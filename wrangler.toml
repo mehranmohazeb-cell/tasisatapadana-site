@@ -1,0 +1,9 @@
+name = "tasisat-apadana"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# سرو فایل‌های استاتیک از پوشه public
+# مستندات: https://developers.cloudflare.com/workers/static-assets/
+[assets]
+directory = "./public"
+binding = "ASSETS"
