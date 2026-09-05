@@ -65,3 +65,5 @@ const CONTACT_CONFIG = {
   whatsapp: "شماره واتساپ به فرمت بین‌المللی بدون + و بدون صفر ابتدایی",
 };
 ```
+
+Cloudflare deployment test
