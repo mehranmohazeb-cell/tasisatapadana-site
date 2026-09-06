@@ -604,3 +604,82 @@ p {
     font-size: 1.9rem;
   }
 }
+/* =========================
+   Store
+   ========================= */
+
+.store {
+  padding: 56px 0;
+  background: var(--bg-alt);
+}
+
+.store h2 {
+  font-size: 1.5rem;
+  color: var(--primary);
+}
+
+.store-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.store-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+}
+
+.store-card-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--bg-alt);
+}
+
+.store-card-content {
+  padding: 18px;
+}
+
+.store-card h3 {
+  margin: 0 0 8px;
+  color: var(--primary);
+}
+
+.store-card-description {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.8;
+}
+
+.store-card-price {
+  margin-top: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.store-card-stock {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.store-status {
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .store-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .store-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
