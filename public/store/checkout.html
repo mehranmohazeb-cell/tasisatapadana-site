@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ثبت سفارش | تأسیسات آپادانا</title><link rel="stylesheet" href="store.css"></head>
+<body>
+<header class="store-header"><div class="container"><a href="index.html" class="logo-link"><img src="../assets/logo-header.png" alt="تأسیسات آپادانا"></a><nav class="store-nav"><a href="index.html">فروشگاه</a><a href="cart.html">سبد خرید <span id="cart-count">0</span></a></nav></div></header>
+<main class="container"><section class="store-hero"><h1>ثبت سفارش</h1><div id="checkout-content"><p class="loading">در حال بارگذاری...</p></div></section></main>
+<footer class="store-footer"><div class="container"><p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p></div></footer>
+<script>
+const API_BASE="/api";
+function getCart(){try{return JSON.parse(localStorage.getItem("apadana_cart"))||[]}catch{return[];}}
+function updateCartCount(){const e=document.getElementById("cart-count");if(!e)return;e.textContent=getCart().reduce((t,i)=>t+Number(i.quantity||0),0).toLocaleString("fa-IR");}
+function formatPrice(price){if(price===null||price===undefined||price==="")return"تماس بگیرید";const n=Number(price);return Number.isNaN(n)?String(price):`${n.toLocaleString("fa-IR")} تومان`;}
+function escapeHtml(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
+function renderCheckout(){
+ const container=document.getElementById("checkout-content"),cart=getCart();
+ if(cart.length===0){container.innerHTML=`<p>سبد خرید شما خالی است.</p><a href="index.html" class="product-button" style="display:inline-block;width:auto;margin-top:15px;">بازگشت به فروشگاه</a>`;return;}
+ let total=0;
+ const itemsHtml=cart.map(item=>{const price=Number(item.price)||0,quantity=Number(item.quantity)||1;total+=price*quantity;return `<div style="display:flex;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid #eee;"><span>${escapeHtml(item.name)} × ${quantity.toLocaleString("fa-IR")}</span><strong>${formatPrice(price*quantity)}</strong></div>`;}).join("");
+ container.innerHTML=`<div style="text-align:right;"><h2>خلاصه سفارش</h2>${itemsHtml}<h2 style="margin-top:25px;">مبلغ کل: ${formatPrice(total)}</h2><hr style="margin:25px 0;"><h2>اطلاعات مشتری</h2><form id="order-form"><label for="name">نام و نام خانوادگی</label><input id="name" name="name" type="text" required style="display:block;width:100%;padding:12px;margin:8px 0 18px;font-family:inherit;"><label for="phone">شماره تماس</label><input id="phone" name="phone" type="tel" required style="display:block;width:100%;padding:12px;margin:8px 0 18px;font-family:inherit;"><label for="address">آدرس</label><textarea id="address" name="address" rows="4" required style="display:block;width:100%;padding:12px;margin:8px 0 18px;font-family:inherit;resize:vertical;"></textarea><button type="submit" class="product-button">ثبت درخواست سفارش</button></form><div id="order-message" style="margin-top:20px;"></div></div>`;
+ document.getElementById("order-form").addEventListener("submit",submitOrder);
+}
+async function submitOrder(event){
+ event.preventDefault();
+ const form=event.target,message=document.getElementById("order-message"),cart=getCart();
+ const order={customer:{name:form.name.value.trim(),phone:form.phone.value.trim(),address:form.address.value.trim()},items:cart};
+ message.textContent="در حال ارسال درخواست...";
+ try{
+  const response=await fetch(`${API_BASE}/orders`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(order)});
+  if(!response.ok)throw new Error("خطا در ثبت سفارش");
+  localStorage.removeItem("apadana_cart");
+  message.innerHTML=`<strong>درخواست سفارش شما با موفقیت ثبت شد.</strong>`;
+  form.reset();updateCartCount();
+ }catch(error){console.error(error);message.innerHTML=`<strong>فعلاً امکان ثبت سفارش وجود ندارد.</strong><br>لطفاً بعداً دوباره تلاش کنید.`;}
+}
+document.addEventListener("DOMContentLoaded",()=>{updateCartCount();renderCheckout();});
+</script>
+</body>
+</html>
