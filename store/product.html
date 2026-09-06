@@ -1,1 +1,39 @@
+<button
+              class="product-button"
+              type="button"
+              id="add-to-cart"
+            >
+              افزودن به سبد خرید
+            </button>
 
+            <p style="margin-top:20px;">
+              <a href="index.html">← بازگشت به فروشگاه</a>
+            </p>
+          </div>
+        ;
+
+        document
+          .getElementById("add-to-cart")
+          .addEventListener("click", () => addToCart(product));
+
+      } catch (error) {
+        console.error(error);
+
+        container.innerHTML = 
+          <h1>محصول پیدا نشد</h1>
+          <p>
+            امکان دریافت اطلاعات این محصول وجود ندارد.
+          </p>
+          <a href="index.html">بازگشت به فروشگاه</a>
+        `;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      updateCartCount();
+      loadProduct();
+    });
+  </script>
+
+</body>
+</html>
