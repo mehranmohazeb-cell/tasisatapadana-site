@@ -26,7 +26,7 @@ async function loadProduct(){
   try{
     const response=await fetch(`${API_BASE}/products/${encodeURIComponent(id)}`);
     if(!response.ok)throw new Error("محصول پیدا نشد");
-    const product=await response.json(),image=product.image||"../assets/placeholder.svg";
+    const response=await fetch(${API_BASE}/products/${encodeURIComponent(id)});if(!response.ok)throw new Error("محصول پیدا نشد");const data=await response.json();const product=data.product,image=product.image||"../assets/placeholder.svg";
     container.innerHTML=`<div><img src="${escapeHtml(image)}" alt="${escapeHtml(product.name||"محصول")}" style="width:100%;max-width:450px;max-height:450px;object-fit:contain;border-radius:12px;"><h1>${escapeHtml(product.name||"محصول")}</h1><div class="product-price">${formatPrice(product.price)}</div><p style="line-height:2;">${escapeHtml(product.description||"توضیحی برای این محصول ثبت نشده است.")}</p><button class="product-button" type="button" id="add-to-cart">افزودن به سبد خرید</button><p style="margin-top:20px;"><a href="index.html">← بازگشت به فروشگاه</a></p></div>`;
     document.getElementById("add-to-cart").addEventListener("click",()=>addToCart(product));
   }catch(error){console.error(error);container.innerHTML=`<h1>محصول پیدا نشد</h1><p>امکان دریافت اطلاعات این محصول وجود ندارد.</p><a href="index.html">بازگشت به فروشگاه</a>`;}
