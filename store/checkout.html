@@ -1,1 +1,85 @@
+<button
+          type="submit"
+          class="product-button"
+        >
+          ثبت درخواست سفارش
+        </button>
 
+      </form>
+
+      <div
+        id="order-message"
+        style="margin-top:20px;"
+      ></div>
+
+    </div>
+  ;
+
+  document
+    .getElementById("order-form")
+    .addEventListener("submit", submitOrder);
+}
+
+async function submitOrder(event) {
+  event.preventDefault();
+
+  const form = event.target;
+  const message = document.getElementById("order-message");
+  const cart = getCart();
+
+  const order = {
+    customer: {
+      name: form.name.value.trim(),
+      phone: form.phone.value.trim(),
+      address: form.address.value.trim()
+    },
+    items: cart
+  };
+
+  message.textContent = "در حال ارسال درخواست...";
+
+  try {
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(order)
+    });
+
+    if (!response.ok) {
+      throw new Error("خطا در ثبت سفارش");
+    }
+
+    localStorage.removeItem("apadana_cart");
+
+    message.innerHTML = 
+      <strong>
+        درخواست سفارش شما با موفقیت ثبت شد.
+      </strong>
+    ;
+
+    form.reset();
+    updateCartCount();
+
+  } catch (error) {
+    console.error(error);
+
+    message.innerHTML = 
+      <strong>
+        فعلاً امکان ثبت سفارش وجود ندارد.
+      </strong>
+      <br>
+      لطفاً بعداً دوباره تلاش کنید.
+    `;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  updateCartCount();
+  renderCheckout();
+});
+</script>
+
+</body>
+</html>
