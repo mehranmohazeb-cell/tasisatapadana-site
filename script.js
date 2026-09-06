@@ -5,10 +5,10 @@
  */
 const CONTACT_CONFIG = {
   // شماره تلفن به همان شکلی که باید نمایش داده شود، مثال: '0311xxxxxxx'
-  phone: 'PLACEHOLDER_PHONE',
+  phone: '09139029945',
 
   // شماره واتساپ همراه با کد کشور و بدون + یا صفر ابتدایی، مثال ایران: '98912xxxxxxx'
-  whatsapp: 'PLACEHOLDER_WHATSAPP',
+  whatsapp: '989139029945',
 };
 
 document.addEventListener('DOMContentLoaded', () => {
