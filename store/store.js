@@ -103,7 +103,10 @@ function saveCart(cart) {
 
 function addToCart(productId) {
   const cart = getCart();
-  const existing = cart.find(item => String(item.id) === String(productId));
+
+  const existing = cart.find(
+    item => String(item.id) === String(productId)
+  );
 
   if (existing) {
     existing.quantity += 1;
@@ -129,6 +132,7 @@ function addToCart(productId) {
 
 function updateCartCount() {
   const element = document.getElementById("cart-count");
+
   if (!element) return;
 
   const cart = getCart();
