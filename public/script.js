@@ -58,3 +58,67 @@ function setupFooterYear() {
     yearEl.textContent = new Date().getFullYear();
   }
 }
+async function loadStoreProducts() {
+  const container = document.getElementById('storeProducts');
+
+  if (!container) return;
+
+  try {
+    const response = await fetch('/api/store/products');
+
+    if (!response.ok) {
+      throw new Error('خطا در دریافت محصولات');
+    }
+
+    const data = await response.json();
+
+    if (!data.ok || !Array.isArray(data.products)) {
+      throw new Error('اطلاعات محصولات معتبر نیست');
+    }
+
+    if (data.products.length === 0) {
+      container.innerHTML =
+        '<p class="store-status">در حال حاضر محصولی برای نمایش وجود ندارد.</p>';
+      return;
+    }
+
+    container.innerHTML = data.products
+      .map((product) => {
+        const image = product.image
+          ? `<img class="store-card-image" src="${product.image}" alt="${product.name}" loading="lazy">`
+          : '';
+
+        const price = Number(product.price || 0).toLocaleString('fa-IR');
+
+        return `
+          <article class="store-card">
+            ${image}
+
+            <div class="store-card-content">
+              <h3>${product.name}</h3>
+
+              ${
+                product.description
+                  ? `<p class="store-card-description">${product.description}</p>`
+                  : ''
+              }
+
+              <div class="store-card-price">
+                ${price} تومان
+              </div>
+
+              <div class="store-card-stock">
+                موجودی: ${Number(product.stock || 0).toLocaleString('fa-IR')}
+              </div>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+  } catch (error) {
+    console.error('Store API error:', error);
+
+    container.innerHTML =
+      '<p class="store-status">امکان دریافت محصولات وجود ندارد.</p>';
+  }
+}
