@@ -19,15 +19,15 @@ async function handleStoreApi(request, env) {
     });
   }
 
-  // API products - دریافت محصولات فعال از D1
+  // API products
   if (url.pathname === "/api/store/products") {
     try {
       const result = await env.DB
         .prepare(
-          SELECT id, name, slug, description, price, image, stock
-           FROM products
-           WHERE active = 1
-           ORDER BY id DESC
+          "SELECT id, name, slug, description, price, image, stock " +
+          "FROM products " +
+          "WHERE active = 1 " +
+          "ORDER BY id DESC"
         )
         .all();
 
@@ -54,10 +54,10 @@ async function handleStoreApi(request, env) {
     try {
       const result = await env.DB
         .prepare(
-          SELECT id, name, slug, description, price, image, stock
-           FROM products
-           WHERE slug = ? AND active = 1
-           LIMIT 1
+          "SELECT id, name, slug, description, price, image, stock " +
+          "FROM products " +
+          "WHERE slug = ? AND active = 1 " +
+          "LIMIT 1"
         )
         .bind(slug)
         .first();
@@ -113,18 +113,10 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    /*
-     * تمام درخواست‌های API فروشگاه
-     * قبل از سرو فایل‌های سایت بررسی می‌شوند.
-     */
     if (url.pathname.startsWith("/api/store/")) {
       return handleStoreApi(request, env);
     }
 
-    /*
-     * سایر درخواست‌ها:
-     * فایل‌های public توسط Cloudflare Assets سرو می‌شوند.
-     */
     return env.ASSETS.fetch(request);
   },
 };
