@@ -178,6 +178,7 @@ p {
   height: 54px;
   width: auto;
   object-fit: contain;
+  transform: translateY(4px); 
 }
 .menu-toggle {
   display: flex;
