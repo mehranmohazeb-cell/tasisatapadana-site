@@ -1,1 +1,64 @@
+<span>
+              ${quantity.toLocaleString("fa-IR")}
+            </span>
 
+            <button
+              type="button"
+              onclick="changeQuantity(${index}, -1)"
+            >
+              −
+            </button>
+
+            <button
+              type="button"
+              onclick="removeItem(${index})"
+              style="margin-right:10px;"
+            >
+              حذف
+            </button>
+          </div>
+        </div>
+      </div>
+    ;
+  }).join("");
+
+  container.innerHTML = 
+    <div>
+      ${itemsHtml}
+    </div>
+
+    <div
+      style="
+        margin-top:25px;
+        padding-top:20px;
+        border-top:2px solid #222;
+      "
+    >
+      <h2>
+        مبلغ کل:
+        ${formatPrice(total)}
+      </h2>
+
+      <a
+        href="checkout.html"
+        class="product-button"
+        style="
+          display:inline-block;
+          width:auto;
+          margin-top:10px;
+        "
+      >
+        ادامه و ثبت سفارش
+      </a>
+    </div>
+  `;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  updateCartCount();
+  renderCart();
+});
+</script>
+
+</body>
+</html>
