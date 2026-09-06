@@ -7,3 +7,8 @@ compatibility_date = "2024-11-01"
 [assets]
 directory = "./public"
 binding = "ASSETS"
+# اتصال دیتابیس Cloudflare D1
+[[d1_databases]]
+binding = "DB"
+database_name = "tasisatapadana-db"
+database_id = "YOUR_DATABASE_ID"
