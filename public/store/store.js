@@ -7,7 +7,8 @@ async function loadProducts() {
   try {
     const response = await fetch(`${API_BASE}/products`);
     if (!response.ok) throw new Error("خطا در دریافت محصولات");
-    products = await response.json();
+    const data = await response.json();
+products = data.products || [];
     if (!Array.isArray(products) || products.length === 0) {
       grid.innerHTML = `<p class="loading">در حال حاضر محصولی برای نمایش وجود ندارد.</p>`;
       return;
