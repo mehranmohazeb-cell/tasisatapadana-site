@@ -11,4 +11,4 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "tasisatapadana-db"
-database_id = "YOUR_DATABASE_ID"
+database_id = "0088ce29-aea2-410b-8949-10917e101e78"
