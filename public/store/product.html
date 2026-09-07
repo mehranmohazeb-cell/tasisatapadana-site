@@ -69,7 +69,202 @@ container.innerHTML =
       updateCartCount();
       loadProduct();
     });
-  </script>
+  <script>
+const API_BASE = "/api/store";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatPrice(value) {
+  return `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
+}
+
+async function loadProduct() {
+  const container = document.getElementById("product-detail");
+
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get("slug");
+
+  if (!slug) {
+    container.innerHTML = `
+      <p class="loading">محصول مورد نظر پیدا نشد.</p>
+      <a href="index.html">بازگشت به فروشگاه</a>
+    `;
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/products/${encodeURIComponent(slug)}`
+    );
+
+    if (!response.ok) {
+      throw new Error("محصول پیدا نشد");
+    }
+
+    const data = await response.json();
+
+    if (!data.ok || !data.product) {
+      throw new Error("اطلاعات محصول معتبر نیست");
+    }
+
+    const product = data.product;
+
+    const image = product.image
+      ? `
+        <img
+          src="${escapeHtml(product.image)}"
+          alt="${escapeHtml(product.name)}"
+          class="product-detail-image"
+        >
+      `
+      : "";
+
+    container.innerHTML = `
+      <div class="product-detail-card">
+
+        <div class="product-detail-media">
+          ${image}
+        </div>
+
+        <div class="product-detail-content">
+
+          <h1>${escapeHtml(product.name)}</h1>
+
+          ${
+            product.description
+              ? `<p class="product-description">${escapeHtml(product.description)}</p>`
+              : ""
+          }
+
+          <div class="product-detail-price">
+            ${formatPrice(product.price)}
+          </div>
+
+          <div class="product-detail-stock">
+            موجودی:
+            ${Number(product.stock || 0).toLocaleString("fa-IR")}
+          </div>
+
+          <div class="product-actions">
+
+            <label for="quantity">تعداد:</label>
+
+            <input
+              id="quantity"
+              type="number"
+              min="1"
+              max="${Math.max(Number(product.stock || 0), 1)}"
+              value="1"
+            >
+
+            <button
+              type="button"
+              class="product-button"
+              onclick="addProductToCart()"
+              ${Number(product.stock || 0) <= 0 ? "disabled" : ""}
+            >
+              افزودن به سبد خرید
+            </button>
+
+          </div>
+
+          <a href="index.html" class="back-link">
+            بازگشت به فروشگاه
+          </a>
+
+        </div>
+
+      </div>
+    `;
+
+    window.currentProduct = product;
+
+  } catch (error) {
+
+    console.error(error);
+
+    container.innerHTML = `
+      <p class="loading">امکان دریافت اطلاعات محصول وجود ندارد.</p>
+      <a href="index.html">بازگشت به فروشگاه</a>
+    `;
+  }
+}
+
+function addProductToCart() {
+  if (!window.currentProduct) return;
+
+  const quantityInput = document.getElementById("quantity");
+  const quantity = Number(quantityInput.value || 1);
+
+  const product = window.currentProduct;
+
+  if (
+    quantity < 1 ||
+    quantity > Number(product.stock || 0)
+  ) {
+    alert("تعداد انتخاب‌شده بیشتر از موجودی محصول است.");
+    return;
+  }
+
+  const cart = JSON.parse(
+    localStorage.getItem("tasisat_apadana_cart") || "[]"
+  );
+
+  const existing = cart.find(
+    item => String(item.id) === String(product.id)
+  );
+
+  if (existing) {
+    existing.quantity += quantity;
+  } else {
+    cart.push({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image || "",
+      quantity
+    });
+  }
+
+  localStorage.setItem(
+    "tasisat_apadana_cart",
+    JSON.stringify(cart)
+  );
+
+  updateCartCount();
+
+  alert("محصول به سبد خرید اضافه شد.");
+}
+
+function updateCartCount() {
+  const cart = JSON.parse(
+    localStorage.getItem("tasisat_apadana_cart") || "[]"
+  );
+
+  const count = cart.reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0
+  );
+
+  const element = document.getElementById("cart-count");
+
+  if (element) {
+    element.textContent = count.toLocaleString("fa-IR");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  updateCartCount();
+  loadProduct();
+});
+</script>
 
 </body>
 </html>
