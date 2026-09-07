@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مدیریت محصولات | تأسیسات آپادانا</title>
+  <link rel="stylesheet" href="admin.css">
+</head><body>  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت محصولات</h1>
+      <a href="../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>  <main class="container"><section class="admin-card">
+  <h2>افزودن / ویرایش محصول</h2>
+
+  <form id="product-form">
+
+    <input type="hidden" id="product-id">
+
+    <div class="form-grid">
+
+      <div class="form-group">
+        <label for="name">نام محصول</label>
+        <input id="name" type="text" required>
+      </div>
+
+      <div class="form-group">
+        <label for="slug">شناسه محصول (Slug)</label>
+        <input id="slug" type="text" required>
+        <small>مثلاً: test-product</small>
+      </div>
+
+      <div class="form-group full">
+        <label for="description">توضیحات</label>
+        <textarea id="description" rows="5"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="price">قیمت (تومان)</label>
+        <input id="price" type="number" min="0" required>
+      </div>
+
+      <div class="form-group">
+        <label for="stock">موجودی</label>
+        <input id="stock" type="number" min="0" value="0" required>
+      </div>
+
+      <div class="form-group full">
+        <label for="image">آدرس تصویر</label>
+        <input id="image" type="text" placeholder="مثلاً: /assets/products/product.jpg">
+      </div>
+
+      <div class="form-group checkbox-group">
+        <label>
+          <input id="active" type="checkbox" checked>
+          محصول فعال باشد
+        </label>
+      </div>
+
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="primary-button">
+        ذخیره محصول
+      </button>
+
+      <button type="button" id="cancel-edit" class="secondary-button">
+        لغو / پاک کردن فرم
+      </button>
+    </div>
+
+  </form>
+</section>
+
+<section class="admin-card">
+  <div class="section-heading">
+    <h2>محصولات موجود</h2>
+    <button id="refresh-products" class="secondary-button">
+      بروزرسانی
+    </button>
+  </div>
+
+  <div id="products-list">
+    <p class="loading">در حال بارگذاری محصولات...</p>
+  </div>
+</section>
+
+  </main>  <script src="admin.js"></script></body>
+</html> 
