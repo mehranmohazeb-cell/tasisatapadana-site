@@ -1,0 +1,166 @@
+
+* {
+  box-sizing: border-box;
+  }
+
+body {
+margin: 0;
+font-family: Tahoma, Arial, sans-serif;
+background: #f5f6f8;
+color: #222;
+}
+
+.container {
+width: min(1100px, 94%);
+margin: 0 auto;
+}
+
+.admin-header {
+background: #ffffff;
+border-bottom: 1px solid #ddd;
+padding: 20px 0;
+margin-bottom: 25px;
+}
+
+.admin-header .container {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 20px;
+}
+
+.admin-header h1 {
+margin: 0;
+font-size: 24px;
+}
+
+.back-link {
+text-decoration: none;
+color: #333;
+}
+
+.admin-card {
+background: #ffffff;
+border: 1px solid #ddd;
+border-radius: 12px;
+padding: 22px;
+margin-bottom: 25px;
+}
+
+.admin-card h2 {
+margin-top: 0;
+margin-bottom: 20px;
+font-size: 20px;
+}
+
+.form-grid {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 18px;
+}
+
+.form-group {
+display: flex;
+flex-direction: column;
+gap: 7px;
+}
+
+.form-group.full {
+grid-column: 1 / -1;
+}
+
+.form-group label {
+font-weight: bold;
+}
+
+.form-group input,
+.form-group textarea {
+width: 100%;
+border: 1px solid #ccc;
+border-radius: 8px;
+padding: 11px;
+font-family: inherit;
+font-size: 15px;
+}
+
+.form-group textarea {
+resize: vertical;
+}
+
+.form-group small {
+color: #777;
+}
+
+.checkbox-group {
+justify-content: center;
+}
+
+.checkbox-group label {
+display: flex;
+align-items: center;
+gap: 8px;
+font-weight: normal;
+}
+
+.checkbox-group input {
+width: auto;
+}
+
+.form-actions {
+display: flex;
+gap: 10px;
+margin-top: 22px;
+flex-wrap: wrap;
+}
+
+.primary-button,
+.secondary-button {
+border: 0;
+border-radius: 8px;
+padding: 11px 18px;
+font-family: inherit;
+font-size: 15px;
+cursor: pointer;
+}
+
+.primary-button {
+background: #222;
+color: #fff;
+}
+
+.secondary-button {
+background: #e9eaec;
+color: #222;
+}
+
+.section-heading {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 15px;
+}
+
+.loading {
+text-align: center;
+color: #777;
+padding: 20px;
+}
+
+@media (max-width: 700px) {
+.admin-header .container {
+flex-direction: column;
+align-items: flex-start;
+}
+
+.form-grid {
+grid-template-columns: 1fr;
+}
+
+.form-group.full {
+grid-column: auto;
+}
+
+.admin-card {
+padding: 16px;
+}
+} 
