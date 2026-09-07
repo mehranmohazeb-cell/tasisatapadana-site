@@ -96,10 +96,64 @@ behavior: "smooth"
 
 function clearForm() {
 document.getElementById("product-form").reset();
-
 document.getElementById("product-id").value = "";
-
 document.getElementById("active").checked = true;
+}
+
+async function createProduct(event) {
+event.preventDefault();
+
+const product = {
+name: document.getElementById("name").value.trim(),
+slug: document.getElementById("slug").value.trim(),
+description: document.getElementById("description").value.trim(),
+price: Number(document.getElementById("price").value),
+stock: Number(document.getElementById("stock").value),
+image: document.getElementById("image").value.trim(),
+active: document.getElementById("active").checked
+};
+
+if (!product.name || !product.slug) {
+alert("نام محصول و شناسه محصول الزامی است.");
+return;
+}
+
+const token = prompt("رمز مدیریت را وارد کنید:");
+
+if (!token) {
+return;
+}
+
+try {
+const response = await fetch("${API_BASE}/products", {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+"X-Admin-Token": token
+},
+body: JSON.stringify(product)
+});
+
+const data = await response.json();
+
+if (!response.ok) {
+  if (response.status === 401) {
+    alert("رمز مدیریت صحیح نیست.");
+  } else {
+    alert(data.message || "ثبت محصول انجام نشد.");
+  }
+  return;
+}
+
+alert("محصول با موفقیت ثبت شد.");
+
+clearForm();
+await loadProducts();
+
+} catch (error) {
+console.error(error);
+alert("ارتباط با سرور برقرار نشد.");
+}
 }
 
 function escapeHtml(value) {
@@ -130,12 +184,5 @@ document
 
 document
 .getElementById("product-form")
-.addEventListener("submit", event => {
-event.preventDefault();
-
-  alert(
-    "هسته رابط مدیریت آماده است. اتصال ذخیره‌سازی در مرحله بعد فعال می‌شود."
-  );
-});
-
+.addEventListener("submit", createProduct);
 });
