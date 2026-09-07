@@ -1,37 +1,75 @@
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>جزئیات محصول | تأسیسات آپادانا</title>
-  <link rel="stylesheet" href="store.css">
-</head>
-<body>
-<header class="store-header"><div class="container">
-  <a href="index.html" class="logo-link"><img src="../assets/logo-header.png" alt="تأسیسات آپادانا"></a>
-  <nav class="store-nav"><a href="index.html">فروشگاه</a><a href="cart.html">سبد خرید <span id="cart-count">0</span></a></nav>
-</div></header>
-<main class="container"><section id="product-detail" class="store-hero"><p class="loading">در حال بارگذاری محصول...</p></section></main>
-<footer class="store-footer"><div class="container"><p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p></div></footer>
-<script>
-const API_BASE = "/api";
-function formatPrice(price){if(price===null||price===undefined||price==="")return"تماس بگیرید";const n=Number(price);return Number.isNaN(n)?String(price):`${n.toLocaleString("fa-IR")} تومان`;}
-function escapeHtml(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
-function getCart(){try{return JSON.parse(localStorage.getItem("apadana_cart"))||[]}catch{return[];}}
-function saveCart(cart){localStorage.setItem("apadana_cart",JSON.stringify(cart));updateCartCount();}
-function updateCartCount(){const e=document.getElementById("cart-count");if(!e)return;e.textContent=getCart().reduce((t,i)=>t+Number(i.quantity||0),0).toLocaleString("fa-IR");}
-function addToCart(product){const cart=getCart();const existing=cart.find(i=>String(i.id)===String(product.id));if(existing)existing.quantity+=1;else cart.push({id:product.id,name:product.name,price:product.price,image:product.image||"../assets/placeholder.svg",quantity:1});saveCart(cart);alert("محصول به سبد خرید اضافه شد.");}
-async function loadProduct(){
-  const container=document.getElementById("product-detail"),id=new URLSearchParams(window.location.search).get("id");
-  if(!id){container.innerHTML=`<h1>محصول پیدا نشد</h1><p>شناسه محصول مشخص نشده است.</p><a href="index.html">بازگشت به فروشگاه</a>`;return;}
-  try{
-    const response=await fetch(`${API_BASE}/products/${encodeURIComponent(id)}`);
-    if(!response.ok)throw new Error("محصول پیدا نشد");
-    const response=await fetch(${API_BASE}/products/${encodeURIComponent(id)});if(!response.ok)throw new Error("محصول پیدا نشد");const data=await response.json();const product=data.product,image=product.image||"../assets/placeholder.svg";
-    container.innerHTML=`<div><img src="${escapeHtml(image)}" alt="${escapeHtml(product.name||"محصول")}" style="width:100%;max-width:450px;max-height:450px;object-fit:contain;border-radius:12px;"><h1>${escapeHtml(product.name||"محصول")}</h1><div class="product-price">${formatPrice(product.price)}</div><p style="line-height:2;">${escapeHtml(product.description||"توضیحی برای این محصول ثبت نشده است.")}</p><button class="product-button" type="button" id="add-to-cart">افزودن به سبد خرید</button><p style="margin-top:20px;"><a href="index.html">← بازگشت به فروشگاه</a></p></div>`;
-    document.getElementById("add-to-cart").addEventListener("click",()=>addToCart(product));
-  }catch(error){console.error(error);container.innerHTML=`<h1>محصول پیدا نشد</h1><p>امکان دریافت اطلاعات این محصول وجود ندارد.</p><a href="index.html">بازگشت به فروشگاه</a>`;}
-}
-document.addEventListener("DOMContentLoaded",()=>{updateCartCount();loadProduct();});
-</script>
+container.innerHTML = 
+          <p class="loading">امکان دریافت اطلاعات محصول وجود ندارد.</p>
+          <a href="index.html">بازگشت به فروشگاه</a>
+        ;
+      }
+    }
+
+    function addProductToCart() {
+      if (!window.currentProduct) return;
+
+      const quantityInput = document.getElementById("quantity");
+      const quantity = Number(quantityInput.value || 1);
+
+      const product = window.currentProduct;
+
+      if (quantity < 1 || quantity > Number(product.stock || 0)) {
+        alert("تعداد انتخاب‌شده بیشتر از موجودی محصول است.");
+        return;
+      }
+
+      const cart = JSON.parse(
+        localStorage.getItem("tasisat_apadana_cart") || "[]"
+      );
+
+      const existing = cart.find(
+        item => String(item.id) === String(product.id)
+      );
+
+      if (existing) {
+        existing.quantity += quantity;
+      } else {
+        cart.push({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          image: product.image || "",
+          quantity
+        });
+      }
+
+      localStorage.setItem(
+        "tasisat_apadana_cart",
+        JSON.stringify(cart)
+      );
+
+      updateCartCount();
+
+      alert("محصول به سبد خرید اضافه شد.");
+    }
+
+    function updateCartCount() {
+      const cart = JSON.parse(
+        localStorage.getItem("tasisat_apadana_cart") || "[]"
+      );
+
+      const count = cart.reduce(
+        (total, item) => total + Number(item.quantity || 0),
+        0
+      );
+
+      const element = document.getElementById("cart-count");
+
+      if (element) {
+        element.textContent = count.toLocaleString("fa-IR");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      updateCartCount();
+      loadProduct();
+    });
+  </script>
+
 </body>
 </html>
