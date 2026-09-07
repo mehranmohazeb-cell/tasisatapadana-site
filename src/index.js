@@ -5,8 +5,13 @@
 * مسئولیت‌ها:
 * 1) سرو فایل‌های استاتیک از public
 * 2) API فروشگاه با استفاده از D1
-* 3) آماده‌سازی احراز هویت پنل مدیریت
+* 3) احراز هویت پنل مدیریت
      */
+
+function isAdmin(request, env) {
+const token = request.headers.get("X-Admin-Token");
+return !!env.ADMIN_TOKEN && token === env.ADMIN_TOKEN;
+}
 
 async function handleStoreApi(request, env) {
 const url = new URL(request.url);
@@ -21,16 +26,14 @@ database: !!env.DB,
 }
 
 if (url.pathname === "/api/store/admin-test") {
-const token = request.headers.get("X-Admin-Token");
-
-if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
-  return Response.json(
-    {
-      ok: false,
-      error: "UNAUTHORIZED",
-    },
-    { status: 401 }
-  );
+if (!isAdmin(request, env)) {
+return Response.json(
+{
+ok: false,
+error: "UNAUTHORIZED",
+},
+{ status: 401 }
+);
 }
 
 return Response.json({
@@ -38,6 +41,116 @@ return Response.json({
   admin: true,
   message: "Admin authentication is working.",
 });
+
+}
+
+/*
+
+* افزودن محصول جدید
+* فقط برای مدیر
+  */
+  if (
+  url.pathname === "/api/store/products" &&
+  request.method === "POST"
+  ) {
+  if (!isAdmin(request, env)) {
+  return Response.json(
+  {
+  ok: false,
+  error: "UNAUTHORIZED",
+  },
+  { status: 401 }
+  );
+  }
+
+try {
+  const body = await request.json();
+
+  const name = String(body.name || "").trim();
+  const slug = String(body.slug || "").trim();
+  const description = String(body.description || "").trim();
+  const image = String(body.image || "").trim();
+
+  const price = Number(body.price);
+  const stock = Number(body.stock);
+  const active = body.active ? 1 : 0;
+
+  if (!name || !slug) {
+    return Response.json(
+      {
+        ok: false,
+        error: "INVALID_INPUT",
+        message: "نام محصول و slug الزامی است.",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (
+    !Number.isFinite(price) ||
+    price < 0 ||
+    !Number.isInteger(price)
+  ) {
+    return Response.json(
+      {
+        ok: false,
+        error: "INVALID_PRICE",
+        message: "قیمت نامعتبر است.",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (
+    !Number.isFinite(stock) ||
+    stock < 0 ||
+    !Number.isInteger(stock)
+  ) {
+    return Response.json(
+      {
+        ok: false,
+        error: "INVALID_STOCK",
+        message: "موجودی نامعتبر است.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const result = await env.DB
+    .prepare(
+      "INSERT INTO products " +
+      "(name, slug, description, price, image, stock, active) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(
+      name,
+      slug,
+      description,
+      price,
+      image,
+      stock,
+      active
+    )
+    .run();
+
+  return Response.json(
+    {
+      ok: true,
+      message: "محصول با موفقیت ایجاد شد.",
+      product_id: result.meta?.last_row_id ?? null,
+    },
+    { status: 201 }
+  );
+} catch (error) {
+  return Response.json(
+    {
+      ok: false,
+      error: "DATABASE_ERROR",
+      message: error.message,
+    },
+    { status: 500 }
+  );
+}
 
 }
 
