@@ -15,7 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
   applyContactInfo();
   setupMobileMenu();
   setupFooterYear();
-  loadStoreProducts();
 });
 
 function applyContactInfo() {
