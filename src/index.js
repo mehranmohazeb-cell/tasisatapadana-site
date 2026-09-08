@@ -6,11 +6,25 @@ async function handleStoreApi(request, env) {
     return !!env.ADMIN_TOKEN && token === env.ADMIN_TOKEN;
   }
 
+  async function getProductImages(productId) {
+    const result = await env.DB
+      .prepare(
+        "SELECT id, image, sort_order " +
+        "FROM product_images " +
+        "WHERE product_id = ? " +
+        "ORDER BY sort_order ASC, id ASC"
+      )
+      .bind(productId)
+      .all();
+
+    return result.results || [];
+  }
+
   if (url.pathname === "/api/store/health") {
     return Response.json({
       ok: true,
       service: "tasisat-apadana-store",
-      version: "1.2.0",
+      version: "1.3.0",
       database: !!env.DB,
     });
   }
@@ -47,9 +61,25 @@ async function handleStoreApi(request, env) {
         )
         .all();
 
+      const products = result.results || [];
+
+      for (const product of products) {
+        product.images = await getProductImages(product.id);
+
+        if (product.images.length === 0 && product.image) {
+          product.images = [
+            {
+              id: null,
+              image: product.image,
+              sort_order: 0,
+            },
+          ];
+        }
+      }
+
       return Response.json({
         ok: true,
-        products: result.results || [],
+        products,
       });
     } catch (error) {
       return Response.json(
@@ -132,11 +162,32 @@ async function handleStoreApi(request, env) {
         )
         .run();
 
+      const productId = result.meta?.last_row_id ?? null;
+
+      const images = Array.isArray(body.images)
+        ? body.images
+        : [];
+
+      for (let i = 0; i < images.length; i++) {
+        const imagePath = String(images[i] || "").trim();
+
+        if (!imagePath) continue;
+
+        await env.DB
+          .prepare(
+            "INSERT INTO product_images " +
+            "(product_id, image, sort_order) " +
+            "VALUES (?, ?, ?)"
+          )
+          .bind(productId, imagePath, i)
+          .run();
+      }
+
       return Response.json(
         {
           ok: true,
           message: "محصول با موفقیت ثبت شد.",
-          product_id: result.meta?.last_row_id ?? null,
+          product_id: productId,
         },
         { status: 201 }
       );
@@ -232,6 +283,30 @@ async function handleStoreApi(request, env) {
         );
       }
 
+      if (Array.isArray(body.images)) {
+        await env.DB
+          .prepare(
+            "DELETE FROM product_images WHERE product_id = ?"
+          )
+          .bind(id)
+          .run();
+
+        for (let i = 0; i < body.images.length; i++) {
+          const imagePath = String(body.images[i] || "").trim();
+
+          if (!imagePath) continue;
+
+          await env.DB
+            .prepare(
+              "INSERT INTO product_images " +
+              "(product_id, image, sort_order) " +
+              "VALUES (?, ?, ?)"
+            )
+            .bind(id, imagePath, i)
+            .run();
+        }
+      }
+
       return Response.json({
         ok: true,
         message: "محصول با موفقیت ویرایش شد.",
@@ -281,6 +356,20 @@ async function handleStoreApi(request, env) {
           },
           { status: 404 }
         );
+      }
+
+      const images = await getProductImages(result.id);
+
+      if (images.length === 0 && result.image) {
+        result.images = [
+          {
+            id: null,
+            image: result.image,
+            sort_order: 0,
+          },
+        ];
+      } else {
+        result.images = images;
       }
 
       return Response.json({
