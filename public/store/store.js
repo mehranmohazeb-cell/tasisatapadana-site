@@ -37,7 +37,7 @@ function renderProducts(items) {
 
   grid.innerHTML = items.map(product => {
 
-    const image = product.image || "../assets/placeholder.svg";
+    const image = product.image || "/assets/placeholder.svg";
     const title = escapeHtml(product.name || "محصول");
     const price = formatPrice(product.price);
 
