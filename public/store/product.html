@@ -53,16 +53,130 @@
       return `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
     }
 
+    function getProductImages(product) {
+      if (
+        Array.isArray(product.images) &&
+        product.images.length > 0
+      ) {
+        return product.images
+          .map(item => {
+            if (typeof item === "string") {
+              return item;
+            }
+
+            return item?.image || "";
+          })
+          .filter(Boolean);
+      }
+
+      if (product.image) {
+        return [product.image];
+      }
+
+      return [];
+    }
+
+    function renderProductImages(product) {
+      const images = getProductImages(product);
+
+      if (images.length === 0) {
+        return `
+          <div class="product-detail-media">
+            <img
+              src="../assets/placeholder.svg"
+              alt="${escapeHtml(product.name)}"
+              class="product-detail-image"
+            >
+          </div>
+        `;
+      }
+
+      const mainImage = images[0];
+
+      const thumbnails = images.length > 1
+        ? `
+          <div class="product-thumbnails">
+            ${images.map((image, index) => `
+              <button
+                type="button"
+                class="product-thumbnail ${index === 0 ? "active" : ""}"
+                onclick="selectProductImage(${index})"
+                aria-label="نمایش تصویر ${index + 1}"
+              >
+                <img
+                  src="${escapeHtml(image)}"
+                  alt="${escapeHtml(product.name)} - تصویر ${index + 1}"
+                >
+              </button>
+            `).join("")}
+          </div>
+        `
+        : "";
+
+      return `
+        <div class="product-detail-media">
+
+          <div class="product-main-image">
+            <img
+              id="main-product-image"
+              src="${escapeHtml(mainImage)}"
+              alt="${escapeHtml(product.name)}"
+              class="product-detail-image"
+            >
+          </div>
+
+          ${thumbnails}
+
+        </div>
+      `;
+    }
+
+    function selectProductImage(index) {
+      const product = window.currentProduct;
+
+      if (!product) return;
+
+      const images = getProductImages(product);
+
+      if (!images[index]) return;
+
+      const mainImage =
+        document.getElementById("main-product-image");
+
+      if (mainImage) {
+        mainImage.src = images[index];
+      }
+
+      document
+        .querySelectorAll(".product-thumbnail")
+        .forEach((thumbnail, thumbnailIndex) => {
+          thumbnail.classList.toggle(
+            "active",
+            thumbnailIndex === index
+          );
+        });
+    }
+
     async function loadProduct() {
-      const container = document.getElementById("product-detail");
-      const params = new URLSearchParams(window.location.search);
+      const container =
+        document.getElementById("product-detail");
+
+      const params =
+        new URLSearchParams(window.location.search);
+
       const slug = params.get("slug");
 
       if (!slug) {
         container.innerHTML = `
-          <p class="loading">محصول مورد نظر پیدا نشد.</p>
-          <a href="index.html">بازگشت به فروشگاه</a>
+          <p class="loading">
+            محصول مورد نظر پیدا نشد.
+          </p>
+
+          <a href="index.html">
+            بازگشت به فروشگاه
+          </a>
         `;
+
         return;
       }
 
@@ -78,35 +192,31 @@
         const data = await response.json();
 
         if (!data.ok || !data.product) {
-          throw new Error("اطلاعات محصول معتبر نیست");
+          throw new Error(
+            "اطلاعات محصول معتبر نیست"
+          );
         }
 
         const product = data.product;
 
-        const image = product.image
-          ? `
-            <img
-              src="${escapeHtml(product.image)}"
-              alt="${escapeHtml(product.name)}"
-              class="product-detail-image"
-            >
-          `
-          : "";
-
         container.innerHTML = `
           <div class="product-detail-card">
 
-            <div class="product-detail-media">
-              ${image}
-            </div>
+            ${renderProductImages(product)}
 
             <div class="product-detail-content">
 
-              <h1>${escapeHtml(product.name)}</h1>
+              <h1>
+                ${escapeHtml(product.name)}
+              </h1>
 
               ${
                 product.description
-                  ? `<p class="product-description">${escapeHtml(product.description)}</p>`
+                  ? `
+                    <p class="product-description">
+                      ${escapeHtml(product.description)}
+                    </p>
+                  `
                   : ""
               }
 
@@ -116,18 +226,25 @@
 
               <div class="product-detail-stock">
                 موجودی:
-                ${Number(product.stock || 0).toLocaleString("fa-IR")}
+                ${Number(
+                  product.stock || 0
+                ).toLocaleString("fa-IR")}
               </div>
 
               <div class="product-actions">
 
-                <label for="quantity">تعداد:</label>
+                <label for="quantity">
+                  تعداد:
+                </label>
 
                 <input
                   id="quantity"
                   type="number"
                   min="1"
-                  max="${Math.max(Number(product.stock || 0), 1)}"
+                  max="${Math.max(
+                    Number(product.stock || 0),
+                    1
+                  )}"
                   value="1"
                 >
 
@@ -135,14 +252,21 @@
                   type="button"
                   class="product-button"
                   onclick="addProductToCart()"
-                  ${Number(product.stock || 0) <= 0 ? "disabled" : ""}
+                  ${
+                    Number(product.stock || 0) <= 0
+                      ? "disabled"
+                      : ""
+                  }
                 >
                   افزودن به سبد خرید
                 </button>
 
               </div>
 
-              <a href="index.html" class="back-link">
+              <a
+                href="index.html"
+                class="back-link"
+              >
                 بازگشت به فروشگاه
               </a>
 
@@ -157,8 +281,13 @@
         console.error(error);
 
         container.innerHTML = `
-          <p class="loading">امکان دریافت اطلاعات محصول وجود ندارد.</p>
-          <a href="index.html">بازگشت به فروشگاه</a>
+          <p class="loading">
+            امکان دریافت اطلاعات محصول وجود ندارد.
+          </p>
+
+          <a href="index.html">
+            بازگشت به فروشگاه
+          </a>
         `;
       }
     }
@@ -166,24 +295,36 @@
     function addProductToCart() {
       if (!window.currentProduct) return;
 
-      const quantityInput = document.getElementById("quantity");
-      const quantity = Number(quantityInput.value || 1);
-      const product = window.currentProduct;
+      const quantityInput =
+        document.getElementById("quantity");
+
+      const quantity =
+        Number(quantityInput.value || 1);
+
+      const product =
+        window.currentProduct;
 
       if (
         quantity < 1 ||
         quantity > Number(product.stock || 0)
       ) {
-        alert("تعداد انتخاب‌شده بیشتر از موجودی محصول است.");
+        alert(
+          "تعداد انتخاب‌شده بیشتر از موجودی محصول است."
+        );
+
         return;
       }
 
       const cart = JSON.parse(
-        localStorage.getItem("tasisat_apadana_cart") || "[]"
+        localStorage.getItem(
+          "tasisat_apadana_cart"
+        ) || "[]"
       );
 
       const existing = cart.find(
-        item => String(item.id) === String(product.id)
+        item =>
+          String(item.id) ===
+          String(product.id)
       );
 
       if (existing) {
@@ -205,30 +346,43 @@
 
       updateCartCount();
 
-      alert("محصول به سبد خرید اضافه شد.");
+      alert(
+        "محصول به سبد خرید اضافه شد."
+      );
     }
 
     function updateCartCount() {
       const cart = JSON.parse(
-        localStorage.getItem("tasisat_apadana_cart") || "[]"
+        localStorage.getItem(
+          "tasisat_apadana_cart"
+        ) || "[]"
       );
 
       const count = cart.reduce(
-        (total, item) => total + Number(item.quantity || 0),
+        (total, item) =>
+          total +
+          Number(item.quantity || 0),
         0
       );
 
-      const element = document.getElementById("cart-count");
+      const element =
+        document.getElementById(
+          "cart-count"
+        );
 
       if (element) {
-        element.textContent = count.toLocaleString("fa-IR");
+        element.textContent =
+          count.toLocaleString("fa-IR");
       }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
-      updateCartCount();
-      loadProduct();
-    });
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        updateCartCount();
+        loadProduct();
+      }
+    );
   </script>
 
 </body>
