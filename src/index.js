@@ -151,7 +151,104 @@ async function handleStoreApi(request, env) {
       );
     }
   }
+if (
+  url.pathname === "/api/store/products" &&
+  request.method === "PUT"
+) {
+  if (!isAdmin(request, env)) {
+    return Response.json(
+      {
+        ok: false,
+        error: "UNAUTHORIZED",
+      },
+      { status: 401 }
+    );
+  }
 
+  try {
+    const body = await request.json();
+
+    const id = Number(body.id);
+    const name = String(body.name || "").trim();
+    const slug = String(body.slug || "").trim();
+    const description = String(body.description || "").trim();
+    const image = String(body.image || "").trim();
+    const price = Number(body.price);
+    const stock = Number(body.stock);
+    const active = body.active === false ? 0 : 1;
+
+    if (!Number.isInteger(id) || id <= 0 || !name || !slug) {
+      return Response.json(
+        {
+          ok: false,
+          error: "INVALID_DATA",
+          message: "شناسه، نام محصول و شناسه محصول الزامی است.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !Number.isInteger(price) ||
+      price < 0 ||
+      !Number.isInteger(stock) ||
+      stock < 0
+    ) {
+      return Response.json(
+        {
+          ok: false,
+          error: "INVALID_DATA",
+          message: "قیمت و موجودی باید عدد صحیح صفر یا بیشتر باشند.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const result = await env.DB
+      .prepare(
+        "UPDATE products SET " +
+        "name = ?, slug = ?, description = ?, price = ?, image = ?, stock = ?, active = ? " +
+        "WHERE id = ?"
+      )
+      .bind(
+        name,
+        slug,
+        description,
+        price,
+        image,
+        stock,
+        active,
+        id
+      )
+      .run();
+
+    if (!result.meta?.changes) {
+      return Response.json(
+        {
+          ok: false,
+          error: "PRODUCT_NOT_FOUND",
+          message: "محصول موردنظر پیدا نشد.",
+        },
+        { status: 404 }
+      );
+    }
+
+    return Response.json({
+      ok: true,
+      message: "محصول با موفقیت ویرایش شد.",
+      product_id: id,
+    });
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: "DATABASE_ERROR",
+        message: error.message,
+      },
+      { status: 500 }
+    );
+  }
+}
   if (url.pathname.startsWith("/api/store/products/")) {
     const slug = url.pathname.split("/").pop();
 
