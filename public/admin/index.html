@@ -56,18 +56,32 @@
 
           <div class="form-group full">
 
-            <label>تصویر محصول</label>
+            <label>تصاویر محصول</label>
 
             <div class="image-path-lock">
               <span>📁 /assets/products/</span>
               <span>🔒</span>
             </div>
 
-            <input
-              id="image"
-              type="text"
-              placeholder="مثلاً: test-product.jpeg"
+            <div id="image-fields">
+
+              <div class="image-field">
+                <input
+                  type="text"
+                  class="product-image-input"
+                  placeholder="مثلاً: test-product.jpeg"
+                >
+              </div>
+
+            </div>
+
+            <button
+              type="button"
+              id="add-image"
+              class="secondary-button"
             >
+              + افزودن تصویر
+            </button>
 
             <small>
               فقط نام فایل تصویر را وارد کنید؛ مسیر پوشه به‌صورت خودکار اضافه می‌شود.
