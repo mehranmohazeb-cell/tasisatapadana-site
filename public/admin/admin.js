@@ -1,5 +1,7 @@
 const API_BASE = "/api/store";
 
+const IMAGE_BASE_PATH = "/assets/products/";
+
 let products = [];
 
 async function loadProducts() {
@@ -79,8 +81,15 @@ function editProduct(id) {
     product.price || 0;
   document.getElementById("stock").value =
     product.stock || 0;
-  document.getElementById("image").value =
-    product.image || "";
+
+  const imageValue = product.image || "";
+
+  if (imageValue.startsWith(IMAGE_BASE_PATH)) {
+    document.getElementById("image").value =
+      imageValue.substring(IMAGE_BASE_PATH.length);
+  } else {
+    document.getElementById("image").value = imageValue;
+  }
 
   document.getElementById("active").checked =
     product.active !== 0;
@@ -97,18 +106,35 @@ function clearForm() {
   document.getElementById("active").checked = true;
 }
 
+function buildImagePath(fileName) {
+  const value = String(fileName || "").trim();
+
+  if (!value) {
+    return "";
+  }
+
+  if (value.startsWith(IMAGE_BASE_PATH)) {
+    return value;
+  }
+
+  return IMAGE_BASE_PATH + value.replace(/^\/+/, "");
+}
+
 async function createProduct(event) {
   event.preventDefault();
 
   const productId =
     document.getElementById("product-id").value.trim();
 
+  const imageFileName =
+    document.getElementById("image").value.trim();
+
   const product = {
     name: document.getElementById("name").value.trim(),
     description: document.getElementById("description").value.trim(),
     price: Number(document.getElementById("price").value),
     stock: Number(document.getElementById("stock").value),
-    image: document.getElementById("image").value.trim(),
+    image: buildImagePath(imageFileName),
     active: document.getElementById("active").checked
   };
 
