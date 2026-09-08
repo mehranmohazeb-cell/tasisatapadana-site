@@ -100,9 +100,11 @@ function clearForm() {
 async function createProduct(event) {
   event.preventDefault();
 
+  const productId =
+    document.getElementById("product-id").value.trim();
+
   const product = {
     name: document.getElementById("name").value.trim(),
-    slug: document.getElementById("slug").value.trim(),
     description: document.getElementById("description").value.trim(),
     price: Number(document.getElementById("price").value),
     stock: Number(document.getElementById("stock").value),
@@ -110,9 +112,21 @@ async function createProduct(event) {
     active: document.getElementById("active").checked
   };
 
-  if (!product.name || !product.slug) {
-    alert("نام محصول و شناسه محصول الزامی است.");
+  if (!product.name) {
+    alert("نام محصول الزامی است.");
     return;
+  }
+
+  if (!productId) {
+    const slug =
+      document.getElementById("slug").value.trim();
+
+    if (!slug) {
+      alert("شناسه محصول الزامی است.");
+      return;
+    }
+
+    product.slug = slug;
   }
 
   const token = prompt("رمز مدیریت را وارد کنید:");
@@ -121,9 +135,15 @@ async function createProduct(event) {
     return;
   }
 
+  const isEditing = !!productId;
+
+  if (isEditing) {
+    product.id = Number(productId);
+  }
+
   try {
     const response = await fetch(`${API_BASE}/products`, {
-      method: "POST",
+      method: isEditing ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Admin-Token": token
@@ -137,12 +157,16 @@ async function createProduct(event) {
       if (response.status === 401) {
         alert("رمز مدیریت صحیح نیست.");
       } else {
-        alert(data.message || "ثبت محصول انجام نشد.");
+        alert(data.message || "عملیات انجام نشد.");
       }
       return;
     }
 
-    alert("محصول با موفقیت ثبت شد.");
+    alert(
+      isEditing
+        ? "محصول با موفقیت ویرایش شد."
+        : "محصول با موفقیت ثبت شد."
+    );
 
     clearForm();
     await loadProducts();
