@@ -43,14 +43,21 @@ function renderProducts() {
     <div class="product-row">
       <div>
         <strong>${escapeHtml(product.name)}</strong>
+
         <div>
           قیمت:
           ${Number(product.price || 0).toLocaleString("fa-IR")}
           تومان
         </div>
+
         <div>
           موجودی:
           ${Number(product.stock || 0).toLocaleString("fa-IR")}
+        </div>
+
+        <div>
+          تصاویر:
+          ${(product.images || []).length.toLocaleString("fa-IR")}
         </div>
       </div>
 
@@ -82,13 +89,25 @@ function editProduct(id) {
   document.getElementById("stock").value =
     product.stock || 0;
 
-  const imageValue = product.image || "";
+  const imageFields =
+    document.getElementById("image-fields");
 
-  if (imageValue.startsWith(IMAGE_BASE_PATH)) {
-    document.getElementById("image").value =
-      imageValue.substring(IMAGE_BASE_PATH.length);
+  imageFields.innerHTML = "";
+
+  let images = [];
+
+  if (Array.isArray(product.images) && product.images.length > 0) {
+    images = product.images.map(item => item.image || "");
+  } else if (product.image) {
+    images = [product.image];
+  }
+
+  if (images.length === 0) {
+    addImageField();
   } else {
-    document.getElementById("image").value = imageValue;
+    images.forEach(image => {
+      addImageField(image);
+    });
   }
 
   document.getElementById("active").checked =
@@ -100,10 +119,59 @@ function editProduct(id) {
   });
 }
 
+function addImageField(value = "") {
+  const container =
+    document.getElementById("image-fields");
+
+  const wrapper = document.createElement("div");
+
+  wrapper.className = "image-field";
+
+  const input = document.createElement("input");
+
+  input.type = "text";
+  input.className = "product-image-input";
+  input.placeholder = "مثلاً: test-product.jpeg";
+  input.value = getImageFileName(value);
+
+  wrapper.appendChild(input);
+
+  container.appendChild(wrapper);
+}
+
+function getImageFileName(value) {
+  const image = String(value || "").trim();
+
+  if (image.startsWith(IMAGE_BASE_PATH)) {
+    return image.substring(IMAGE_BASE_PATH.length);
+  }
+
+  return image;
+}
+
+function getImagePaths() {
+  const inputs = document.querySelectorAll(
+    ".product-image-input"
+  );
+
+  return Array.from(inputs)
+    .map(input => buildImagePath(input.value))
+    .filter(Boolean);
+}
+
 function clearForm() {
   document.getElementById("product-form").reset();
+
   document.getElementById("product-id").value = "";
+
   document.getElementById("active").checked = true;
+
+  const imageFields =
+    document.getElementById("image-fields");
+
+  imageFields.innerHTML = "";
+
+  addImageField();
 }
 
 function buildImagePath(fileName) {
@@ -126,17 +194,23 @@ async function createProduct(event) {
   const productId =
     document.getElementById("product-id").value.trim();
 
-  const imageFileName =
-    document.getElementById("image").value.trim();
-
   const product = {
     name: document.getElementById("name").value.trim(),
-    description: document.getElementById("description").value.trim(),
-    price: Number(document.getElementById("price").value),
-    stock: Number(document.getElementById("stock").value),
-    image: buildImagePath(imageFileName),
-    active: document.getElementById("active").checked
+    description:
+      document.getElementById("description").value.trim(),
+    price: Number(
+      document.getElementById("price").value
+    ),
+    stock: Number(
+      document.getElementById("stock").value
+    ),
+    image: "",
+    images: getImagePaths(),
+    active:
+      document.getElementById("active").checked
   };
+
+  product.image = product.images[0] || "";
 
   if (!product.name) {
     alert("نام محصول الزامی است.");
@@ -168,14 +242,17 @@ async function createProduct(event) {
   }
 
   try {
-    const response = await fetch(`${API_BASE}/products`, {
-      method: isEditing ? "PUT" : "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Admin-Token": token
-      },
-      body: JSON.stringify(product)
-    });
+    const response = await fetch(
+      `${API_BASE}/products`,
+      {
+        method: isEditing ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": token
+        },
+        body: JSON.stringify(product)
+      }
+    );
 
     const data = await response.json();
 
@@ -183,8 +260,12 @@ async function createProduct(event) {
       if (response.status === 401) {
         alert("رمز مدیریت صحیح نیست.");
       } else {
-        alert(data.message || "عملیات انجام نشد.");
+        alert(
+          data.message ||
+          "عملیات انجام نشد."
+        );
       }
+
       return;
     }
 
@@ -195,9 +276,12 @@ async function createProduct(event) {
     );
 
     clearForm();
+
     await loadProducts();
+
   } catch (error) {
     console.error(error);
+
     alert("ارتباط با سرور برقرار نشد.");
   }
 }
@@ -217,18 +301,40 @@ function escapeAttribute(value) {
     .replace(/'/g, "\\'");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  loadProducts();
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
 
-  document
-    .getElementById("refresh-products")
-    .addEventListener("click", loadProducts);
+    loadProducts();
 
-  document
-    .getElementById("cancel-edit")
-    .addEventListener("click", clearForm);
+    document
+      .getElementById("refresh-products")
+      .addEventListener(
+        "click",
+        loadProducts
+      );
 
-  document
-    .getElementById("product-form")
-    .addEventListener("submit", createProduct);
-});
+    document
+      .getElementById("cancel-edit")
+      .addEventListener(
+        "click",
+        clearForm
+      );
+
+    document
+      .getElementById("add-image")
+      .addEventListener(
+        "click",
+        () => addImageField()
+      );
+
+    document
+      .getElementById("product-form")
+      .addEventListener(
+        "submit",
+        createProduct
+      );
+
+    clearForm();
+  }
+);
