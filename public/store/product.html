@@ -6,7 +6,7 @@
   <title>جزئیات محصول | فروشگاه تأسیسات آپادانا</title>
   <meta name="description" content="جزئیات محصول در فروشگاه تأسیسات آپادانا">
   <link rel="stylesheet" href="store.css">
-</head>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap"></head>
 
 <body>
 
@@ -83,7 +83,7 @@
         return `
           <div class="product-detail-media">
             <img
-              src="../assets/products/placeholder.svg"
+              src="../assets/placeholder.svg"
               alt="${escapeHtml(product.name)}"
               class="product-detail-image"
             >
@@ -317,7 +317,7 @@
 
       const cart = JSON.parse(
         localStorage.getItem(
-          "tasisat_apadana_cart"
+          "tasisat_tasisat_apadana_cart_v2_v2"
         ) || "[]"
       );
 
@@ -340,7 +340,7 @@
       }
 
       localStorage.setItem(
-        "tasisat_apadana_cart",
+        "tasisat_tasisat_apadana_cart_v2_v2",
         JSON.stringify(cart)
       );
 
@@ -354,7 +354,7 @@
     function updateCartCount() {
       const cart = JSON.parse(
         localStorage.getItem(
-          "tasisat_apadana_cart"
+          "tasisat_tasisat_apadana_cart_v2_v2"
         ) || "[]"
       );
 

@@ -37,7 +37,7 @@ function renderProducts(items) {
 
   grid.innerHTML = items.map(product => {
 
-    const image = product.image || "/assets/products/placeholder.svg";
+    const image = product.image || "/assets/placeholder.svg";
     const title = escapeHtml(product.name || "محصول");
     const price = formatPrice(product.price);
 
@@ -113,7 +113,7 @@ function addToCart(id) {
   if (!product) return;
 
   const cart = JSON.parse(
-    localStorage.getItem("tasisat_apadana_cart") || "[]"
+    localStorage.getItem("tasisat_tasisat_apadana_cart_v2_v2") || "[]"
   );
 
   const existing = cart.find(
@@ -133,7 +133,7 @@ function addToCart(id) {
   }
 
   localStorage.setItem(
-    "tasisat_apadana_cart",
+    "tasisat_tasisat_apadana_cart_v2_v2",
     JSON.stringify(cart)
   );
 
@@ -144,7 +144,7 @@ function addToCart(id) {
 
 function updateCartCount() {
   const cart = JSON.parse(
-    localStorage.getItem("tasisat_apadana_cart") || "[]"
+    localStorage.getItem("tasisat_tasisat_apadana_cart_v2_v2") || "[]"
   );
 
   const count = cart.reduce(

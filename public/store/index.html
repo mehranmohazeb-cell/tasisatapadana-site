@@ -4,12 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>فروشگاه تأسیسات آپادانا</title>
-  <meta name="description" content="فروشگاه اینترنتی تأسیسات آپادانا؛ قطعات و تجهیزات تأسیسات، پکیج، آبگرمکن، اجاق گاز و فر.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <meta name="description" content="فروشگاه اینترنتی تأسیسات آپادانا">
   <link rel="stylesheet" href="store.css">
-</head>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap"></head>
 <body>
   <header class="store-header">
     <div class="container">
@@ -17,35 +14,25 @@
         <img src="../assets/logo-header.png" alt="تأسیسات آپادانا">
       </a>
       <nav class="store-nav">
-        <a href="../index.html">سایت اصلی</a>
         <a href="index.html">فروشگاه</a>
         <a href="cart.html">سبد خرید <span id="cart-count">0</span></a>
       </nav>
     </div>
   </header>
-  <main>
-    <section class="store-hero">
-      <div class="store-hero-pattern" aria-hidden="true"></div>
-      <div class="container store-hero-inner">
-        <span class="store-badge">ویترین تأسیسات آپادانا</span>
-        <h1>فروشگاه تأسیسات آپادانا</h1>
-        <p>قطعات و تجهیزات تأسیسات، پکیج، آبگرمکن، اجاق گاز و فر</p>
-      </div>
+  <main class="container">
+    <section class="store-hero has-bg" style="background-image:linear-gradient(90deg,rgba(10,47,58,.94),rgba(10,47,58,.70),rgba(10,47,58,.28)),url("../assets/store-hero-bg.jpg");">
+      <h1>فروشگاه تأسیسات آپادانا</h1>
+      <p>قطعات و تجهیزات تأسیسات، پکیج و آبگرمکن</p>
     </section>
-    <section class="products-section container">
-      <div class="section-title">
-        <h2>محصولات</h2>
-        <p>محصول موردنظر را انتخاب کنید تا جزئیات و تصاویر آن را ببینید.</p>
-      </div>
+    <section class="products-section">
+      <div class="section-title"><h2>محصولات</h2></div>
       <div id="products-grid" class="products-grid">
         <p class="loading">در حال بارگذاری محصولات...</p>
       </div>
     </section>
   </main>
   <footer class="store-footer">
-    <div class="container">
-      <p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p>
-    </div>
+    <div class="container"><p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p></div>
   </footer>
   <script src="store.js"></script>
 </body>

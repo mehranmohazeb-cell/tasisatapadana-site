@@ -325,7 +325,7 @@ async function handleStoreApi(request, env) {
   }
 
   if (url.pathname.startsWith("/api/store/products/")) {
-    const slug = decodeURIComponent(url.pathname.split("/").pop());
+    const slug = url.pathname.split("/").pop();
 
     if (request.method !== "GET") {
       return Response.json(
