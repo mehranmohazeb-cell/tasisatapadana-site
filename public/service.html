@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خدمات تأسیسات آپادانا</title>
+<meta name="description" content="اطلاعات، عیب‌یابی، راهکارها و ثبت سفارش خدمات تأسیسات آپادانا در اصفهان">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="logo"><img src="/assets/logo-header.png" alt="تأسیسات آپادانا"></a>
+    <button class="menu-toggle" id="menuToggle" aria-label="باز و بسته کردن منو" aria-expanded="false" aria-controls="mainNav"><span></span><span></span><span></span></button>
+    <nav class="main-nav" id="mainNav" aria-label="منوی اصلی">
+      <ul>
+        <li><a href="/">خانه</a></li><li><a href="/#services">خدمات</a></li><li><a href="/store/">فروشگاه</a></li><li><a href="/#about">درباره ما</a></li><li><a href="/#contact">تماس با ما</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main>
+<section class="service-detail-hero">
+  <div class="container">
+    <a href="/#services" class="back-link">← بازگشت به خدمات</a>
+    <p class="eyebrow">تأسیسات آپادانا</p>
+    <h1 id="serviceTitle">خدمت</h1>
+    <p id="serviceLead">توضیحات خدمت در حال بارگذاری است.</p>
+  </div>
+</section>
+<section class="service-detail">
+  <div class="container">
+    <div class="service-detail-actions">
+      <a href="#troubleshooting" class="service-action">عیب‌یابی</a>
+      <a href="#articles" class="service-action">مقالات و آموزش‌ها</a>
+      <a href="#solutions" class="service-action">راهکارها</a>
+      <a href="tel:" data-phone-link class="service-action service-action-primary">ثبت سفارش</a>
+      <a href="#conversation" class="service-action">گفتگو با کارشناس</a>
+    </div>
+    <div class="service-detail-sections">
+      <section id="troubleshooting"><h2>عیب‌یابی</h2><p>نشانه‌های خرابی، علت‌های رایج و مسیر بررسی اولیه این خدمت در این بخش قرار می‌گیرد.</p></section>
+      <section id="articles"><h2>مقالات و آموزش‌ها</h2><p>مقالات و آموزش‌های مرتبط با این خدمت به‌تدریج در این بخش اضافه می‌شوند.</p></section>
+      <section id="solutions"><h2>راهکارها</h2><p>راهکارهای کاربردی برای پیشگیری از خرابی و استفاده بهتر از دستگاه در این بخش قرار می‌گیرد.</p></section>
+      <section id="conversation"><h2>گفتگو با کارشناس</h2><p>این بخش برای راه‌اندازی قابلیت گفتگو در آینده آماده شده است.</p></section>
+    </div>
+  </div>
+</section>
+</main>
+<footer class="site-footer"><div class="container footer-inner"><div class="footer-col"><p class="logo"><img src="/assets/logo-footer.png" alt="تأسیسات آپادانا"></p><p>تعمیر، سرویس و نصب تخصصی تجهیزات گرمایشی و گازسوز در اصفهان.</p></div></div><p class="copyright">© <span id="year"></span> تأسیسات آپادانا — تمامی حقوق محفوظ است.</p></footer>
+<script src="/script.js" defer></script>
+<script>
+const services = {
+  "package-repair": ["تعمیر پکیج","عیب‌یابی و تعمیر انواع پکیج دیواری و زمینی در محل، با تشخیص دقیق قبل از هر اقدام."],
+  "package-service": ["سرویس پکیج","سرویس دوره‌ای پکیج برای عملکرد ایمن‌تر، کاهش مصرف گاز و افزایش طول عمر دستگاه."],
+  "water-heater": ["تعمیر آبگرمکن","تعمیر تخصصی آبگرمکن دیواری و مخزن‌دار توسط تعمیرکار متخصص."],
+  "heater": ["تعمیر بخاری","رفع خرابی انواع بخاری گازی و برقی با بررسی و مشاوره حضوری."],
+  "stove-oven": ["تعمیر اجاق گاز و فر","تعمیر اجاق گاز و فر خانگی و رفع مشکلات جرقه‌زن، شعله و ترموستات."],
+  "installation": ["نصب و راه‌اندازی","نصب اصولی تجهیزات گرمایشی و گازسوز مطابق نکات ایمنی."],
+  "troubleshooting": ["عیب‌یابی","بررسی دقیق علائم و پیدا کردن علت خرابی پیش از تعمیر یا تعویض قطعه."],
+  "maintenance": ["سرویس و نگهداری","برنامه‌ریزی سرویس منظم برای پیشگیری از خرابی‌های ناگهانی."]
+};
+const key = new URLSearchParams(location.search).get("service") || "package-repair";
+const data = services[key] || services["package-repair"];
+document.getElementById("serviceTitle").textContent = data[0];
+document.getElementById("serviceLead").textContent = data[1];
+document.title = data[0] + " | تأسیسات آپادانا";
+</script>
+</body>
+</html>

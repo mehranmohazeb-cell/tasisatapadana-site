@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-labelledby="t d">
+<title id="t">تعمیر بخاری</title><desc id="d">تصویر گرافیکی تعمیر بخاری تأسیسات آپادانا</desc>
+<rect width="800" height="520" rx="28" fill="#eef3f3"/>
+<path d="M0 390h800v130H0z" fill="#0a2f3a"/>
+<circle cx="650" cy="100" r="150" fill="#0e4c5c" opacity=".12"/>
+<circle cx="110" cy="430" r="190" fill="#b5541f" opacity=".10"/>
+<g fill="none" stroke="#0e4c5c" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+<path d="M400 120c-55 75-95 110-95 180a95 95 0 0 0 190 0c0-75-45-115-70-180-12 43-30 65-25 105-35-25-35-65 0-105z"/></g>
+<text x="400" y="455" text-anchor="middle" font-family="Tahoma,Arial,sans-serif" font-size="34" font-weight="700" fill="#fff">تعمیر بخاری</text>
+</svg>
