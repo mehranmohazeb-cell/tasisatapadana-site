@@ -95,6 +95,144 @@ const result = await env.DB
 }
 
 }
+// =========================
+  // Admin Orders
+  // =========================
+
+  if (
+    url.pathname === "/api/store/orders" &&
+    request.method === "GET"
+  ) {
+    if (!isAdmin(request, env)) {
+      return jsonResponse(
+        { message: "Unauthorized" },
+        401
+      );
+    }
+
+    const ordersResult = await env.DB
+      .prepare(`
+        SELECT
+          id,
+          customer_name,
+          customer_phone,
+          customer_address,
+          total,
+          status,
+          created_at
+        FROM orders
+        ORDER BY id DESC
+      `)
+      .all();
+
+    const orders = ordersResult.results || [];
+
+    for (const order of orders) {
+      const itemsResult = await env.DB
+        .prepare(`
+          SELECT
+            id,
+            order_id,
+            product_id,
+            product_name,
+            price,
+            quantity,
+            created_at
+          FROM order_items
+          WHERE order_id = ?
+          ORDER BY id ASC
+        `)
+        .bind(order.id)
+        .all();
+
+      order.items = itemsResult.results || [];
+    }
+
+    return jsonResponse({
+      orders
+    });
+  }
+
+
+  // دریافت جزئیات یک سفارش
+  if (
+    url.pathname.startsWith("/api/store/orders/") &&
+    request.method === "GET"
+  ) {
+    if (!isAdmin(request, env)) {
+      return jsonResponse(
+        { message: "Unauthorized" },
+        401
+      );
+    }
+
+    const orderIdText =
+      url.pathname.split("/").pop();
+
+    const orderId =
+      Number(orderIdText);
+
+    if (
+      !Number.isInteger(orderId) ||
+      orderId <= 0
+    ) {
+      return jsonResponse(
+        { message: "شناسه سفارش نامعتبر است." },
+        400
+      );
+    }
+
+    const orderResult = await env.DB
+      .prepare(`
+        SELECT
+          id,
+          customer_name,
+          customer_phone,
+          customer_address,
+          total,
+          status,
+          created_at
+        FROM orders
+        WHERE id = ?
+        LIMIT 1
+      `)
+      .bind(orderId)
+      .all();
+
+    const order =
+      orderResult.results?.[0];
+
+    if (!order) {
+      return jsonResponse(
+        { message: "سفارش پیدا نشد." },
+        404
+      );
+    }
+
+    const itemsResult = await env.DB
+      .prepare(`
+        SELECT
+          id,
+          order_id,
+          product_id,
+          product_name,
+          price,
+          quantity,
+          created_at
+        FROM order_items
+        WHERE order_id = ?
+        ORDER BY id ASC
+      `)
+      .bind(orderId)
+      .all();
+
+    order.items =
+      itemsResult.results || [];
+
+    return jsonResponse({
+      order
+    });
+  } 
 
 if (
 url.pathname === "/api/store/products" &&
