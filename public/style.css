@@ -496,9 +496,15 @@ p {
    Footer
    ========================= */
 .site-footer {
-  background: var(--primary-dark);
+  position: relative;
+  background:
+    linear-gradient(45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
+    linear-gradient(-45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
+    var(--primary-dark);
+  background-size: 46px 46px;
   color: #cfe0e3;
   padding: 40px 0 20px;
+  overflow: hidden;
 }
 
 .footer-inner {
@@ -534,7 +540,6 @@ p {
   font-size: 0.85rem;
   color: #9fb8bc;
 }
-
 /* =========================
    Tablet / Desktop enhancements
    ========================= */
