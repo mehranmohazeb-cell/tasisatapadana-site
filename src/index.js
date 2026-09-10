@@ -24,7 +24,7 @@ async function handleStoreApi(request, env) {
     return Response.json({
       ok: true,
       service: "tasisat-apadana-store",
-      version: "1.4.0",
+      version: "1.3.0",
       database: !!env.DB,
     });
   }

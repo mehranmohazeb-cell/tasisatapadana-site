@@ -113,7 +113,7 @@ function addToCart(id) {
   if (!product) return;
 
   const cart = JSON.parse(
-    localStorage.getItem("tasisat_tasisat_apadana_cart_v2_v2") || "[]"
+    localStorage.getItem("tasisat_apadana_cart") || "[]"
   );
 
   const existing = cart.find(
@@ -133,7 +133,7 @@ function addToCart(id) {
   }
 
   localStorage.setItem(
-    "tasisat_tasisat_apadana_cart_v2_v2",
+    "tasisat_apadana_cart",
     JSON.stringify(cart)
   );
 
@@ -144,7 +144,7 @@ function addToCart(id) {
 
 function updateCartCount() {
   const cart = JSON.parse(
-    localStorage.getItem("tasisat_tasisat_apadana_cart_v2_v2") || "[]"
+    localStorage.getItem("tasisat_apadana_cart") || "[]"
   );
 
   const count = cart.reduce(
