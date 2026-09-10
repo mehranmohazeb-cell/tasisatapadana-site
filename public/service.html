@@ -3,54 +3,70 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>خدمات تخصصی | تأسیسات آپادانا</title>
-<meta name="description" content="راهنمای عیب‌یابی، مقالات و راهکارهای عملی خدمات تأسیسات آپادانا.">
+<title>خدمات تأسیسات آپادانا</title>
+<meta name="description" content="اطلاعات، عیب‌یابی، راهکارها و ثبت سفارش خدمات تأسیسات آپادانا در اصفهان">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
 <link rel="stylesheet" href="/style.css">
-<style>
-.service-detail-page{padding:42px 0 70px}.service-detail-hero{display:grid;gap:24px;grid-template-columns:1fr;background:var(--bg-alt);border-radius:18px;overflow:hidden;border:1px solid var(--border)}
-.service-detail-hero img{width:100%;height:260px;object-fit:cover}.service-detail-copy{padding:28px}.service-detail-copy h1{color:var(--primary);margin-top:0}.service-detail-grid{display:grid;gap:18px;margin-top:24px}.detail-panel{background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px}.detail-panel h2{color:var(--primary);font-size:1.2rem}.detail-panel ul{padding-right:20px}.detail-panel li{margin:8px 0}.detail-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}@media(min-width:768px){.service-detail-hero{grid-template-columns:1fr 1fr}.service-detail-hero img{height:100%;min-height:360px}.service-detail-grid{grid-template-columns:repeat(3,1fr)}}
-</style>
 </head>
 <body>
-<header class="site-header"><div class="container header-inner">
-<a href="/" class="logo"><img src="/assets/logo-header.png" alt="تأسیسات آپادانا"></a>
-<button class="menu-toggle" id="menuToggle" aria-label="باز و بسته کردن منو" aria-expanded="false" aria-controls="mainNav"><span></span><span></span><span></span></button>
-<nav class="main-nav" id="mainNav"><ul><li><a href="/">خانه</a></li><li><a href="/#services">خدمات</a></li><li><a href="/store/">فروشگاه</a></li><li><a href="/#about">درباره ما</a></li><li><a href="/#contact">تماس با ما</a></li></ul></nav>
-</div></header>
-<main class="service-detail-page">
-<div class="container">
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="logo"><img src="/assets/logo-header.png" alt="تأسیسات آپادانا"></a>
+    <button class="menu-toggle" id="menuToggle" aria-label="باز و بسته کردن منو" aria-expanded="false" aria-controls="mainNav"><span></span><span></span><span></span></button>
+    <nav class="main-nav" id="mainNav" aria-label="منوی اصلی">
+      <ul>
+        <li><a href="/">خانه</a></li><li><a href="/#services">خدمات</a></li><li><a href="/store/">فروشگاه</a></li><li><a href="/#about">درباره ما</a></li><li><a href="/#contact">تماس با ما</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main>
 <section class="service-detail-hero">
-<img id="service-image" src="/assets/services/repair-package.jpg" alt="">
-<div class="service-detail-copy"><h1 id="service-title">خدمات تأسیسات آپادانا</h1><p id="service-intro"></p><div class="detail-cta"><a href="tel:" data-phone-link class="btn btn-call">تماس برای مشاوره</a><a href="/#services" class="btn">بازگشت به خدمات</a></div></div>
+  <div class="container">
+    <a href="/#services" class="back-link">← بازگشت به خدمات</a>
+    <p class="eyebrow">تأسیسات آپادانا</p>
+    <h1 id="serviceTitle">خدمت</h1>
+    <p id="serviceLead">توضیحات خدمت در حال بارگذاری است.</p>
+  </div>
 </section>
-<div class="service-detail-grid">
-<section class="detail-panel"><h2>عیب‌یابی و اشکالات رایج</h2><ul id="troubleshooting"></ul></section>
-<section class="detail-panel"><h2>مقاله پیشنهادی</h2><div id="article"></div></section>
-<section class="detail-panel"><h2>راهکارهای عملی</h2><ul id="solutions"></ul></section>
-</div>
-</div>
+<section class="service-detail">
+  <div class="container">
+    <div class="service-detail-actions">
+      <a href="#troubleshooting" class="service-action">عیب‌یابی</a>
+      <a href="#articles" class="service-action">مقالات و آموزش‌ها</a>
+      <a href="#solutions" class="service-action">راهکارها</a>
+      <a href="tel:" data-phone-link class="service-action service-action-primary">ثبت سفارش</a>
+      <a href="#conversation" class="service-action">گفتگو با کارشناس</a>
+    </div>
+    <div class="service-detail-sections">
+      <section id="troubleshooting"><h2>عیب‌یابی</h2><p>نشانه‌های خرابی، علت‌های رایج و مسیر بررسی اولیه این خدمت در این بخش قرار می‌گیرد.</p></section>
+      <section id="articles"><h2>مقالات و آموزش‌ها</h2><p>مقالات و آموزش‌های مرتبط با این خدمت به‌تدریج در این بخش اضافه می‌شوند.</p></section>
+      <section id="solutions"><h2>راهکارها</h2><p>راهکارهای کاربردی برای پیشگیری از خرابی و استفاده بهتر از دستگاه در این بخش قرار می‌گیرد.</p></section>
+      <section id="conversation"><h2>گفتگو با کارشناس</h2><p>این بخش برای راه‌اندازی قابلیت گفتگو در آینده آماده شده است.</p></section>
+    </div>
+  </div>
+</section>
 </main>
-<footer class="site-footer"><div class="container footer-inner"><div class="footer-col"><p class="logo"><img src="/assets/logo-footer.png" alt="تأسیسات آپادانا"></p><p>تعمیر، سرویس، نصب و فروش تجهیزات تأسیساتی در اصفهان.</p></div><div class="footer-col"><h3>دسترسی سریع</h3><ul class="footer-links"><li><a href="/">خانه</a></li><li><a href="/store/">فروشگاه</a></li></ul></div><div class="footer-col"><h3>ارتباط</h3><p><a href="tel:" data-phone-link>تماس با تأسیسات آپادانا</a></p></div></div><p class="copyright">© <span id="year"></span> تأسیسات آپادانا — تمامی حقوق محفوظ است.</p></footer>
-<script>
-const SERVICES={
-"repair-package":{title:"تعمیر پکیج",image:"/assets/services/repair-package.jpg",intro:"تعمیر پکیج دیواری و زمینی با بررسی مرحله‌به‌مرحله، تشخیص علت خرابی و انجام تعمیر متناسب با وضعیت دستگاه.",troubleshooting:["روشن نشدن یا خاموش شدن مکرر دستگاه","گرم نشدن آب مصرفی یا نوسان دمای آن","افت فشار مدار گرمایش و نیاز مکرر به هواگیری یا آبگیری","صدای غیرعادی پمپ، فن، شیر سه‌طرفه یا مبدل","نمایش کد خطا و نیاز به بررسی سنسورها، گردش آب و احتراق"],article:"پیش از تعویض قطعه، علائم دستگاه باید با فشار مدار، دمای رفت و برگشت، وضعیت احتراق و عملکرد سنسورها تطبیق داده شود. تعمیر اصولی از تشخیص علت شروع می‌شود، نه از تعویض حدسی قطعات.",solutions:["فشار مدار را در حالت سرد بررسی کنید و علت افت فشار را نادیده نگیرید.","شیرها و مسیرهای گردش آب را از نظر گرفتگی و هوا بررسی کنید.","در صورت وجود خطا، شرایط وقوع خطا را ثبت و سپس سراغ اندازه‌گیری بروید.","سرویس و تمیزکاری دوره‌ای را متناسب با شرایط کار دستگاه انجام دهید."]},
-"service-package":{title:"سرویس پکیج",image:"/assets/services/service-package.jpg",intro:"سرویس دوره‌ای برای حفظ ایمنی، راندمان و عملکرد پایدار پکیج و کاهش احتمال خرابی‌های ناگهانی.",troubleshooting:["کاهش تدریجی آب گرم یا نوسان دما","افزایش صدای کارکرد یا لرزش","افت راندمان گرمایش رادیاتورها","افزایش مصرف گاز یا طولانی شدن زمان گرم شدن","کثیفی مشعل، مبدل، فیلتر یا مسیرهای گردش"],article:"سرویس خوب فقط شست‌وشوی یک قطعه نیست؛ مجموعه‌ای از بازدیدهای ایمنی، بررسی احتراق، کنترل فشار و دما، بررسی گردش آب و تمیزکاری هدفمند است.",solutions:["قبل از سرویس، علائم و سابقه خرابی دستگاه را ثبت کنید.","فشار و نشتی مدار را کنترل و وضعیت دودکش و تهویه را بررسی کنید.","قطعات را فقط در صورت نیاز و بر اساس اندازه‌گیری تمیز یا تعویض کنید.","تاریخ سرویس بعدی را ثبت کنید تا نگهداری منظم فراموش نشود."]},
-"water-heater":{title:"تعمیر آبگرمکن",image:"/assets/services/water-heater.jpg",intro:"عیب‌یابی و تعمیر آبگرمکن‌های دیواری و مخزن‌دار با توجه به وضعیت آب، گاز، احتراق و اجزای ایمنی.",troubleshooting:["کم شدن دمای آب یا نوسان دما","خاموش شدن شعله یا روشن نشدن مشعل","جرقه‌زدن نامنظم یا مشکل در تشخیص شعله","نشتی آب از اتصالات، شیرها یا مخزن","رسوب و کاهش دبی آب گرم"],article:"در آبگرمکن، کیفیت آب و میزان رسوب می‌تواند مستقیماً روی دبی، انتقال حرارت و پایداری عملکرد اثر بگذارد؛ تشخیص باید از علائم شروع شود و به اندازه‌گیری برسد.",solutions:["دبی و فشار آب را با شرایط واقعی مصرف مقایسه کنید.","نشتی آب یا گاز را جدی بگیرید و قبل از تعمیر علت آن را مشخص کنید.","مشعل و مسیر احتراق را با رعایت نکات ایمنی بررسی کنید.","در مناطق با آب سخت، برنامه رسوب‌زدایی و سرویس دوره‌ای داشته باشید."]},
-"heater":{title:"تعمیر بخاری",image:"/assets/services/heater.jpg",intro:"عیب‌یابی بخاری گازی و بررسی ایمنی شعله، دودکش، ترموکوپل و مسیر گاز پیش از هر اقدام تعمیراتی.",troubleshooting:["خاموش شدن شعله شمعک","زرد شدن یا ناپایداری شعله","گرمادهی ضعیف یا نامتناسب","بوی گاز یا دود در محیط","عمل نکردن صحیح ترموکوپل یا شیر کنترل"],article:"در بخاری گازی، سلامت احتراق و خروج محصولات احتراق از خودِ گرمایش مهم‌تر است. هر نشانه غیرعادی باید با اولویت ایمنی بررسی شود.",solutions:["دودکش و مسیر خروج محصولات احتراق را بررسی کنید.","رنگ و پایداری شعله را کنترل کنید.","هرگز قطعه ایمنی را برای روشن ماندن بخاری دور نزنید.","در صورت بوی گاز، ابتدا منبع خطر را ایمن کنید و سپس سراغ تعمیر بروید."]},
-"stove-oven":{title:"تعمیر اجاق گاز و فر",image:"/assets/services/stove-oven.jpg",intro:"تعمیر تخصصی اجاق گاز و فر خانگی، از جرقه‌زن و شعله تا ترموستات و عملکرد حرارتی فر.",troubleshooting:["جرقه نزدن یا جرقه‌زدن نامنظم","شعله ضعیف، زرد یا ناپایدار","خاموش شدن شعله پس از رها کردن ولوم","گرم نشدن یکنواخت فر","مشکل در ترموستات یا کنترل دما"],article:"برای تشخیص عیب اجاق و فر باید بین مشکل گازرسانی، جرقه، شعله و کنترل دما تفکیک قائل شد؛ تعویض قطعه بدون این تفکیک می‌تواند هزینه اضافی ایجاد کند.",solutions:["شعله هر شعله را جداگانه مقایسه کنید.","نازل و مسیر ورودی گاز را از نظر گرفتگی بررسی کنید.","عملکرد جرقه‌زن و اتصال‌های آن را کنترل کنید.","برای فر، دمای واقعی را با وضعیت ترموستات مقایسه کنید."]},
-"installation":{title:"نصب و راه‌اندازی",image:"/assets/services/installation.jpg",intro:"برنامه‌ریزی و نصب اصولی تجهیزات گرمایشی با توجه به محل نصب، لوازم موردنیاز، دودکش، شیرها و نکات ایمنی.",troubleshooting:["انتخاب نامناسب محل نصب","کمبود یا نامتناسب بودن اتصالات و شیرها","اجرای نادرست مسیر دودکش","تنظیم نبودن فشار و شرایط راه‌اندازی","نبود بررسی نهایی نشتی و عملکرد"],article:"نصب اصولی از آماده‌سازی محل و فهرست تجهیزات شروع می‌شود. پیش از راه‌اندازی باید مسیرهای آب و گاز، دودکش، برق و دسترسی سرویس آینده بررسی شوند.",solutions:["قبل از حضور نصاب، محل و تجهیزات لازم را مشخص کنید.","مسیر دودکش و تهویه را مطابق الزامات دستگاه اجرا کنید.","پس از نصب، نشتی و عملکرد را مرحله‌به‌مرحله بررسی کنید.","اطلاعات دستگاه و تاریخ نصب را برای سرویس آینده ثبت کنید."]},
-"diagnosis":{title:"عیب‌یابی تخصصی",image:"/assets/services/diagnosis.jpg",intro:"عیب‌یابی با اندازه‌گیری و مقایسه شرایط واقعی دستگاه، پیش از تعمیر یا تعویض قطعات.",troubleshooting:["خطاهای متناوب و سخت‌قابل تکرار","اختلاف دمای غیرعادی در ورودی و خروجی","افت فشار یا دبی","اختلال در ولتاژ، مقاومت یا سنسورها","عملکرد نامنظم که با تعویض قطعه رفع نشده است"],article:"عیب‌یابی حرفه‌ای یعنی تبدیل علامت به اندازه‌گیری؛ مولتی‌متر، گیج فشار، دماسنج و ابزارهای مناسب باید برای تأیید فرضیه تعمیرکار استفاده شوند.",solutions:["علائم و زمان وقوع مشکل را دقیق ثبت کنید.","قبل از تعویض قطعه، ورودی‌ها و شرایط پایه را اندازه‌گیری کنید.","نتیجه هر اندازه‌گیری را با مشخصات دستگاه مقایسه کنید.","بعد از تعمیر، همان پارامتر اولیه را دوباره اندازه بگیرید."]},
-"maintenance-nfc":{title:"سرویس و نگهداری",image:"/assets/services/maintenance-nfc.jpg",intro:"برنامه نگهداری دوره‌ای و ثبت سوابق سرویس برای کاهش خرابی‌های ناگهانی و افزایش عمر تجهیزات.",troubleshooting:["فراموش شدن زمان سرویس بعدی","تجمع رسوب و آلودگی","افت تدریجی راندمان","تکرار یک خرابی به علت رفع نشدن ریشه مشکل","نبود سابقه منظم از تعمیرات و قطعات"],article:"ثبت دیجیتال سوابق سرویس می‌تواند تاریخچه دستگاه، اقدامات انجام‌شده و زمان سرویس بعدی را همیشه در دسترس قرار دهد؛ NFC می‌تواند این دسترسی را ساده‌تر کند.",solutions:["برای هر دستگاه برنامه سرویس مشخص داشته باشید.","نتایج اندازه‌گیری و قطعات تعویض‌شده را ثبت کنید.","زمان سرویس بعدی را همان روز تعیین کنید.","سوابق را کنار اطلاعات مدل و شماره دستگاه نگه دارید."]}};
-const key=new URLSearchParams(location.search).get("service")||"repair-package";
-const s=SERVICES[key]||SERVICES["repair-package"];
-document.title=s.title+" | تأسیسات آپادانا";
-document.getElementById("service-title").textContent=s.title;
-document.getElementById("service-intro").textContent=s.intro;
-const img=document.getElementById("service-image");img.src=s.image;img.alt=s.title;
-document.getElementById("troubleshooting").innerHTML=s.troubleshooting.map(x=>`<li>${x}</li>`).join("");
-document.getElementById("solutions").innerHTML=s.solutions.map(x=>`<li>${x}</li>`).join("");
-document.getElementById("article").textContent=s.article;
-</script>
+<footer class="site-footer"><div class="container footer-inner"><div class="footer-col"><p class="logo"><img src="/assets/logo-footer.png" alt="تأسیسات آپادانا"></p><p>تعمیر، سرویس و نصب تخصصی تجهیزات گرمایشی و گازسوز در اصفهان.</p></div></div><p class="copyright">© <span id="year"></span> تأسیسات آپادانا — تمامی حقوق محفوظ است.</p></footer>
 <script src="/script.js" defer></script>
+<script>
+const services = {
+  "package-repair": ["تعمیر پکیج","عیب‌یابی و تعمیر انواع پکیج دیواری و زمینی در محل، با تشخیص دقیق قبل از هر اقدام."],
+  "package-service": ["سرویس پکیج","سرویس دوره‌ای پکیج برای عملکرد ایمن‌تر، کاهش مصرف گاز و افزایش طول عمر دستگاه."],
+  "water-heater": ["تعمیر آبگرمکن","تعمیر تخصصی آبگرمکن دیواری و مخزن‌دار توسط تعمیرکار متخصص."],
+  "heater": ["تعمیر بخاری","رفع خرابی انواع بخاری گازی و برقی با بررسی و مشاوره حضوری."],
+  "stove-oven": ["تعمیر اجاق گاز و فر","تعمیر اجاق گاز و فر خانگی و رفع مشکلات جرقه‌زن، شعله و ترموستات."],
+  "installation": ["نصب و راه‌اندازی","نصب اصولی تجهیزات گرمایشی و گازسوز مطابق نکات ایمنی."],
+  "troubleshooting": ["عیب‌یابی","بررسی دقیق علائم و پیدا کردن علت خرابی پیش از تعمیر یا تعویض قطعه."],
+  "maintenance": ["سرویس و نگهداری","برنامه‌ریزی سرویس منظم برای پیشگیری از خرابی‌های ناگهانی."]
+};
+const key = new URLSearchParams(location.search).get("service") || "package-repair";
+const data = services[key] || services["package-repair"];
+document.getElementById("serviceTitle").textContent = data[0];
+document.getElementById("serviceLead").textContent = data[1];
+document.title = data[0] + " | تأسیسات آپادانا";
+</script>
 </body>
 </html>
