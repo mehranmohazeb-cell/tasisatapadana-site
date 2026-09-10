@@ -24,7 +24,7 @@ async function handleStoreApi(request, env) {
     return Response.json({
       ok: true,
       service: "tasisat-apadana-store",
-      version: "1.3.0",
+      version: "1.4.0",
       database: !!env.DB,
     });
   }
@@ -325,7 +325,7 @@ async function handleStoreApi(request, env) {
   }
 
   if (url.pathname.startsWith("/api/store/products/")) {
-    const slug = url.pathname.split("/").pop();
+    const slug = decodeURIComponent(url.pathname.split("/").pop());
 
     if (request.method !== "GET") {
       return Response.json(

@@ -7,7 +7,7 @@
 <footer class="store-footer"><div class="container"><p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p></div></footer>
 <script>
 const API_BASE="/api";
-function getCart(){try{return JSON.parse(localStorage.getItem("apadana_cart"))||[]}catch{return[];}}
+function getCart(){try{return JSON.parse(localStorage.getItem("tasisat_apadana_cart"))||[]}catch{return[];}}
 function updateCartCount(){const e=document.getElementById("cart-count");if(!e)return;e.textContent=getCart().reduce((t,i)=>t+Number(i.quantity||0),0).toLocaleString("fa-IR");}
 function formatPrice(price){if(price===null||price===undefined||price==="")return"تماس بگیرید";const n=Number(price);return Number.isNaN(n)?String(price):`${n.toLocaleString("fa-IR")} تومان`;}
 function escapeHtml(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
@@ -27,7 +27,7 @@ async function submitOrder(event){
  try{
   const response=await fetch(`${API_BASE}/orders`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(order)});
   if(!response.ok)throw new Error("خطا در ثبت سفارش");
-  localStorage.removeItem("apadana_cart");
+  localStorage.removeItem("tasisat_apadana_cart");
   message.innerHTML=`<strong>درخواست سفارش شما با موفقیت ثبت شد.</strong>`;
   form.reset();updateCartCount();
  }catch(error){console.error(error);message.innerHTML=`<strong>فعلاً امکان ثبت سفارش وجود ندارد.</strong><br>لطفاً بعداً دوباره تلاش کنید.`;}
