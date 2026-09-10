@@ -67,6 +67,20 @@ const data = services[key] || services["package-repair"];
 document.getElementById("serviceTitle").textContent = data[0];
 document.getElementById("serviceLead").textContent = data[1];
 document.title = data[0] + " | تأسیسات آپادانا";
+  if (key === "package-repair") {
+  document.getElementById("troubleshooting").innerHTML = `
+    <h2>چک‌لیست عیب‌یابی پکیج</h2>
+    <ul>
+      <li><strong>پکیج روشن نمی‌شود:</strong> برق، دوشاخه و فیوز را بررسی کنید.</li>
+      <li><strong>آب گرم نمی‌شود:</strong> باز بودن شیر گاز و مناسب بودن فشار آب را بررسی کنید.</li>
+      <li><strong>رادیاتورها گرم نمی‌شوند:</strong> فشار پکیج را بررسی کنید؛ معمولاً باید حدود <strong>۱ تا ۱.۵ بار</strong> باشد.</li>
+      <li><strong>پکیج خاموش یا خطادار شده:</strong> کد خطای نمایشگر را یادداشت کنید و یک‌بار دستگاه را طبق دستورالعمل سازنده ریست کنید.</li>
+      <li><strong>فشار آب پکیج پایین است:</strong> اگر فشار کمتر از محدوده مجاز است، طبق دفترچه دستگاه فشار را تنظیم کنید.</li>
+      <li><strong>صدای غیرعادی، نشتی آب یا بوی گاز وجود دارد:</strong> شیر گاز را ببندید، دستگاه را دستکاری نکنید و با تعمیرکار تماس بگیرید.</li>
+    </ul>
+    <p><strong>⚠️ اگر مشکل با این بررسی‌ها برطرف نشد، کد خطا و مدل پکیج را برای تعمیرکار ارسال کنید.</strong></p>
+  `;
+}
 </script>
 </body>
 </html>
