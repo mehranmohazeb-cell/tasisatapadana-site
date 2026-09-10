@@ -36,6 +36,7 @@
     </div>
   </header>
 
+
   <main class="container">
 
     <section
@@ -49,6 +50,61 @@
 
   </main>
 
+
+  <!-- نمایش تمام‌صفحه تصویر -->
+  <div
+    id="image-lightbox"
+    class="image-lightbox"
+    hidden
+    aria-hidden="true"
+  >
+
+    <button
+      type="button"
+      class="lightbox-close"
+      onclick="closeLightbox()"
+      aria-label="بستن تصویر"
+    >
+      ×
+    </button>
+
+
+    <button
+      type="button"
+      id="lightbox-prev"
+      class="lightbox-arrow lightbox-prev"
+      onclick="changeLightboxImage(-1)"
+      aria-label="تصویر قبلی"
+    >
+      ‹
+    </button>
+
+
+    <div class="lightbox-content">
+
+      <img
+        id="lightbox-image"
+        src=""
+        alt=""
+        draggable="false"
+      >
+
+    </div>
+
+
+    <button
+      type="button"
+      id="lightbox-next"
+      class="lightbox-arrow lightbox-next"
+      onclick="changeLightboxImage(1)"
+      aria-label="تصویر بعدی"
+    >
+      ›
+    </button>
+
+  </div>
+
+
   <footer class="store-footer">
     <div class="container">
       <p>
@@ -59,23 +115,28 @@
 
 
   <script>
+
     const API_BASE = "/api/store";
 
     let currentImageIndex = 0;
 
 
     function escapeHtml(value) {
+
       return String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+
     }
 
 
     function formatPrice(value) {
+
       return `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
+
     }
 
 
@@ -94,8 +155,10 @@
             }
 
             return item?.image || "";
+
           })
           .filter(Boolean);
+
       }
 
 
@@ -105,6 +168,7 @@
 
 
       return [];
+
     }
 
 
@@ -130,6 +194,7 @@
 
           </div>
         `;
+
       }
 
 
@@ -205,6 +270,7 @@
               alt="${escapeHtml(product.name)}"
               class="product-detail-image"
               draggable="false"
+              onclick="openLightbox()"
             >
 
             ${navigation}
@@ -215,6 +281,7 @@
 
         </div>
       `;
+
     }
 
 
@@ -243,6 +310,7 @@
 
         mainImage.alt =
           `${product.name} - تصویر ${index + 1}`;
+
       }
 
 
@@ -256,6 +324,7 @@
           );
 
         });
+
     }
 
 
@@ -286,8 +355,13 @@
 
 
       selectProductImage(newIndex);
+
     }
 
+
+    /*
+      لمس و سوایپ تصویر اصلی
+    */
 
     function setupImageSwipe() {
 
@@ -350,10 +424,6 @@
           const deltaY = endY - startY;
 
 
-          /*
-            فقط وقتی حرکت افقی باشد
-            تصویر را عوض می‌کنیم.
-          */
           if (
             Math.abs(deltaX) < 45 ||
             Math.abs(deltaX) < Math.abs(deltaY)
@@ -362,11 +432,6 @@
           }
 
 
-          /*
-            چون صفحه RTL است:
-            کشیدن به چپ → تصویر بعدی
-            کشیدن به راست → تصویر قبلی
-          */
           if (deltaX < 0) {
             changeProductImage(1);
           } else {
@@ -378,23 +443,385 @@
       );
 
 
-      /*
-        جلوگیری از انتخاب ناخواسته تصویر
-        هنگام لمس طولانی.
-      */
       slider.addEventListener(
         "dragstart",
         event => {
           event.preventDefault();
         }
       );
+
+    }
+
+
+    /*
+      باز کردن تصویر به صورت تمام‌صفحه
+    */
+
+    function openLightbox() {
+
+      const product = window.currentProduct;
+
+      if (!product) return;
+
+
+      const images = getProductImages(product);
+
+      if (!images.length) return;
+
+
+      const lightbox =
+        document.getElementById("image-lightbox");
+
+      const image =
+        document.getElementById("lightbox-image");
+
+
+      if (!lightbox || !image) return;
+
+
+      image.src = images[currentImageIndex];
+
+      image.alt =
+        `${product.name} - تصویر ${currentImageIndex + 1}`;
+
+
+      updateLightboxNavigation();
+
+
+      lightbox.hidden = false;
+
+      lightbox.setAttribute(
+        "aria-hidden",
+        "false"
+      );
+
+
+      document.body.classList.add(
+        "lightbox-open"
+      );
+
+    }
+
+
+    /*
+      بستن تصویر تمام‌صفحه
+    */
+
+    function closeLightbox() {
+
+      const lightbox =
+        document.getElementById("image-lightbox");
+
+
+      if (!lightbox) return;
+
+
+      lightbox.hidden = true;
+
+      lightbox.setAttribute(
+        "aria-hidden",
+        "true"
+      );
+
+
+      document.body.classList.remove(
+        "lightbox-open"
+      );
+
+    }
+
+
+    /*
+      تغییر تصویر در حالت تمام‌صفحه
+    */
+
+    function changeLightboxImage(direction) {
+
+      const product = window.currentProduct;
+
+      if (!product) return;
+
+
+      const images = getProductImages(product);
+
+      if (images.length <= 1) return;
+
+
+      let newIndex =
+        currentImageIndex + direction;
+
+
+      if (newIndex < 0) {
+        newIndex = images.length - 1;
+      }
+
+
+      if (newIndex >= images.length) {
+        newIndex = 0;
+      }
+
+
+      selectProductImage(newIndex);
+
+
+      const lightboxImage =
+        document.getElementById("lightbox-image");
+
+
+      if (lightboxImage) {
+
+        lightboxImage.src =
+          images[newIndex];
+
+        lightboxImage.alt =
+          `${product.name} - تصویر ${newIndex + 1}`;
+
+      }
+
+
+      updateLightboxNavigation();
+
+    }
+
+
+    function updateLightboxNavigation() {
+
+      const product = window.currentProduct;
+
+      if (!product) return;
+
+
+      const images = getProductImages(product);
+
+
+      const previous =
+        document.getElementById("lightbox-prev");
+
+      const next =
+        document.getElementById("lightbox-next");
+
+
+      if (!previous || !next) return;
+
+
+      if (images.length <= 1) {
+
+        previous.hidden = true;
+        next.hidden = true;
+
+      } else {
+
+        previous.hidden = false;
+        next.hidden = false;
+
+      }
+
+    }
+
+
+    /*
+      لمس و سوایپ در حالت تمام‌صفحه
+    */
+
+    function setupLightboxSwipe() {
+
+      const lightbox =
+        document.getElementById("image-lightbox");
+
+
+      if (!lightbox) return;
+
+
+      let startX = 0;
+      let startY = 0;
+
+
+      lightbox.addEventListener(
+        "touchstart",
+        event => {
+
+          if (!event.touches || !event.touches.length) {
+            return;
+          }
+
+
+          startX =
+            event.touches[0].clientX;
+
+          startY =
+            event.touches[0].clientY;
+
+        },
+        { passive: true }
+      );
+
+
+      lightbox.addEventListener(
+        "touchend",
+        event => {
+
+          if (
+            !event.changedTouches ||
+            !event.changedTouches.length
+          ) {
+            return;
+          }
+
+
+          const endX =
+            event.changedTouches[0].clientX;
+
+          const endY =
+            event.changedTouches[0].clientY;
+
+
+          const deltaX = endX - startX;
+          const deltaY = endY - startY;
+
+
+          if (
+            Math.abs(deltaX) < 45 ||
+            Math.abs(deltaX) < Math.abs(deltaY)
+          ) {
+            return;
+          }
+
+
+          if (deltaX < 0) {
+            changeLightboxImage(1);
+          } else {
+            changeLightboxImage(-1);
+          }
+
+        },
+        { passive: true }
+      );
+
+    }
+
+
+    /*
+      بستن با کلیک روی فضای اطراف تصویر
+    */
+
+    function setupLightboxCloseOnOutsideClick() {
+
+      const lightbox =
+        document.getElementById("image-lightbox");
+
+      const content =
+        document.querySelector(".lightbox-content");
+
+
+      if (!lightbox || !content) return;
+
+
+      lightbox.addEventListener(
+        "click",
+        event => {
+
+          if (event.target === lightbox) {
+            closeLightbox();
+          }
+
+        }
+      );
+
+    }
+
+
+    /*
+      بستن با کلید ESC
+    */
+
+    document.addEventListener(
+      "keydown",
+      event => {
+
+        if (event.key === "Escape") {
+          closeLightbox();
+        }
+
+
+        if (
+          event.key === "ArrowLeft"
+        ) {
+          changeLightboxImage(1);
+        }
+
+
+        if (
+          event.key === "ArrowRight"
+        ) {
+          changeLightboxImage(-1);
+        }
+
+      }
+    );
+
+
+    /*
+      باز و بسته کردن توضیحات و مشخصات فنی
+    */
+
+    function toggleProductInfo() {
+
+      const panel =
+        document.getElementById(
+          "product-info-panel"
+        );
+
+      const button =
+        document.getElementById(
+          "product-info-toggle"
+        );
+
+
+      if (!panel || !button) return;
+
+
+      const isHidden =
+        panel.hasAttribute("hidden");
+
+
+      if (isHidden) {
+
+        panel.removeAttribute("hidden");
+
+        button.setAttribute(
+          "aria-expanded",
+          "true"
+        );
+
+        button.textContent =
+          "بستن توضیحات و مشخصات فنی";
+
+      } else {
+
+        panel.setAttribute(
+          "hidden",
+          ""
+        );
+
+        button.setAttribute(
+          "aria-expanded",
+          "false"
+        );
+
+        button.textContent =
+          "توضیحات و مشخصات فنی";
+
+      }
+
     }
 
 
     async function loadProduct() {
 
       const container =
-        document.getElementById("product-detail");
+        document.getElementById(
+          "product-detail"
+        );
 
 
       const params =
@@ -403,7 +830,8 @@
         );
 
 
-      const slug = params.get("slug");
+      const slug =
+        params.get("slug");
 
 
       if (!slug) {
@@ -427,9 +855,10 @@
 
       try {
 
-        const response = await fetch(
-          `${API_BASE}/products/${encodeURIComponent(slug)}`
-        );
+        const response =
+          await fetch(
+            `${API_BASE}/products/${encodeURIComponent(slug)}`
+          );
 
 
         if (!response.ok) {
@@ -449,6 +878,7 @@
           throw new Error(
             "اطلاعات محصول معتبر نیست"
           );
+
         }
 
 
@@ -461,9 +891,11 @@
 
 
         container.innerHTML = `
+
           <div class="product-detail-card">
 
             ${renderProductImages(product)}
+
 
             <div class="product-detail-content">
 
@@ -475,9 +907,25 @@
               ${
                 product.description
                   ? `
-                    <p class="product-description">
-                      ${escapeHtml(product.description)}
-                    </p>
+                    <button
+                      type="button"
+                      id="product-info-toggle"
+                      class="product-info-toggle"
+                      aria-expanded="false"
+                      onclick="toggleProductInfo()"
+                    >
+                      توضیحات و مشخصات فنی
+                    </button>
+
+                    <div
+                      id="product-info-panel"
+                      class="product-info-panel"
+                      hidden
+                    >
+                      <div class="product-description">
+                        ${escapeHtml(product.description)}
+                      </div>
+                    </div>
                   `
                   : ""
               }
@@ -489,10 +937,12 @@
 
 
               <div class="product-detail-stock">
+
                 موجودی:
                 ${Number(
                   product.stock || 0
                 ).toLocaleString("fa-IR")}
+
               </div>
 
 
@@ -541,10 +991,15 @@
             </div>
 
           </div>
+
         `;
 
 
         setupImageSwipe();
+
+        setupLightboxSwipe();
+
+        setupLightboxCloseOnOutsideClick();
 
 
       } catch (error) {
@@ -564,7 +1019,9 @@
             بازگشت به فروشگاه
           </a>
         `;
+
       }
+
     }
 
 
@@ -574,7 +1031,9 @@
 
 
       const quantityInput =
-        document.getElementById("quantity");
+        document.getElementById(
+          "quantity"
+        );
 
 
       const quantity =
@@ -645,6 +1104,7 @@
       alert(
         "محصول به سبد خرید اضافه شد."
       );
+
     }
 
 
@@ -677,7 +1137,9 @@
 
         element.textContent =
           count.toLocaleString("fa-IR");
+
       }
+
     }
 
 
@@ -691,6 +1153,7 @@
 
       }
     );
+
   </script>
 
 </body>
