@@ -22,6 +22,7 @@
     </nav>
   </div>
 </header>
+
 <main>
 <section class="service-detail-hero">
   <div class="container">
@@ -31,6 +32,7 @@
     <p id="serviceLead">توضیحات خدمت در حال بارگذاری است.</p>
   </div>
 </section>
+
 <section class="service-detail">
   <div class="container">
     <div class="service-detail-actions">
@@ -40,17 +42,44 @@
       <a href="tel:" data-phone-link class="service-action service-action-primary">ثبت سفارش</a>
       <a href="#conversation" class="service-action">گفتگو با کارشناس</a>
     </div>
+
     <div class="service-detail-sections">
-      <section id="troubleshooting"><h2>عیب‌یابی</h2><p>نشانه‌های خرابی، علت‌های رایج و مسیر بررسی اولیه این خدمت در این بخش قرار می‌گیرد.</p></section>
-      <section id="articles"><h2>مقالات و آموزش‌ها</h2><p>مقالات و آموزش‌های مرتبط با این خدمت به‌تدریج در این بخش اضافه می‌شوند.</p></section>
-      <section id="solutions"><h2>راهکارها</h2><p>راهکارهای کاربردی برای پیشگیری از خرابی و استفاده بهتر از دستگاه در این بخش قرار می‌گیرد.</p></section>
-      <section id="conversation"><h2>گفتگو با کارشناس</h2><p>این بخش برای راه‌اندازی قابلیت گفتگو در آینده آماده شده است.</p></section>
+      <section id="troubleshooting">
+        <h2>عیب‌یابی</h2>
+        <p>نشانه‌های خرابی، علت‌های رایج و مسیر بررسی اولیه این خدمت در این بخش قرار می‌گیرد.</p>
+      </section>
+
+      <section id="articles">
+        <h2>مقالات و آموزش‌ها</h2>
+        <p>مقالات و آموزش‌های مرتبط با این خدمت به‌تدریج در این بخش اضافه می‌شوند.</p>
+      </section>
+
+      <section id="solutions">
+        <h2>راهکارها</h2>
+        <p>راهکارهای کاربردی برای پیشگیری از خرابی و استفاده بهتر از دستگاه در این بخش قرار می‌گیرد.</p>
+      </section>
+
+      <section id="conversation">
+        <h2>گفتگو با کارشناس</h2>
+        <p>این بخش برای راه‌اندازی قابلیت گفتگو در آینده آماده شده است.</p>
+      </section>
     </div>
   </div>
 </section>
 </main>
-<footer class="site-footer"><div class="container footer-inner"><div class="footer-col"><p class="logo"><img src="/assets/logo-footer.png" alt="تأسیسات آپادانا"></p><p>تعمیر، سرویس و نصب تخصصی تجهیزات گرمایشی و گازسوز در اصفهان.</p></div></div><p class="copyright">© <span id="year"></span> تأسیسات آپادانا — تمامی حقوق محفوظ است.</p></footer>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div class="footer-col">
+      <p class="logo"><img src="/assets/logo-footer.png" alt="تأسیسات آپادانا"></p>
+      <p>تعمیر، سرویس و نصب تخصصی تجهیزات گرمایشی و گازسوز در اصفهان.</p>
+    </div>
+  </div>
+  <p class="copyright">© <span id="year"></span> تأسیسات آپادانا — تمامی حقوق محفوظ است.</p>
+</footer>
+
 <script src="/script.js" defer></script>
+
 <script>
 const services = {
   "package-repair": ["تعمیر پکیج","عیب‌یابی و تعمیر انواع پکیج دیواری و زمینی در محل، با تشخیص دقیق قبل از هر اقدام."],
@@ -62,12 +91,15 @@ const services = {
   "troubleshooting": ["عیب‌یابی","بررسی دقیق علائم و پیدا کردن علت خرابی پیش از تعمیر یا تعویض قطعه."],
   "maintenance": ["سرویس و نگهداری","برنامه‌ریزی سرویس منظم برای پیشگیری از خرابی‌های ناگهانی."]
 };
+
 const key = new URLSearchParams(location.search).get("service") || "package-repair";
 const data = services[key] || services["package-repair"];
+
 document.getElementById("serviceTitle").textContent = data[0];
 document.getElementById("serviceLead").textContent = data[1];
 document.title = data[0] + " | تأسیسات آپادانا";
-  if (key === "package-repair") {
+
+if (key === "package-repair") {
   document.getElementById("troubleshooting").innerHTML = `
     <h2>چک‌لیست عیب‌یابی پکیج</h2>
     <ul>
@@ -81,20 +113,23 @@ document.title = data[0] + " | تأسیسات آپادانا";
     <p><strong>⚠️ اگر مشکل با این بررسی‌ها برطرف نشد، کد خطا و مدل پکیج را برای تعمیرکار ارسال کنید.</strong></p>
   `;
 }
- if (key === "package-repair") {
+
+if (key === "package-service") {
   document.getElementById("troubleshooting").innerHTML = `
-    <h2>چک‌لیست عیب‌یابی پکیج</h2>
+    <h2>چک‌لیست عیب‌یابی و تشخیص نیاز به سرویس پکیج</h2>
     <ul>
-      <li><strong>پکیج روشن نمی‌شود:</strong> برق، دوشاخه و فیوز را بررسی کنید.</li>
-      <li><strong>آب گرم نمی‌شود:</strong> باز بودن شیر گاز و مناسب بودن فشار آب را بررسی کنید.</li>
-      <li><strong>رادیاتورها گرم نمی‌شوند:</strong> فشار پکیج را بررسی کنید؛ معمولاً باید حدود <strong>۱ تا ۱.۵ بار</strong> باشد.</li>
-      <li><strong>پکیج خاموش یا خطادار شده:</strong> کد خطای نمایشگر را یادداشت کنید و یک‌بار دستگاه را طبق دستورالعمل سازنده ریست کنید.</li>
-      <li><strong>فشار آب پکیج پایین است:</strong> اگر فشار کمتر از محدوده مجاز است، طبق دفترچه دستگاه فشار را تنظیم کنید.</li>
-      <li><strong>صدای غیرعادی، نشتی آب یا بوی گاز وجود دارد:</strong> شیر گاز را ببندید، دستگاه را دستکاری نکنید و با تعمیرکار تماس بگیرید.</li>
+      <li><strong>گرم شدن آب کمتر از قبل:</strong> ممکن است دستگاه نیاز به سرویس یا رسوب‌زدایی داشته باشد.</li>
+      <li><strong>نوسان دمای آب گرم:</strong> فشار آب و عملکرد صحیح دستگاه را بررسی کنید.</li>
+      <li><strong>گرم نشدن کامل رادیاتورها:</strong> فشار پکیج را بررسی کنید؛ معمولاً باید حدود <strong>۱ تا ۱.۵ بار</strong> باشد.</li>
+      <li><strong>افزایش یا کاهش غیرعادی فشار:</strong> تغییرات مکرر فشار می‌تواند نشانه نیاز به بررسی و سرویس باشد.</li>
+      <li><strong>صدای غیرعادی هنگام کار:</strong> صداهایی مانند تق‌تق، سوت یا لرزش را جدی بگیرید.</li>
+      <li><strong>روشن و خاموش شدن مکرر:</strong> می‌تواند نشانه نیاز به سرویس و بررسی عملکرد دستگاه باشد.</li>
+      <li><strong>کاهش محسوس عملکرد نسبت به گذشته:</strong> اگر پکیج نسبت به قبل ضعیف‌تر کار می‌کند، سرویس دوره‌ای می‌تواند از خرابی جدی‌تر جلوگیری کند.</li>
     </ul>
-    <p><strong>⚠️ اگر مشکل با این بررسی‌ها برطرف نشد، کد خطا و مدل پکیج را برای تعمیرکار ارسال کنید.</strong></p>
+    <p><strong>⚠️ اگر این علائم برطرف نشد، مدل پکیج و کد خطای نمایشگر را برای تعمیرکار ارسال کنید.</strong></p>
   `;
-} 
+}
 </script>
+
 </body>
 </html>
