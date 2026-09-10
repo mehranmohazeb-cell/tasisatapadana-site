@@ -1,3 +1,4 @@
+
 /* =========================================================
    تأسیسات آپادانا — Stylesheet
    طراحی: تیره پترولی (الهام از کاشی‌کاری اصفهان) + مسی گرم برای CTA
@@ -174,12 +175,14 @@ p {
   font-weight: 700;
   color: var(--primary);
 }
+
 .logo img {
   height: 54px;
   width: auto;
   object-fit: contain;
-  transform: translateY(4px); 
+  transform: translateY(4px);
 }
+
 .menu-toggle {
   display: flex;
   flex-direction: column;
@@ -247,7 +250,7 @@ p {
 }
 
 /* =========================
-   Hero
+   Hero صفحه اصلی
    ========================= */
 .hero {
   position: relative;
@@ -295,6 +298,7 @@ p {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -307,6 +311,7 @@ p {
   .hero .cta-group {
     animation: none;
   }
+
   html {
     scroll-behavior: auto;
   }
@@ -450,7 +455,6 @@ p {
   font-size: 0.95rem;
 }
 
-/* .brand-item (برای آینده) */
 .brand-item {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -604,10 +608,10 @@ p {
     font-size: 1.9rem;
   }
 }
+
 /* =========================
    Store
    ========================= */
-
 .store {
   padding: 56px 0;
   background: var(--bg-alt);
@@ -683,7 +687,6 @@ p {
     grid-template-columns: repeat(4, 1fr);
   }
 }
-
 
 /* =========================
    Service cards & floating contact
@@ -840,16 +843,38 @@ p {
 /* =========================
    Service detail pages
    ========================= */
+
+/*
+   بنر صفحه توضیحات خدمات
+   هماهنگ با بنر اصلی:
+   رنگ پترولی + الگوی هندسی ظریف کاشی‌کاری
+*/
 .service-detail-hero {
+  position: relative;
   padding: 46px 0 42px;
-  background: var(--primary-dark);
+  background:
+    linear-gradient(45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
+    linear-gradient(-45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
+    var(--primary-dark);
+  background-size: 46px 46px;
   color: #fff;
+  overflow: hidden;
+}
+
+.service-detail-hero .container {
+  position: relative;
+  z-index: 1;
 }
 
 .service-detail-hero .back-link {
   display: inline-block;
   margin-bottom: 22px;
   color: #dce9ec;
+}
+
+.service-detail-hero .back-link:hover,
+.service-detail-hero .back-link:focus-visible {
+  color: #fff;
 }
 
 .service-detail-hero .eyebrow {
@@ -958,6 +983,7 @@ p {
     font-size: 1.65rem;
   }
 }
+
 /* ===== Brand Cards ===== */
 
 .brand-grid {
@@ -1042,10 +1068,15 @@ p {
     font-size: 21px;
   }
 }
+
 .store-feature-button {
   display: block;
   width: fit-content;
   margin-left: auto;
   margin-right: auto;
 }
-.brand-beko { color: #1f4f9a; border-color: rgba(31, 79, 154, 0.25); }
+
+.brand-beko {
+  color: #1f4f9a;
+  border-color: rgba(31, 79, 154, 0.25);
+} 
