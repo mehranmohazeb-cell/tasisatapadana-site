@@ -1351,3 +1351,168 @@ body.lightbox-open {
   }
 
 }
+/* =========================================================
+   Product Detail — Compact Layout
+   تنظیم نهایی ارتفاع و فاصله‌های صفحه محصول
+   ========================================================= */
+
+.product-detail {
+  margin: 20px 0 30px;
+}
+
+.product-detail-card {
+  padding: 20px;
+}
+
+.product-detail-media {
+  max-width: 620px;
+  margin-bottom: 20px;
+}
+
+.product-main-image {
+  height: 320px;
+}
+
+.product-detail-image {
+  padding: 18px;
+}
+
+.product-thumbnails {
+  margin-top: 9px;
+}
+
+.product-thumbnail {
+  width: 62px;
+  height: 62px;
+}
+
+.product-detail-content h1 {
+  margin-bottom: 10px;
+  font-size: 25px;
+}
+
+.product-info-toggle {
+  margin-bottom: 12px;
+  padding: 9px 16px;
+}
+
+.product-info-panel {
+  margin-bottom: 16px;
+  padding: 14px 18px;
+}
+
+.product-info-panel .product-description {
+  line-height: 2;
+}
+
+.product-detail-price {
+  margin-bottom: 7px;
+  font-size: 21px;
+}
+
+.product-detail-stock {
+  margin-bottom: 14px;
+}
+
+.product-actions {
+  margin-bottom: 14px;
+}
+
+.back-link {
+  margin-top: 2px;
+}
+
+
+/* ---------- Mobile Compact ---------- */
+
+@media (max-width: 650px) {
+
+  .product-detail {
+    margin: 12px 0 25px;
+  }
+
+  .product-detail-card {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .product-detail-media {
+    margin-bottom: 17px;
+  }
+
+  .product-main-image {
+    height: 230px;
+    border-radius: 13px;
+  }
+
+  .product-detail-image {
+    padding: 12px;
+  }
+
+  .product-thumbnails {
+    margin-top: 8px;
+    padding: 2px;
+  }
+
+  .product-thumbnail {
+    width: 56px;
+    height: 56px;
+  }
+
+  .product-detail-content h1 {
+    margin-bottom: 9px;
+    font-size: 20px;
+    line-height: 1.6;
+  }
+
+  .product-info-toggle {
+    margin-bottom: 10px;
+    padding: 8px 14px;
+  }
+
+  .product-info-panel {
+    margin-bottom: 13px;
+    padding: 12px 12px;
+  }
+
+  .product-info-panel .product-description {
+    font-size: 13px;
+    line-height: 2;
+  }
+
+  .product-detail-price {
+    margin-bottom: 5px;
+    font-size: 19px;
+  }
+
+  .product-detail-stock {
+    margin-bottom: 11px;
+    font-size: 13px;
+  }
+
+  .product-actions {
+    gap: 7px;
+    margin-bottom: 11px;
+  }
+
+  .back-link {
+    margin-top: 0;
+  }
+
+}
+
+
+/* ---------- Very Small Mobile ---------- */
+
+@media (max-width: 380px) {
+
+  .product-main-image {
+    height: 210px;
+  }
+
+  .product-thumbnail {
+    width: 52px;
+    height: 52px;
+  }
+
+}
