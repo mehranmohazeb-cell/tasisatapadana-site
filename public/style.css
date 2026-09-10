@@ -1042,3 +1042,9 @@ p {
     font-size: 21px;
   }
 }
+.store-feature-button {
+  display: block;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
