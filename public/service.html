@@ -11,19 +11,31 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+
 <header class="site-header">
   <div class="container header-inner">
-    <a href="/" class="logo"><img src="/assets/logo-header.png" alt="تأسیسات آپادانا"></a>
-    <button class="menu-toggle" id="menuToggle" aria-label="باز و بسته کردن منو" aria-expanded="false" aria-controls="mainNav"><span></span><span></span><span></span></button>
+    <a href="/" class="logo">
+      <img src="/assets/logo-header.png" alt="تأسیسات آپادانا">
+    </a>
+
+    <button class="menu-toggle" id="menuToggle" aria-label="باز و بسته کردن منو" aria-expanded="false" aria-controls="mainNav">
+      <span></span><span></span><span></span>
+    </button>
+
     <nav class="main-nav" id="mainNav" aria-label="منوی اصلی">
       <ul>
-        <li><a href="/">خانه</a></li><li><a href="/#services">خدمات</a></li><li><a href="/store/">فروشگاه</a></li><li><a href="/#about">درباره ما</a></li><li><a href="/#contact">تماس با ما</a></li>
+        <li><a href="/">خانه</a></li>
+        <li><a href="/#services">خدمات</a></li>
+        <li><a href="/store/">فروشگاه</a></li>
+        <li><a href="/#about">درباره ما</a></li>
+        <li><a href="/#contact">تماس با ما</a></li>
       </ul>
     </nav>
   </div>
 </header>
 
 <main>
+
 <section class="service-detail-hero">
   <div class="container">
     <a href="/#services" class="back-link">← بازگشت به خدمات</a>
@@ -35,6 +47,7 @@
 
 <section class="service-detail">
   <div class="container">
+
     <div class="service-detail-actions">
       <a href="#troubleshooting" class="service-action">عیب‌یابی</a>
       <a href="#articles" class="service-action">مقالات و آموزش‌ها</a>
@@ -44,6 +57,7 @@
     </div>
 
     <div class="service-detail-sections">
+
       <section id="troubleshooting">
         <h2>عیب‌یابی</h2>
         <p>نشانه‌های خرابی، علت‌های رایج و مسیر بررسی اولیه این خدمت در این بخش قرار می‌گیرد.</p>
@@ -63,33 +77,71 @@
         <h2>گفتگو با کارشناس</h2>
         <p>این بخش برای راه‌اندازی قابلیت گفتگو در آینده آماده شده است.</p>
       </section>
+
     </div>
   </div>
 </section>
+
 </main>
 
 <footer class="site-footer">
   <div class="container footer-inner">
     <div class="footer-col">
-      <p class="logo"><img src="/assets/logo-footer.png" alt="تأسیسات آپادانا"></p>
+      <p class="logo">
+        <img src="/assets/logo-footer.png" alt="تأسیسات آپادانا">
+      </p>
       <p>تعمیر، سرویس و نصب تخصصی تجهیزات گرمایشی و گازسوز در اصفهان.</p>
     </div>
   </div>
-  <p class="copyright">© <span id="year"></span> تأسیسات آپادانا — تمامی حقوق محفوظ است.</p>
+
+  <p class="copyright">
+    © <span id="year"></span> تأسیسات آپادانا — تمامی حقوق محفوظ است.
+  </p>
 </footer>
 
 <script src="/script.js" defer></script>
 
 <script>
 const services = {
-  "package-repair": ["تعمیر پکیج","عیب‌یابی و تعمیر انواع پکیج دیواری و زمینی در محل، با تشخیص دقیق قبل از هر اقدام."],
-  "package-service": ["سرویس پکیج","سرویس دوره‌ای پکیج برای عملکرد ایمن‌تر، کاهش مصرف گاز و افزایش طول عمر دستگاه."],
-  "water-heater": ["تعمیر آبگرمکن","تعمیر تخصصی آبگرمکن دیواری و مخزن‌دار توسط تعمیرکار متخصص."],
-  "heater": ["تعمیر بخاری","رفع خرابی انواع بخاری گازی و برقی با بررسی و مشاوره حضوری."],
-  "stove-oven": ["تعمیر اجاق گاز و فر","تعمیر اجاق گاز و فر خانگی و رفع مشکلات جرقه‌زن، شعله و ترموستات."],
-  "installation": ["نصب و راه‌اندازی","نصب اصولی تجهیزات گرمایشی و گازسوز مطابق نکات ایمنی."],
-  "troubleshooting": ["عیب‌یابی","بررسی دقیق علائم و پیدا کردن علت خرابی پیش از تعمیر یا تعویض قطعه."],
-  "maintenance": ["سرویس و نگهداری","برنامه‌ریزی سرویس منظم برای پیشگیری از خرابی‌های ناگهانی."]
+  "package-repair": [
+    "تعمیر پکیج",
+    "عیب‌یابی و تعمیر انواع پکیج دیواری و زمینی در محل، با تشخیص دقیق قبل از هر اقدام."
+  ],
+
+  "package-service": [
+    "سرویس پکیج",
+    "سرویس دوره‌ای پکیج برای عملکرد ایمن‌تر، کاهش مصرف گاز و افزایش طول عمر دستگاه."
+  ],
+
+  "water-heater": [
+    "تعمیر آبگرمکن",
+    "تعمیر تخصصی آبگرمکن دیواری و مخزن‌دار توسط تعمیرکار متخصص."
+  ],
+
+  "heater": [
+    "تعمیر بخاری",
+    "رفع خرابی انواع بخاری گازی و برقی با بررسی و مشاوره حضوری."
+  ],
+
+  "stove-oven": [
+    "تعمیر اجاق گاز و فر",
+    "تعمیر اجاق گاز و فر خانگی و رفع مشکلات جرقه‌زن، شعله و ترموستات."
+  ],
+
+  "installation": [
+    "نصب و راه‌اندازی",
+    "نصب اصولی تجهیزات گرمایشی و گازسوز مطابق نکات ایمنی."
+  ],
+
+  "troubleshooting": [
+    "عیب‌یابی",
+    "بررسی دقیق علائم و پیدا کردن علت خرابی پیش از تعمیر یا تعویض قطعه."
+  ],
+
+  "maintenance": [
+    "سرویس و نگهداری",
+    "برنامه‌ریزی سرویس منظم برای پیشگیری از خرابی‌های ناگهانی."
+  ]
 };
 
 const key = new URLSearchParams(location.search).get("service") || "package-repair";
@@ -99,6 +151,8 @@ document.getElementById("serviceTitle").textContent = data[0];
 document.getElementById("serviceLead").textContent = data[1];
 document.title = data[0] + " | تأسیسات آپادانا";
 
+
+/* عیب‌یابی تعمیر پکیج */
 if (key === "package-repair") {
   document.getElementById("troubleshooting").innerHTML = `
     <h2>چک‌لیست عیب‌یابی پکیج</h2>
@@ -114,6 +168,8 @@ if (key === "package-repair") {
   `;
 }
 
+
+/* عیب‌یابی سرویس پکیج */
 if (key === "package-service") {
   document.getElementById("troubleshooting").innerHTML = `
     <h2>چک‌لیست عیب‌یابی و تشخیص نیاز به سرویس پکیج</h2>
@@ -127,6 +183,57 @@ if (key === "package-service") {
       <li><strong>کاهش محسوس عملکرد نسبت به گذشته:</strong> اگر پکیج نسبت به قبل ضعیف‌تر کار می‌کند، سرویس دوره‌ای می‌تواند از خرابی جدی‌تر جلوگیری کند.</li>
     </ul>
     <p><strong>⚠️ اگر این علائم برطرف نشد، مدل پکیج و کد خطای نمایشگر را برای تعمیرکار ارسال کنید.</strong></p>
+  `;
+}
+
+
+/* عیب‌یابی تعمیر بخاری */
+if (key === "heater") {
+  document.getElementById("troubleshooting").innerHTML = `
+    <h2>چک‌لیست عیب‌یابی بخاری</h2>
+    <ul>
+      <li><strong>بخاری روشن نمی‌شود:</strong> باز بودن شیر گاز، وجود گاز و <strong>وضعیت شعله شمعک، در صورت وجود</strong> را بررسی کنید.</li>
+      <li><strong>بخاری روشن می‌شود ولی خاموش می‌شود:</strong> وضعیت شعله و عملکرد دستگاه را بررسی کنید.</li>
+      <li><strong>بخاری گرمای کافی ندارد:</strong> مسیر خروجی دودکش و جریان مناسب هوا را بررسی کنید.</li>
+      <li><strong>شعله بخاری غیرعادی است:</strong> رنگ و شکل شعله را بررسی کنید؛ شعله غیرعادی نیاز به بررسی تخصصی دارد.</li>
+      <li><strong>بوی گاز احساس می‌شود:</strong> شیر گاز را ببندید، از ایجاد شعله یا جرقه خودداری کنید و با تعمیرکار تماس بگیرید.</li>
+      <li><strong>صدای غیرعادی یا مشکل در روشن شدن وجود دارد:</strong> دستگاه را دستکاری نکنید و برای بررسی تخصصی اقدام کنید.</li>
+    </ul>
+    <p><strong>⚠️ اگر مشکل برطرف نشد، مدل بخاری و شرح علائم را برای تعمیرکار ارسال کنید.</strong></p>
+  `;
+}
+
+
+/* عیب‌یابی تعمیر آبگرمکن */
+if (key === "water-heater") {
+  document.getElementById("troubleshooting").innerHTML = `
+    <h2>چک‌لیست عیب‌یابی آبگرمکن</h2>
+    <ul>
+      <li><strong>آب گرم نمی‌شود:</strong> باز بودن شیر گاز، مناسب بودن فشار آب و وضعیت شعله شمعک، در صورت وجود، را بررسی کنید.</li>
+      <li><strong>آب به اندازه کافی گرم نیست:</strong> دمای تنظیم‌شده و وضعیت شعله را بررسی کنید.</li>
+      <li><strong>آب گرم نوسان دارد:</strong> فشار آب و عملکرد صحیح آبگرمکن نیاز به بررسی دارد.</li>
+      <li><strong>آبگرمکن روشن نمی‌شود:</strong> در مدل‌های برقی برق دستگاه و در مدل‌های گازی وضعیت گاز و روشن شدن شعله را بررسی کنید.</li>
+      <li><strong>آبگرمکن خاموش می‌شود:</strong> ممکن است نیاز به بررسی سیستم ایمنی و عملکرد دستگاه داشته باشد.</li>
+      <li><strong>نشتی آب یا بوی گاز وجود دارد:</strong> دستگاه را دستکاری نکنید؛ در صورت بوی گاز، شیر گاز را ببندید و با تعمیرکار تماس بگیرید.</li>
+    </ul>
+    <p><strong>⚠️ اگر مشکل برطرف نشد، مدل آبگرمکن و شرح علائم را برای تعمیرکار ارسال کنید.</strong></p>
+  `;
+}
+
+
+/* عیب‌یابی تعمیر اجاق گاز و فر */
+if (key === "stove-oven") {
+  document.getElementById("troubleshooting").innerHTML = `
+    <h2>چک‌لیست عیب‌یابی اجاق گاز و فر</h2>
+    <ul>
+      <li><strong>شعله روشن نمی‌شود:</strong> باز بودن شیر گاز و عملکرد جرقه‌زن را بررسی کنید.</li>
+      <li><strong>شعله ضعیف است:</strong> وضعیت جریان گاز و تمیزی مسیر شعله را بررسی کنید.</li>
+      <li><strong>شعله زرد یا غیرعادی است:</strong> دستگاه نیاز به بررسی تخصصی دارد.</li>
+      <li><strong>جرقه‌زن کار نمی‌کند:</strong> باتری یا برق دستگاه و وضعیت جرقه‌زن را بررسی کنید.</li>
+      <li><strong>فر به‌درستی گرم نمی‌شود:</strong> تنظیمات دما و عملکرد سیستم گرمایشی فر نیاز به بررسی دارد.</li>
+      <li><strong>بوی گاز احساس می‌شود:</strong> شیر گاز را ببندید، از ایجاد شعله یا جرقه خودداری کنید و با تعمیرکار تماس بگیرید.</li>
+    </ul>
+    <p><strong>⚠️ اگر مشکل برطرف نشد، مدل اجاق یا فر و شرح مشکل را برای تعمیرکار ارسال کنید.</strong></p>
   `;
 }
 </script>
