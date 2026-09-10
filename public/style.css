@@ -958,3 +958,87 @@ p {
     font-size: 1.65rem;
   }
 }
+/* ===== Brand Cards ===== */
+
+.brand-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 28px 0 0;
+}
+
+.brand-item {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+
+.brand-item span {
+  direction: ltr;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+/* رنگ اختصاصی برندها */
+
+.brand-alton {
+  color: #7042a5;
+  border-color: rgba(112, 66, 165, 0.25);
+}
+
+.brand-butane {
+  color: #c62828;
+  border-color: rgba(198, 40, 40, 0.25);
+}
+
+.brand-energy {
+  color: #c78300;
+  border-color: rgba(199, 131, 0, 0.25);
+}
+
+.brand-lorch {
+  color: #2864a8;
+  border-color: rgba(40, 100, 168, 0.25);
+}
+
+.brand-iranradiator {
+  color: #b52b25;
+  border-color: rgba(181, 43, 37, 0.25);
+}
+
+.brand-bosch {
+  color: #247b45;
+  border-color: rgba(36, 123, 69, 0.25);
+}
+
+.brand-masterplus {
+  color: #333333;
+  border-color: rgba(51, 51, 51, 0.2);
+}
+
+@media (min-width: 700px) {
+  .brand-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .brand-item {
+    min-height: 84px;
+  }
+
+  .brand-item span {
+    font-size: 21px;
+  }
+}
