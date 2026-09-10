@@ -1,657 +1,25 @@
 const API_BASE = "/api/store";
-
 const IMAGE_BASE_PATH = "/assets/products/";
 
+let editingProductId = null;
+let productImages = [];
 let products = [];
 let orders = [];
-
-
-/* =========================================================
-   مدیریت محصولات
-========================================================= */
-
-async function loadProducts() {
-  const container = document.getElementById("products-list");
-
-  if (!container) return;
-
-  container.innerHTML =
-    '<p class="loading">در حال بارگذاری محصولات...</p>';
-
-  try {
-    const response = await fetch(`${API_BASE}/products`);
-
-    if (!response.ok) {
-      throw new Error("خطا در دریافت محصولات");
-    }
-
-    const data = await response.json();
-
-    products = data.products || [];
-
-    if (!Array.isArray(products) || products.length === 0) {
-      container.innerHTML =
-        '<p class="loading">هنوز محصولی ثبت نشده است.</p>';
-      return;
-    }
-
-    renderProducts();
-
-  } catch (error) {
-    console.error(error);
-
-    container.innerHTML =
-      '<p class="loading">دریافت محصولات با مشکل مواجه شد.</p>';
-  }
-}
-
-
-function renderProducts() {
-  const container = document.getElementById("products-list");
-
-  if (!container) return;
-
-  container.innerHTML = products.map(product => `
-    <div class="product-row">
-      <div>
-        <strong>${escapeHtml(product.name)}</strong>
-
-        <div>
-          قیمت:
-          ${Number(product.price || 0).toLocaleString("fa-IR")}
-          تومان
-        </div>
-
-        <div>
-          موجودی:
-          ${Number(product.stock || 0).toLocaleString("fa-IR")}
-        </div>
-
-        <div>
-          تصاویر:
-          ${(product.images || []).length.toLocaleString("fa-IR")}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="secondary-button"
-        onclick="editProduct('${escapeAttribute(product.id)}')"
-      >
-        ویرایش
-      </button>
-    </div>
-  `).join("");
-}
-
-
-function editProduct(id) {
-  const product = products.find(
-    item => String(item.id) === String(id)
-  );
-
-  if (!product) return;
-
-  document.getElementById("product-id").value =
-    product.id;
-
-  document.getElementById("name").value =
-    product.name || "";
-
-  document.getElementById("slug").value =
-    product.slug || "";
-
-  document.getElementById("description").value =
-    product.description || "";
-
-  document.getElementById("price").value =
-    product.price || 0;
-
-  document.getElementById("stock").value =
-    product.stock || 0;
-
-  const imageFields =
-    document.getElementById("image-fields");
-
-  imageFields.innerHTML = "";
-
-  let images = [];
-
-  if (
-    Array.isArray(product.images) &&
-    product.images.length > 0
-  ) {
-    images = product.images.map(
-      item => item.image || ""
-    );
-  } else if (product.image) {
-    images = [product.image];
-  }
-
-  if (images.length === 0) {
-    addImageField();
-  } else {
-    images.forEach(image => {
-      addImageField(image);
-    });
-  }
-
-  document.getElementById("active").checked =
-    product.active !== 0;
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-}
-
-
-function addImageField(value = "") {
-  const container =
-    document.getElementById("image-fields");
-
-  if (!container) return;
-
-  const wrapper =
-    document.createElement("div");
-
-  wrapper.className = "image-field";
-
-  const input =
-    document.createElement("input");
-
-  input.type = "text";
-  input.className = "product-image-input";
-  input.placeholder =
-    "مثلاً: test-product.jpeg";
-  input.value =
-    getImageFileName(value);
-
-  wrapper.appendChild(input);
-
-  container.appendChild(wrapper);
-}
-
-
-function getImageFileName(value) {
-  const image =
-    String(value || "").trim();
-
-  if (image.startsWith(IMAGE_BASE_PATH)) {
-    return image.substring(
-      IMAGE_BASE_PATH.length
-    );
-  }
-
-  return image;
-}
-
-
-function getImagePaths() {
-  const inputs =
-    document.querySelectorAll(
-      ".product-image-input"
-    );
-
-  return Array.from(inputs)
-    .map(input =>
-      buildImagePath(input.value)
-    )
-    .filter(Boolean);
-}
-
-
-function clearForm() {
-  const form =
-    document.getElementById("product-form");
-
-  if (form) {
-    form.reset();
-  }
-
-  const productId =
-    document.getElementById("product-id");
-
-  if (productId) {
-    productId.value = "";
-  }
-
-  const active =
-    document.getElementById("active");
-
-  if (active) {
-    active.checked = true;
-  }
-
-  const imageFields =
-    document.getElementById("image-fields");
-
-  if (imageFields) {
-    imageFields.innerHTML = "";
-    addImageField();
-  }
-}
-
-
-function buildImagePath(fileName) {
-  const value =
-    String(fileName || "").trim();
-
-  if (!value) {
-    return "";
-  }
-
-  if (value.startsWith(IMAGE_BASE_PATH)) {
-    return value;
-  }
-
-  return (
-    IMAGE_BASE_PATH +
-    value.replace(/^\/+/, "")
-  );
-}
-
-
-async function createProduct(event) {
-  event.preventDefault();
-
-  const productId =
-    document.getElementById("product-id")
-      .value
-      .trim();
-
-  const product = {
-    name:
-      document.getElementById("name")
-        .value
-        .trim(),
-
-    description:
-      document.getElementById("description")
-        .value
-        .trim(),
-
-    price:
-      Number(
-        document.getElementById("price")
-          .value
-      ),
-
-    stock:
-      Number(
-        document.getElementById("stock")
-          .value
-      ),
-
-    image: "",
-
-    images:
-      getImagePaths(),
-
-    active:
-      document.getElementById("active")
-        .checked
-  };
-
-  product.image =
-    product.images[0] || "";
-
-  if (!product.name) {
-    alert("نام محصول الزامی است.");
-    return;
-  }
-
-  if (!productId) {
-    const slug =
-      document.getElementById("slug")
-        .value
-        .trim();
-
-    if (!slug) {
-      alert("شناسه محصول الزامی است.");
-      return;
-    }
-
-    product.slug = slug;
-  }
-
-  const token =
-    prompt("رمز مدیریت را وارد کنید:");
-
-  if (!token) {
-    return;
-  }
-
-  const isEditing =
-    !!productId;
-
-  if (isEditing) {
-    product.id =
-      Number(productId);
-  }
-
-  try {
-    const response =
-      await fetch(
-        `${API_BASE}/products`,
-        {
-          method:
-            isEditing
-              ? "PUT"
-              : "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            "X-Admin-Token":
-              token
-          },
-
-          body:
-            JSON.stringify(product)
-        }
-      );
-
-    const data =
-      await response.json();
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        alert(
-          "رمز مدیریت صحیح نیست."
-        );
-      } else {
-        alert(
-          data.message ||
-          "عملیات انجام نشد."
-        );
-      }
-
-      return;
-    }
-
-    alert(
-      isEditing
-        ? "محصول با موفقیت ویرایش شد."
-        : "محصول با موفقیت ثبت شد."
-    );
-
-    clearForm();
-
-    await loadProducts();
-
-  } catch (error) {
-    console.error(error);
-
-    alert(
-      "ارتباط با سرور برقرار نشد."
-    );
-  }
-}
-
-
-/* =========================================================
-   مدیریت سفارش‌ها
-========================================================= */
-
-async function loadOrders() {
-  const container =
-    document.getElementById(
-      "orders-list"
-    );
-
-  if (!container) return;
-
-  container.innerHTML =
-    '<p class="loading">در حال بارگذاری سفارش‌ها...</p>';
-
-  const token =
-    prompt("رمز مدیریت را وارد کنید:");
-
-  if (!token) {
-    container.innerHTML =
-      '<p class="loading">دریافت سفارش‌ها لغو شد.</p>';
-
-    return;
-  }
-
-  try {
-    const response =
-      await fetch(
-        `${API_BASE}/orders`,
-        {
-          method: "GET",
-
-          headers: {
-            "X-Admin-Token":
-              token
-          }
-        }
-      );
-
-    const data =
-      await response.json();
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        alert(
-          "رمز مدیریت صحیح نیست."
-        );
-      } else {
-        alert(
-          data.message ||
-          "دریافت سفارش‌ها انجام نشد."
-        );
-      }
-
-      container.innerHTML =
-        '<p class="loading">امکان دریافت سفارش‌ها وجود ندارد.</p>';
-
-      return;
-    }
-
-    orders =
-      data.orders || [];
-
-    if (
-      !Array.isArray(orders) ||
-      orders.length === 0
-    ) {
-      container.innerHTML =
-        '<p class="loading">هنوز سفارشی ثبت نشده است.</p>';
-
-      return;
-    }
-
-    renderOrders();
-
-  } catch (error) {
-    console.error(error);
-
-    container.innerHTML =
-      '<p class="loading">ارتباط با سرور برقرار نشد.</p>';
-  }
-}
-
-
-function renderOrders() {
-  const container =
-    document.getElementById(
-      "orders-list"
-    );
-
-  if (!container) return;
-
-  container.innerHTML =
-    orders.map(order => {
-
-      const status =
-        getOrderStatusText(
-          order.status
-        );
-
-      return `
-        <div class="order-row">
-
-          <div class="order-main">
-
-            <strong>
-              سفارش شماره
-              ${Number(order.id)
-                .toLocaleString("fa-IR")}
-            </strong>
-
-            <div>
-              مشتری:
-              ${escapeHtml(
-                order.customer_name
-              )}
-            </div>
-
-            <div>
-              مبلغ:
-              ${Number(
-                order.total || 0
-              ).toLocaleString("fa-IR")}
-              تومان
-            </div>
-
-            <div>
-              وضعیت:
-              <span
-                class="order-status status-${escapeAttribute(
-                  order.status
-                )}"
-              >
-                ${status}
-              </span>
-            </div>
-
-            <div>
-              تاریخ:
-              ${escapeHtml(
-                order.created_at || ""
-              )}
-            </div>
-
-          </div>
-
-          <button
-            type="button"
-            class="secondary-button"
-            onclick="showOrderDetails('${escapeAttribute(
-              order.id
-            )}')"
-          >
-            جزئیات
-          </button>
-
-        </div>
-      `;
-    }).join("");
-}
-
-
-function showOrderDetails(id) {
-  const order =
-    orders.find(
-      item =>
-        String(item.id) ===
-        String(id)
-    );
-
-  if (!order) return;
-
-  const items =
-    Array.isArray(order.items)
-      ? order.items
-      : [];
-
-  let itemsText = "";
-
-  if (items.length === 0) {
-    itemsText =
-      "کالایی ثبت نشده است.";
-  } else {
-    itemsText =
-      items.map(item => {
-
-        return (
-          `${item.product_name} × ` +
-          `${Number(
-            item.quantity || 0
-          ).toLocaleString("fa-IR")} — ` +
-          `${Number(
-            item.price || 0
-          ).toLocaleString("fa-IR")} تومان`
-        );
-
-      }).join("\n");
-  }
-
-  alert(
-    "سفارش شماره " +
-    Number(order.id)
-      .toLocaleString("fa-IR") +
-    "\n\n" +
-
-    "نام مشتری: " +
-    (order.customer_name || "") +
-    "\n" +
-
-    "شماره تماس: " +
-    (order.customer_phone || "") +
-    "\n" +
-
-    "آدرس: " +
-    (order.customer_address || "") +
-    "\n\n" +
-
-    "کالاها:\n" +
-    itemsText +
-    "\n\n" +
-
-    "مبلغ کل: " +
-    Number(order.total || 0)
-      .toLocaleString("fa-IR") +
-    " تومان"
-  );
-}
-
-
-function getOrderStatusText(status) {
-  const statuses = {
-    pending:
-      "در انتظار بررسی",
-
-    confirmed:
-      "تأیید شده",
-
-    preparing:
-      "در حال آماده‌سازی",
-
-    shipped:
-      "ارسال شده",
-
-    completed:
-      "تکمیل شده",
-
-    cancelled:
-      "لغو شده"
-  };
-
-  return (
-    statuses[status] ||
-    status ||
-    "نامشخص"
-  );
-}
-
-
-/* =========================================================
-   ابزارهای عمومی
-========================================================= */
+let adminToken = "";
+
+const STATUS_LABELS = {
+  pending: "در انتظار بررسی",
+  confirmed: "تأیید شده",
+  preparing: "در حال آماده‌سازی",
+  shipped: "ارسال شده",
+  completed: "تکمیل شده",
+  cancelled: "لغو شده",
+};
+
+
+// =========================
+// ابزارهای کمکی
+// =========================
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -662,23 +30,739 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-
 function escapeAttribute(value) {
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
     .replace(/'/g, "\\'");
 }
 
+function formatPrice(value) {
+  return Number(value || 0).toLocaleString("fa-IR");
+}
 
-/* =========================================================
-   شروع پنل
-========================================================= */
+function formatDate(value) {
+  if (!value) return "-";
+
+  try {
+    return new Date(value).toLocaleString("fa-IR");
+  } catch {
+    return value;
+  }
+}
+
+
+// =========================
+// محصولات
+// =========================
+
+async function loadProducts() {
+  const container =
+    document.getElementById("products-list");
+
+  if (!container) return;
+
+  container.innerHTML =
+    '<p class="loading">در حال بارگذاری محصولات...</p>';
+
+  try {
+    const response =
+      await fetch(`${API_BASE}/products`);
+
+    const data =
+      await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message ||
+        "خطا در دریافت محصولات."
+      );
+    }
+
+    products =
+      data.products || [];
+
+    renderProducts();
+
+  } catch (error) {
+    container.innerHTML =
+      `<p class="loading">${escapeHtml(
+        error.message
+      )}</p>`;
+  }
+}
+
+
+function renderProducts() {
+  const container =
+    document.getElementById("products-list");
+
+  if (!container) return;
+
+  if (products.length === 0) {
+    container.innerHTML =
+      '<p class="loading">هنوز محصولی ثبت نشده است.</p>';
+    return;
+  }
+
+  container.innerHTML =
+    products.map(product => {
+      const image =
+        product.image
+          ? `${IMAGE_BASE_PATH}${product.image}`
+          : "";
+
+      return `
+        <div class="product-admin-item">
+          ${
+            image
+              ? `<img
+                  src="${escapeAttribute(image)}"
+                  alt="${escapeHtml(product.name)}"
+                  class="product-admin-image"
+                >`
+              : ""
+          }
+
+          <div class="product-admin-info">
+            <strong>
+              ${escapeHtml(product.name)}
+            </strong>
+
+            <span>
+              قیمت:
+              ${formatPrice(product.price)}
+              تومان
+            </span>
+
+            <span>
+              موجودی:
+              ${formatPrice(product.stock)}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            class="secondary-button"
+            onclick="editProduct(${Number(product.id)})"
+          >
+            ویرایش
+          </button>
+        </div>
+      `;
+    }).join("");
+}
+
+
+function clearForm() {
+  const form =
+    document.getElementById("product-form");
+
+  if (!form) return;
+
+  form.reset();
+
+  const idInput =
+    document.getElementById("product-id");
+
+  if (idInput) {
+    idInput.value = "";
+  }
+
+  const title =
+    document.getElementById("form-title");
+
+  if (title) {
+    title.textContent =
+      "افزودن محصول";
+  }
+
+  editingProductId = null;
+  productImages = [];
+
+  renderImageList();
+}
+
+
+function editProduct(id) {
+  const product =
+    products.find(
+      item =>
+        Number(item.id) === Number(id)
+    );
+
+  if (!product) return;
+
+  editingProductId =
+    Number(product.id);
+
+  const idInput =
+    document.getElementById("product-id");
+
+  const nameInput =
+    document.getElementById("product-name");
+
+  const slugInput =
+    document.getElementById("product-slug");
+
+  const descriptionInput =
+    document.getElementById("product-description");
+
+  const priceInput =
+    document.getElementById("product-price");
+
+  const stockInput =
+    document.getElementById("product-stock");
+
+  const activeInput =
+    document.getElementById("product-active");
+
+  if (idInput)
+    idInput.value = product.id;
+
+  if (nameInput)
+    nameInput.value = product.name || "";
+
+  if (slugInput)
+    slugInput.value = product.slug || "";
+
+  if (descriptionInput)
+    descriptionInput.value =
+      product.description || "";
+
+  if (priceInput)
+    priceInput.value =
+      product.price || 0;
+
+  if (stockInput)
+    stockInput.value =
+      product.stock || 0;
+
+  if (activeInput)
+    activeInput.checked =
+      Number(product.active) === 1;
+
+  productImages =
+    (product.images || [])
+      .map(item => item.image)
+      .filter(Boolean);
+
+  const title =
+    document.getElementById("form-title");
+
+  if (title) {
+    title.textContent =
+      "ویرایش محصول";
+  }
+
+  renderImageList();
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+
+function renderImageList() {
+  const container =
+    document.getElementById("image-list");
+
+  if (!container) return;
+
+  if (productImages.length === 0) {
+    container.innerHTML =
+      '<p class="loading">هنوز عکسی اضافه نشده است.</p>';
+    return;
+  }
+
+  container.innerHTML =
+    productImages.map(
+      (image, index) => `
+        <div class="image-admin-item">
+          <span>
+            ${index + 1}.
+            ${escapeHtml(image)}
+          </span>
+
+          <button
+            type="button"
+            class="secondary-button"
+            onclick="removeProductImage(${index})"
+          >
+            حذف
+          </button>
+        </div>
+      `
+    ).join("");
+}
+
+
+function removeProductImage(index) {
+  productImages.splice(index, 1);
+  renderImageList();
+}
+
+
+async function saveProduct(event) {
+  event.preventDefault();
+
+  const name =
+    document.getElementById("product-name")?.value.trim();
+
+  const slug =
+    document.getElementById("product-slug")?.value.trim();
+
+  const description =
+    document.getElementById("product-description")?.value.trim();
+
+  const price =
+    Number(
+      document.getElementById("product-price")?.value
+    );
+
+  const stock =
+    Number(
+      document.getElementById("product-stock")?.value
+    );
+
+  const active =
+    document.getElementById("product-active")?.checked;
+
+  if (!name || !slug) {
+    alert(
+      "نام محصول و شناسه محصول الزامی است."
+    );
+    return;
+  }
+
+  const payload = {
+    name,
+    slug,
+    description,
+    price,
+    stock,
+    active,
+    images: productImages,
+  };
+
+  if (editingProductId) {
+    payload.id =
+      editingProductId;
+  }
+
+  try {
+    const response =
+      await fetch(
+        `${API_BASE}/products`,
+        {
+          method:
+            editingProductId
+              ? "PUT"
+              : "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+            "X-Admin-Token":
+              adminToken,
+          },
+
+          body:
+            JSON.stringify(payload),
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message ||
+        "خطا در ذخیره محصول."
+      );
+    }
+
+    alert(
+      editingProductId
+        ? "محصول با موفقیت ویرایش شد."
+        : "محصول با موفقیت ثبت شد."
+    );
+
+    clearForm();
+    await loadProducts();
+
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+
+// =========================
+// سفارش‌ها
+// =========================
+
+async function loadOrders() {
+  const container =
+    document.getElementById("orders-list");
+
+  if (!container) return;
+
+  container.innerHTML =
+    '<p class="loading">در حال بارگذاری سفارش‌ها...</p>';
+
+  if (!adminToken) {
+    adminToken =
+      prompt(
+        "رمز مدیریت را وارد کنید:"
+      ) || "";
+  }
+
+  if (!adminToken) {
+    container.innerHTML =
+      '<p class="loading">ورود به مدیریت لغو شد.</p>';
+    return;
+  }
+
+  try {
+    const response =
+      await fetch(
+        `${API_BASE}/orders`,
+        {
+          method: "GET",
+          headers: {
+            "X-Admin-Token":
+              adminToken,
+          },
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (
+      response.status === 401
+    ) {
+      adminToken = "";
+      throw new Error(
+        "رمز مدیریت صحیح نیست."
+      );
+    }
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message ||
+        "خطا در دریافت سفارش‌ها."
+      );
+    }
+
+    orders =
+      data.orders || [];
+
+    renderOrders();
+
+  } catch (error) {
+    container.innerHTML =
+      `<p class="loading">${escapeHtml(
+        error.message
+      )}</p>`;
+  }
+}
+
+
+function renderOrders() {
+  const container =
+    document.getElementById("orders-list");
+
+  if (!container) return;
+
+  if (orders.length === 0) {
+    container.innerHTML =
+      '<p class="loading">هنوز سفارشی ثبت نشده است.</p>';
+    return;
+  }
+
+  container.innerHTML =
+    orders.map(order => {
+
+      const status =
+        order.status || "pending";
+
+      const statusLabel =
+        STATUS_LABELS[status] ||
+        status;
+
+      return `
+        <div class="order-admin-item">
+
+          <div class="order-admin-main">
+
+            <div>
+              <strong>
+                سفارش شماره
+                ${Number(order.id)}
+              </strong>
+
+              <span>
+                مشتری:
+                ${escapeHtml(
+                  order.customer_name
+                )}
+              </span>
+
+              <span>
+                مبلغ:
+                ${formatPrice(
+                  order.total
+                )}
+                تومان
+              </span>
+
+              <span>
+                تاریخ:
+                ${escapeHtml(
+                  formatDate(
+                    order.created_at
+                  )
+                )}
+              </span>
+            </div>
+
+            <div class="order-status-box">
+
+              <label>
+                وضعیت سفارش
+              </label>
+
+              <select
+                class="order-status-select"
+                data-order-id="${Number(order.id)}"
+                onchange="changeOrderStatus(${Number(order.id)}, this.value)"
+              >
+                ${Object.entries(
+                  STATUS_LABELS
+                ).map(
+                  ([value, label]) =>
+                    `
+                    <option
+                      value="${value}"
+                      ${
+                        value === status
+                          ? "selected"
+                          : ""
+                      }
+                    >
+                      ${label}
+                    </option>
+                    `
+                ).join("")}
+              </select>
+
+              <small>
+                ${escapeHtml(
+                  statusLabel
+                )}
+              </small>
+
+            </div>
+
+            <button
+              type="button"
+              class="secondary-button"
+              onclick="showOrderDetails(${Number(order.id)})"
+            >
+              جزئیات
+            </button>
+
+          </div>
+
+        </div>
+      `;
+    }).join("");
+}
+
+
+// =========================
+// تغییر وضعیت سفارش
+// =========================
+
+async function changeOrderStatus(
+  orderId,
+  newStatus
+) {
+  const order =
+    orders.find(
+      item =>
+        Number(item.id) ===
+        Number(orderId)
+    );
+
+  if (!order) return;
+
+  const oldStatus =
+    order.status || "pending";
+
+  if (newStatus === oldStatus) {
+    return;
+  }
+
+  const newLabel =
+    STATUS_LABELS[newStatus] ||
+    newStatus;
+
+  const confirmed =
+    confirm(
+      `وضعیت سفارش شماره ${orderId} به «${newLabel}» تغییر کند؟`
+    );
+
+  if (!confirmed) {
+    renderOrders();
+    return;
+  }
+
+  try {
+    const response =
+      await fetch(
+        `${API_BASE}/orders/${Number(orderId)}`,
+        {
+          method: "PUT",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "X-Admin-Token":
+              adminToken,
+          },
+
+          body:
+            JSON.stringify({
+              status: newStatus,
+            }),
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (
+      response.status === 401
+    ) {
+      adminToken = "";
+      throw new Error(
+        "رمز مدیریت صحیح نیست."
+      );
+    }
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message ||
+        "تغییر وضعیت سفارش انجام نشد."
+      );
+    }
+
+    order.status =
+      newStatus;
+
+    alert(
+      "وضعیت سفارش با موفقیت تغییر کرد."
+    );
+
+    renderOrders();
+
+  } catch (error) {
+    alert(error.message);
+    renderOrders();
+  }
+}
+
+
+// =========================
+// جزئیات سفارش
+// =========================
+
+function showOrderDetails(id) {
+  const order =
+    orders.find(
+      item =>
+        String(item.id) ===
+        String(id)
+    );
+
+  if (!order) {
+    alert(
+      "اطلاعات سفارش پیدا نشد."
+    );
+    return;
+  }
+
+  const items =
+    Array.isArray(order.items)
+      ? order.items
+      : [];
+
+  const itemsText =
+    items.length
+      ? items.map(item => {
+          return (
+            `${item.product_name} × ` +
+            `${Number(
+              item.quantity || 0
+            ).toLocaleString("fa-IR")} — ` +
+            `${Number(
+              item.price || 0
+            ).toLocaleString("fa-IR")} تومان`
+          );
+        }).join("\n")
+      : "بدون کالا";
+
+  const statusLabel =
+    STATUS_LABELS[
+      order.status
+    ] ||
+    order.status ||
+    "-";
+
+  alert(
+    "سفارش شماره " +
+    order.id +
+    "\n\n" +
+
+    "نام مشتری: " +
+    order.customer_name +
+    "\n" +
+
+    "شماره تماس: " +
+    order.customer_phone +
+    "\n" +
+
+    "آدرس: " +
+    order.customer_address +
+    "\n\n" +
+
+    "وضعیت: " +
+    statusLabel +
+    "\n\n" +
+
+    "کالاها:\n" +
+    itemsText +
+    "\n\n" +
+
+    "مبلغ کل: " +
+    Number(
+      order.total || 0
+    ).toLocaleString("fa-IR") +
+    " تومان"
+  );
+}
+
+
+// =========================
+// شروع مدیریت
+// =========================
 
 document.addEventListener(
   "DOMContentLoaded",
   () => {
-
-    loadProducts();
 
     const refreshProducts =
       document.getElementById(
@@ -712,7 +796,26 @@ document.addEventListener(
     if (addImage) {
       addImage.addEventListener(
         "click",
-        () => addImageField()
+        () => {
+
+          const input =
+            document.getElementById(
+              "product-image"
+            );
+
+          if (!input) return;
+
+          const value =
+            input.value.trim();
+
+          if (!value) return;
+
+          productImages.push(value);
+
+          input.value = "";
+
+          renderImageList();
+        }
       );
     }
 
@@ -724,7 +827,7 @@ document.addEventListener(
     if (productForm) {
       productForm.addEventListener(
         "submit",
-        createProduct
+        saveProduct
       );
     }
 
@@ -741,6 +844,8 @@ document.addEventListener(
     }
 
     clearForm();
+
+    loadProducts();
 
     loadOrders();
   }
