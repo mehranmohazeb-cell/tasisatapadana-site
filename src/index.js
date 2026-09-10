@@ -96,76 +96,86 @@ const result = await env.DB
 
 }
 // =========================
-  // Admin Orders
-  // =========================
+// Admin Orders
+// =========================
 
-  if (
-    url.pathname === "/api/store/orders" &&
-    request.method === "GET"
-  ) {
-    if (!isAdmin(request, env)) {
-      return jsonResponse(
-        { message: "Unauthorized" },
-        401
-      );
-    }
+if (
+  url.pathname === "/api/store/orders" &&
+  request.method === "GET"
+) {
+  if (!isAdmin(request, env)) {
+    return Response.json(
+      {
+        ok: false,
+        error: "UNAUTHORIZED",
+        message: "رمز مدیریت صحیح نیست.",
+      },
+      { status: 401 }
+    );
+  }
 
+  try {
     const ordersResult = await env.DB
-      .prepare(`
-        SELECT
-          id,
-          customer_name,
-          customer_phone,
-          customer_address,
-          total,
-          status,
-          created_at
-        FROM orders
-        ORDER BY id DESC
-      `)
+      .prepare(
+        "SELECT id, customer_name, customer_phone, " +
+        "customer_address, total, status, created_at " +
+        "FROM orders " +
+        "ORDER BY id DESC"
+      )
       .all();
 
     const orders = ordersResult.results || [];
 
     for (const order of orders) {
       const itemsResult = await env.DB
-        .prepare(`
-          SELECT
-            id,
-            order_id,
-            product_id,
-            product_name,
-            price,
-            quantity,
-            created_at
-          FROM order_items
-          WHERE order_id = ?
-          ORDER BY id ASC
-        `)
+        .prepare(
+          "SELECT id, order_id, product_id, " +
+          "product_name, price, quantity, created_at " +
+          "FROM order_items " +
+          "WHERE order_id = ? " +
+          "ORDER BY id ASC"
+        )
         .bind(order.id)
         .all();
 
       order.items = itemsResult.results || [];
     }
 
-    return jsonResponse({
-      orders
+    return Response.json({
+      ok: true,
+      orders,
     });
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: "DATABASE_ERROR",
+        message: error.message,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+
+// دریافت جزئیات یک سفارش
+
+if (
+  url.pathname.startsWith("/api/store/orders/") &&
+  request.method === "GET"
+) {
+  if (!isAdmin(request, env)) {
+    return Response.json(
+      {
+        ok: false,
+        error: "UNAUTHORIZED",
+        message: "رمز مدیریت صحیح نیست.",
+      },
+      { status: 401 }
+    );
   }
 
-
-  // دریافت جزئیات یک سفارش
-  if (
-    url.pathname.startsWith("/api/store/orders/") &&
-    request.method === "GET"
-  ) {
-    if (!isAdmin(request, env)) {
-      return jsonResponse(
-        { message: "Unauthorized" },
-        401
-      );
-    }
-
+  try {
     const orderIdText =
       url.pathname.split("/").pop();
 
@@ -176,26 +186,24 @@ const result = await env.DB
       !Number.isInteger(orderId) ||
       orderId <= 0
     ) {
-      return jsonResponse(
-        { message: "شناسه سفارش نامعتبر است." },
-        400
+      return Response.json(
+        {
+          ok: false,
+          error: "INVALID_ORDER_ID",
+          message: "شناسه سفارش نامعتبر است.",
+        },
+        { status: 400 }
       );
     }
 
     const orderResult = await env.DB
-      .prepare(`
-        SELECT
-          id,
-          customer_name,
-          customer_phone,
-          customer_address,
-          total,
-          status,
-          created_at
-        FROM orders
-        WHERE id = ?
-        LIMIT 1
-      `)
+      .prepare(
+        "SELECT id, customer_name, customer_phone, " +
+        "customer_address, total, status, created_at " +
+        "FROM orders " +
+        "WHERE id = ? " +
+        "LIMIT 1"
+      )
       .bind(orderId)
       .all();
 
@@ -203,36 +211,45 @@ const result = await env.DB
       orderResult.results?.[0];
 
     if (!order) {
-      return jsonResponse(
-        { message: "سفارش پیدا نشد." },
-        404
+      return Response.json(
+        {
+          ok: false,
+          error: "ORDER_NOT_FOUND",
+          message: "سفارش پیدا نشد.",
+        },
+        { status: 404 }
       );
     }
 
     const itemsResult = await env.DB
-      .prepare(`
-        SELECT
-          id,
-          order_id,
-          product_id,
-          product_name,
-          price,
-          quantity,
-          created_at
-        FROM order_items
-        WHERE order_id = ?
-        ORDER BY id ASC
-      `)
+      .prepare(
+        "SELECT id, order_id, product_id, " +
+        "product_name, price, quantity, created_at " +
+        "FROM order_items " +
+        "WHERE order_id = ? " +
+        "ORDER BY id ASC"
+      )
       .bind(orderId)
       .all();
 
     order.items =
       itemsResult.results || [];
 
-    return jsonResponse({
-      order
+    return Response.json({
+      ok: true,
+      order,
     });
-  } 
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: "DATABASE_ERROR",
+        message: error.message,
+      },
+      { status: 500 }
+    );
+  }
+} 
 
 if (
 url.pathname === "/api/store/products" &&
