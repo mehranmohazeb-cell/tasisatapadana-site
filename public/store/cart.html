@@ -1,26 +1,235 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>سبد خرید | تأسیسات آپادانا</title><link rel="stylesheet" href="store.css"></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>سبد خرید | تأسیسات آپادانا</title>
+  <link rel="stylesheet" href="store.css">
+</head>
+
 <body>
-<header class="store-header"><div class="container"><a href="index.html" class="logo-link"><img src="../assets/logo-header.png" alt="تأسیسات آپادانا"></a><nav class="store-nav"><a href="index.html">فروشگاه</a><a href="cart.html">سبد خرید <span id="cart-count">0</span></a></nav></div></header>
-<main class="container"><section class="cart-hero"><h1>سبد خرید</h1><div id="cart-content"><p class="loading">در حال بارگذاری سبد خرید...</p></div></section></main>
-<footer class="store-footer"><div class="container"><p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p></div></footer>
+
+<header class="store-header">
+  <div class="container">
+    <a href="index.html" class="logo-link">
+      <img src="../assets/logo-header.png" alt="تأسیسات آپادانا">
+    </a>
+
+    <nav class="store-nav">
+      <a href="index.html">فروشگاه</a>
+      <a href="cart.html">
+        سبد خرید
+        <span id="cart-count">0</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main class="container cart-page">
+
+  <section class="cart-hero">
+    <h1>سبد خرید</h1>
+    <p>محصولات انتخاب‌شده خود را بررسی کنید.</p>
+  </section>
+
+  <section id="cart-content">
+    <p class="loading">در حال بارگذاری سبد خرید...</p>
+  </section>
+
+</main>
+
+<footer class="store-footer">
+  <div class="container">
+    <p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p>
+  </div>
+</footer>
+
 <script>
-function getCart(){try{return JSON.parse(localStorage.getItem("tasisat_apadana_cart"))||[]}catch{return[];}}
-function saveCart(cart){localStorage.setItem("tasisat_apadana_cart",JSON.stringify(cart));updateCartCount();renderCart();}
-function updateCartCount(){const e=document.getElementById("cart-count");if(!e)return;e.textContent=getCart().reduce((t,i)=>t+Number(i.quantity||0),0).toLocaleString("fa-IR");}
-function formatPrice(price){if(price===null||price===undefined||price==="")return"تماس بگیرید";const n=Number(price);return Number.isNaN(n)?String(price):`${n.toLocaleString("fa-IR")} تومان`;}
-function escapeHtml(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
-function changeQuantity(index,change){const cart=getCart();if(!cart[index])return;cart[index].quantity=Number(cart[index].quantity||1)+change;if(cart[index].quantity<=0)cart.splice(index,1);saveCart(cart);}
-function removeItem(index){const cart=getCart();if(!cart[index])return;cart.splice(index,1);saveCart(cart);}
-function renderCart(){
- const container=document.getElementById("cart-content"),cart=getCart();
- if(cart.length===0){container.innerHTML=`<p>سبد خرید شما خالی است.</p><a href="index.html" class="product-button" style="display:inline-block;width:auto;margin-top:15px;">رفتن به فروشگاه</a>`;return;}
- let total=0;
- const itemsHtml=cart.map((item,index)=>{const price=Number(item.price)||0,quantity=Number(item.quantity)||1;total+=price*quantity;return `<div style="display:flex;align-items:center;gap:15px;padding:15px 0;border-bottom:1px solid #eee;text-align:right;"><img src="${escapeHtml(item.image||"../assets/products/placeholder.svg")}" alt="${escapeHtml(item.name)}" style="width:80px;height:80px;object-fit:contain;background:#fafafa;border-radius:8px;"><div style="flex:1;"><h3 style="margin:0 0 8px;">${escapeHtml(item.name)}</h3><div>${formatPrice(item.price)}</div><div style="display:flex;align-items:center;gap:8px;margin-top:10px;"><button type="button" onclick="changeQuantity(${index},1)">+</button><span>${quantity.toLocaleString("fa-IR")}</span><button type="button" onclick="changeQuantity(${index},-1)">−</button><button type="button" onclick="removeItem(${index})" style="margin-right:10px;">حذف</button></div></div></div>`;}).join("");
- container.innerHTML=`<div>${itemsHtml}</div><div style="margin-top:25px;padding-top:20px;border-top:2px solid #222;"><h2>مبلغ کل: ${formatPrice(total)}</h2><a href="checkout.html" class="product-button" style="display:inline-block;width:auto;margin-top:10px;">ادامه و ثبت سفارش</a></div>`;
+function getCart() {
+  try {
+    return JSON.parse(localStorage.getItem("tasisat_apadana_cart")) || [];
+  } catch {
+    return [];
+  }
 }
-document.addEventListener("DOMContentLoaded",()=>{updateCartCount();renderCart();});
+
+function saveCart(cart) {
+  localStorage.setItem(
+    "tasisat_apadana_cart",
+    JSON.stringify(cart)
+  );
+
+  updateCartCount();
+  renderCart();
+}
+
+function updateCartCount() {
+  const element = document.getElementById("cart-count");
+
+  if (!element) return;
+
+  element.textContent = getCart()
+    .reduce((total, item) => total + Number(item.quantity || 0), 0)
+    .toLocaleString("fa-IR");
+}
+
+function formatPrice(price) {
+  if (price === null || price === undefined || price === "") {
+    return "تماس بگیرید";
+  }
+
+  const number = Number(price);
+
+  return Number.isNaN(number)
+    ? String(price)
+    : `${number.toLocaleString("fa-IR")} تومان`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function changeQuantity(index, change) {
+  const cart = getCart();
+
+  if (!cart[index]) return;
+
+  cart[index].quantity =
+    Number(cart[index].quantity || 1) + change;
+
+  if (cart[index].quantity <= 0) {
+    cart.splice(index, 1);
+  }
+
+  saveCart(cart);
+}
+
+function removeItem(index) {
+  const cart = getCart();
+
+  if (!cart[index]) return;
+
+  cart.splice(index, 1);
+  saveCart(cart);
+}
+
+function renderCart() {
+  const container = document.getElementById("cart-content");
+  const cart = getCart();
+
+  if (cart.length === 0) {
+    container.innerHTML = `
+      <div class="cart-empty">
+        <div class="cart-empty-icon">🛒</div>
+        <h2>سبد خرید شما خالی است</h2>
+        <p>هنوز محصولی به سبد خرید اضافه نکرده‌اید.</p>
+        <a href="index.html" class="product-button cart-shop-button">
+          رفتن به فروشگاه
+        </a>
+      </div>
+    `;
+
+    return;
+  }
+
+  let total = 0;
+
+  const itemsHtml = cart.map((item, index) => {
+
+    const price = Number(item.price) || 0;
+    const quantity = Number(item.quantity) || 1;
+
+    total += price * quantity;
+
+    return `
+      <article class="cart-item">
+
+        <img
+          src="${escapeHtml(item.image || "../assets/products/placeholder.svg")}"
+          alt="${escapeHtml(item.name)}"
+          class="cart-item-image"
+        >
+
+        <div class="cart-item-info">
+
+          <h3>${escapeHtml(item.name)}</h3>
+
+          <div class="cart-item-price">
+            ${formatPrice(item.price)}
+          </div>
+
+          <div class="cart-item-controls">
+
+            <div class="quantity-control">
+              <button
+                type="button"
+                onclick="changeQuantity(${index}, 1)"
+                aria-label="افزایش تعداد"
+              >+</button>
+
+              <span>
+                ${quantity.toLocaleString("fa-IR")}
+              </span>
+
+              <button
+                type="button"
+                onclick="changeQuantity(${index}, -1)"
+                aria-label="کاهش تعداد"
+              >−</button>
+            </div>
+
+            <button
+              type="button"
+              class="remove-item"
+              onclick="removeItem(${index})"
+            >
+              حذف
+            </button>
+
+          </div>
+
+        </div>
+
+      </article>
+    `;
+
+  }).join("");
+
+  container.innerHTML = `
+
+    <div class="cart-list">
+      ${itemsHtml}
+    </div>
+
+    <div class="cart-summary">
+
+      <div class="cart-total">
+        <span>مبلغ کل</span>
+        <strong>${formatPrice(total)}</strong>
+      </div>
+
+      <a
+        href="checkout.html"
+        class="product-button cart-checkout-button"
+      >
+        ادامه و ثبت سفارش
+      </a>
+
+    </div>
+
+  `;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  updateCartCount();
+  renderCart();
+});
 </script>
+
 </body>
-</html>
+</html> 
