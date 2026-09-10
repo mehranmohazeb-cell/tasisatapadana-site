@@ -1,3 +1,4 @@
+
 /* =========================================================
    تأسیسات آپادانا — Stylesheet
    طراحی: تیره پترولی (الهام از کاشی‌کاری اصفهان) + مسی گرم برای CTA
@@ -63,9 +64,7 @@ ul {
   list-style: none;
 }
 
-h1,
-h2,
-h3 {
+h1, h2, h3 {
   line-height: 1.35;
   margin: 0 0 0.6em;
   font-weight: 700;
@@ -706,54 +705,15 @@ p {
   background: var(--bg-alt);
 }
 
-/*
-   محتوای کارت:
-   عنوان در بالای بخش محتوا قرار دارد.
-   خود عنوان به شکل نوار هماهنگ با بنر اصلی نمایش داده می‌شود.
-*/
 .service-card-content {
-  padding: 0 20px 20px;
+  padding: 18px 20px 20px;
   display: flex;
   flex-direction: column;
   flex: 1;
 }
 
-/*
-   نوار عنوان اصلی کارت خدمات
-   همان عنوان h3 است و عنوان دیگری ایجاد نمی‌شود.
-   رنگ و الگو دقیقاً بر اساس بنر اصلی سایت است.
-*/
-.service-card-content h3 {
-  margin: 0 -20px 14px;
-  padding: 12px 20px;
-  background:
-    linear-gradient(
-      45deg,
-      transparent 48%,
-      rgba(255, 255, 255, 0.12) 48% 52%,
-      transparent 52%
-    ),
-    linear-gradient(
-      -45deg,
-      transparent 48%,
-      rgba(255, 255, 255, 0.12) 48% 52%,
-      transparent 52%
-    ),
-    var(--primary-dark);
-  background-size: 46px 46px;
-  color: #fff;
-  font-size: 1.05rem;
-  line-height: 1.5;
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-}
-
 .service-card-content p {
   flex: 1;
-  color: var(--ink-soft);
-  font-size: 0.95rem;
-  margin-bottom: 10px;
 }
 
 .service-card .card-link {
@@ -800,7 +760,7 @@ p {
 .store-badge {
   display: inline-flex;
   padding: 6px 12px;
-  border: 1px solid rgba(255, 255, 255, .35);
+  border: 1px solid rgba(255,255,255,.35);
   border-radius: 999px;
   font-size: .85rem;
   font-weight: 700;
@@ -825,18 +785,8 @@ p {
   justify-content: center;
   gap: 8px;
   background:
-    linear-gradient(
-      45deg,
-      transparent 48%,
-      rgba(255, 255, 255, .12) 48% 52%,
-      transparent 52%
-    ),
-    linear-gradient(
-      -45deg,
-      transparent 48%,
-      rgba(255, 255, 255, .12) 48% 52%,
-      transparent 52%
-    ),
+    linear-gradient(45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
+    linear-gradient(-45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
     var(--primary);
   background-size: 34px 34px;
   color: #fff;
@@ -874,7 +824,7 @@ p {
   color: #fff;
   font-size: .85rem;
   font-weight: 700;
-  border: 1px solid rgba(255, 255, 255, .25);
+  border: 1px solid rgba(255,255,255,.25);
 }
 
 .floating-call {
@@ -903,18 +853,8 @@ p {
   position: relative;
   padding: 46px 0 42px;
   background:
-    linear-gradient(
-      45deg,
-      transparent 48%,
-      rgba(255, 255, 255, .12) 48% 52%,
-      transparent 52%
-    ),
-    linear-gradient(
-      -45deg,
-      transparent 48%,
-      rgba(255, 255, 255, .12) 48% 52%,
-      transparent 52%
-    ),
+    linear-gradient(45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
+    linear-gradient(-45deg, transparent 48%, rgba(255,255,255,.12) 48% 52%, transparent 52%),
     var(--primary-dark);
   background-size: 46px 46px;
   color: #fff;
@@ -1139,4 +1079,4 @@ p {
 .brand-beko {
   color: #1f4f9a;
   border-color: rgba(31, 79, 154, 0.25);
-}
+} 
