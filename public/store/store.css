@@ -314,7 +314,7 @@ input {
 .product-main-image {
   position: relative;
   width: 100%;
-  height: 440px;
+  height: 380px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -910,7 +910,7 @@ input {
   }
 
   .product-main-image {
-    height: 310px;
+    height: 270px;
     border-radius: 15px;
   }
 
