@@ -584,3 +584,238 @@ img { max-width: 100%; display: block; }
   color: #fff;
   text-align: center;
 }
+/* =========================================================
+   Cart Page — تأسیسات آپادانا
+   ========================================================= */
+
+.cart-page {
+  padding-top: 30px;
+  padding-bottom: 50px;
+}
+
+.cart-hero {
+  margin-bottom: 25px;
+}
+
+.cart-hero p {
+  margin: 5px 0 0;
+  color: #dce9ec;
+}
+
+.cart-list {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.cart-item {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cart-item:last-child {
+  border-bottom: 0;
+}
+
+.cart-item-image {
+  flex: 0 0 100px;
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  padding: 8px;
+  background: var(--bg-alt);
+  border-radius: 10px;
+}
+
+.cart-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cart-item-info h3 {
+  margin: 0 0 7px;
+  color: var(--primary);
+  font-size: 17px;
+}
+
+.cart-item-price {
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.cart-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 13px;
+}
+
+.quantity-control {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #fff;
+}
+
+.quantity-control button {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  background: var(--bg-alt);
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.quantity-control button:hover,
+.quantity-control button:focus-visible {
+  background: var(--border);
+}
+
+.quantity-control span {
+  min-width: 42px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.remove-item {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.remove-item:hover,
+.remove-item:focus-visible {
+  color: var(--accent-dark);
+}
+
+.cart-summary {
+  margin-top: 20px;
+  padding: 20px;
+  background: var(--primary-dark);
+  border-radius: 14px;
+  color: #fff;
+}
+
+.cart-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.cart-total span {
+  color: #dce9ec;
+}
+
+.cart-total strong {
+  color: #fff;
+  font-size: 21px;
+}
+
+.cart-checkout-button {
+  background: var(--accent);
+  text-align: center;
+}
+
+.cart-checkout-button:hover,
+.cart-checkout-button:focus-visible {
+  background: var(--accent-dark);
+}
+
+.cart-empty {
+  padding: 45px 20px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.cart-empty-icon {
+  font-size: 42px;
+  margin-bottom: 10px;
+}
+
+.cart-empty h2 {
+  margin: 0 0 7px;
+  color: var(--primary);
+  font-size: 20px;
+}
+
+.cart-empty p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.cart-shop-button {
+  width: fit-content !important;
+  margin: 20px auto 0 !important;
+}
+
+/* Cart mobile */
+@media (max-width: 650px) {
+
+  .cart-page {
+    padding-top: 20px;
+    padding-bottom: 35px;
+  }
+
+  .cart-hero {
+    padding: 27px 15px;
+  }
+
+  .cart-item {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .cart-item-image {
+    flex-basis: 78px;
+    width: 78px;
+    height: 78px;
+  }
+
+  .cart-item-info h3 {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .cart-item-price {
+    font-size: 13px;
+  }
+
+  .cart-item-controls {
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+
+  .quantity-control button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .quantity-control span {
+    min-width: 36px;
+  }
+
+  .cart-summary {
+    padding: 17px;
+  }
+
+  .cart-total strong {
+    font-size: 18px;
+  }
+} 
