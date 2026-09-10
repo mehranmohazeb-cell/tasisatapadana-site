@@ -1,5 +1,4 @@
 const API_BASE = "/api/store";
-const IMAGE_BASE_PATH = "/assets/products/";
 
 let editingProductId = null;
 let productImages = [];
@@ -18,7 +17,7 @@ const STATUS_LABELS = {
 
 
 // =========================
-// ابزارهای کمکی
+// Helpers
 // =========================
 
 function escapeHtml(value) {
@@ -30,15 +29,18 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+
 function escapeAttribute(value) {
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
     .replace(/'/g, "\\'");
 }
 
+
 function formatPrice(value) {
   return Number(value || 0).toLocaleString("fa-IR");
 }
+
 
 function formatDate(value) {
   if (!value) return "-";
@@ -46,18 +48,66 @@ function formatDate(value) {
   try {
     return new Date(value).toLocaleString("fa-IR");
   } catch {
-    return value;
+    return String(value);
   }
 }
 
 
 // =========================
-// محصولات
+// Product Image Path
+// =========================
+
+function getProductImageUrl(image) {
+  if (!image) return "";
+
+  const value =
+    String(image).trim();
+
+  if (!value) return "";
+
+  // اگر مسیر کامل اینترنتی باشد
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:")
+  ) {
+    return value;
+  }
+
+  // اگر مسیر از قبل با / شروع شده باشد
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  // اگر مسیر assets/products باشد
+  if (
+    value.startsWith("assets/")
+  ) {
+    return "/" + value;
+  }
+
+  // اگر مسیر products/... باشد
+  if (
+    value.startsWith("products/")
+  ) {
+    return "/assets/" + value;
+  }
+
+  // حالت معمول:
+  // فقط نام فایل در D1 ذخیره شده است
+  return "/assets/products/" + value;
+}
+
+
+// =========================
+// Products
 // =========================
 
 async function loadProducts() {
   const container =
-    document.getElementById("products-list");
+    document.getElementById(
+      "products-list"
+    );
 
   if (!container) return;
 
@@ -66,12 +116,17 @@ async function loadProducts() {
 
   try {
     const response =
-      await fetch(`${API_BASE}/products`);
+      await fetch(
+        `${API_BASE}/products`
+      );
 
     const data =
       await response.json();
 
-    if (!response.ok || !data.ok) {
+    if (
+      !response.ok ||
+      !data.ok
+    ) {
       throw new Error(
         data.message ||
         "خطا در دریافت محصولات."
@@ -94,7 +149,9 @@ async function loadProducts() {
 
 function renderProducts() {
   const container =
-    document.getElementById("products-list");
+    document.getElementById(
+      "products-list"
+    );
 
   if (!container) return;
 
@@ -105,71 +162,99 @@ function renderProducts() {
   }
 
   container.innerHTML =
-    products.map(product => {
-      const image =
-        product.image
-          ? `${IMAGE_BASE_PATH}${product.image}`
-          : "";
+    products.map(
+      product => {
 
-      return `
-        <div class="product-admin-item">
-          ${
-            image
-              ? `<img
-                  src="${escapeAttribute(image)}"
-                  alt="${escapeHtml(product.name)}"
-                  class="product-admin-image"
-                >`
-              : ""
-          }
+        const image =
+          getProductImageUrl(
+            product.image
+          );
 
-          <div class="product-admin-info">
-            <strong>
-              ${escapeHtml(product.name)}
-            </strong>
+        return `
+          <div class="product-admin-item">
 
-            <span>
-              قیمت:
-              ${formatPrice(product.price)}
-              تومان
-            </span>
+            ${
+              image
+                ? `
+                  <img
+                    src="${escapeHtml(image)}"
+                    alt="${escapeHtml(product.name)}"
+                    class="product-admin-image"
+                    onerror="this.style.display='none';"
+                  >
+                `
+                : `
+                  <div class="product-admin-image"></div>
+                `
+            }
 
-            <span>
-              موجودی:
-              ${formatPrice(product.stock)}
-            </span>
+            <div class="product-admin-info">
+
+              <strong>
+                ${escapeHtml(
+                  product.name
+                )}
+              </strong>
+
+              <span>
+                قیمت:
+                ${formatPrice(
+                  product.price
+                )}
+                تومان
+              </span>
+
+              <span>
+                موجودی:
+                ${formatPrice(
+                  product.stock
+                )}
+              </span>
+
+            </div>
+
+            <button
+              type="button"
+              class="secondary-button"
+              onclick="editProduct(${Number(product.id)})"
+            >
+              ویرایش
+            </button>
+
           </div>
-
-          <button
-            type="button"
-            class="secondary-button"
-            onclick="editProduct(${Number(product.id)})"
-          >
-            ویرایش
-          </button>
-        </div>
-      `;
-    }).join("");
+        `;
+      }
+    ).join("");
 }
 
 
+// =========================
+// Product Form
+// =========================
+
 function clearForm() {
   const form =
-    document.getElementById("product-form");
+    document.getElementById(
+      "product-form"
+    );
 
   if (!form) return;
 
   form.reset();
 
   const idInput =
-    document.getElementById("product-id");
+    document.getElementById(
+      "product-id"
+    );
 
   if (idInput) {
     idInput.value = "";
   }
 
   const title =
-    document.getElementById("form-title");
+    document.getElementById(
+      "form-title"
+    );
 
   if (title) {
     title.textContent =
@@ -187,7 +272,8 @@ function editProduct(id) {
   const product =
     products.find(
       item =>
-        Number(item.id) === Number(id)
+        Number(item.id) ===
+        Number(id)
     );
 
   if (!product) return;
@@ -196,34 +282,51 @@ function editProduct(id) {
     Number(product.id);
 
   const idInput =
-    document.getElementById("product-id");
+    document.getElementById(
+      "product-id"
+    );
 
   const nameInput =
-    document.getElementById("product-name");
+    document.getElementById(
+      "product-name"
+    );
 
   const slugInput =
-    document.getElementById("product-slug");
+    document.getElementById(
+      "product-slug"
+    );
 
   const descriptionInput =
-    document.getElementById("product-description");
+    document.getElementById(
+      "product-description"
+    );
 
   const priceInput =
-    document.getElementById("product-price");
+    document.getElementById(
+      "product-price"
+    );
 
   const stockInput =
-    document.getElementById("product-stock");
+    document.getElementById(
+      "product-stock"
+    );
 
   const activeInput =
-    document.getElementById("product-active");
+    document.getElementById(
+      "product-active"
+    );
 
   if (idInput)
-    idInput.value = product.id;
+    idInput.value =
+      product.id;
 
   if (nameInput)
-    nameInput.value = product.name || "";
+    nameInput.value =
+      product.name || "";
 
   if (slugInput)
-    slugInput.value = product.slug || "";
+    slugInput.value =
+      product.slug || "";
 
   if (descriptionInput)
     descriptionInput.value =
@@ -247,7 +350,9 @@ function editProduct(id) {
       .filter(Boolean);
 
   const title =
-    document.getElementById("form-title");
+    document.getElementById(
+      "form-title"
+    );
 
   if (title) {
     title.textContent =
@@ -265,11 +370,15 @@ function editProduct(id) {
 
 function renderImageList() {
   const container =
-    document.getElementById("image-list");
+    document.getElementById(
+      "image-list"
+    );
 
   if (!container) return;
 
-  if (productImages.length === 0) {
+  if (
+    productImages.length === 0
+  ) {
     container.innerHTML =
       '<p class="loading">هنوز عکسی اضافه نشده است.</p>';
     return;
@@ -279,6 +388,7 @@ function renderImageList() {
     productImages.map(
       (image, index) => `
         <div class="image-admin-item">
+
           <span>
             ${index + 1}.
             ${escapeHtml(image)}
@@ -291,6 +401,7 @@ function renderImageList() {
           >
             حذف
           </button>
+
         </div>
       `
     ).join("");
@@ -298,35 +409,55 @@ function renderImageList() {
 
 
 function removeProductImage(index) {
-  productImages.splice(index, 1);
+  productImages.splice(
+    index,
+    1
+  );
+
   renderImageList();
 }
 
+
+// =========================
+// Save Product
+// =========================
 
 async function saveProduct(event) {
   event.preventDefault();
 
   const name =
-    document.getElementById("product-name")?.value.trim();
+    document.getElementById(
+      "product-name"
+    )?.value.trim();
 
   const slug =
-    document.getElementById("product-slug")?.value.trim();
+    document.getElementById(
+      "product-slug"
+    )?.value.trim();
 
   const description =
-    document.getElementById("product-description")?.value.trim();
+    document.getElementById(
+      "product-description"
+    )?.value.trim();
 
   const price =
     Number(
-      document.getElementById("product-price")?.value
+      document.getElementById(
+        "product-price"
+      )?.value
     );
 
   const stock =
     Number(
-      document.getElementById("product-stock")?.value
+      document.getElementById(
+        "product-stock"
+      )?.value
     );
 
   const active =
-    document.getElementById("product-active")?.checked;
+    document.getElementById(
+      "product-active"
+    )?.checked;
 
   if (!name || !slug) {
     alert(
@@ -342,12 +473,24 @@ async function saveProduct(event) {
     price,
     stock,
     active,
-    images: productImages,
+    images:
+      productImages,
   };
 
   if (editingProductId) {
     payload.id =
       editingProductId;
+  }
+
+  if (!adminToken) {
+    adminToken =
+      prompt(
+        "رمز مدیریت را وارد کنید:"
+      ) || "";
+  }
+
+  if (!adminToken) {
+    return;
   }
 
   try {
@@ -368,14 +511,29 @@ async function saveProduct(event) {
           },
 
           body:
-            JSON.stringify(payload),
+            JSON.stringify(
+              payload
+            ),
         }
       );
 
     const data =
       await response.json();
 
-    if (!response.ok || !data.ok) {
+    if (
+      response.status === 401
+    ) {
+      adminToken = "";
+
+      throw new Error(
+        "رمز مدیریت صحیح نیست."
+      );
+    }
+
+    if (
+      !response.ok ||
+      !data.ok
+    ) {
       throw new Error(
         data.message ||
         "خطا در ذخیره محصول."
@@ -389,21 +547,26 @@ async function saveProduct(event) {
     );
 
     clearForm();
+
     await loadProducts();
 
   } catch (error) {
-    alert(error.message);
+    alert(
+      error.message
+    );
   }
 }
 
 
 // =========================
-// سفارش‌ها
+// Orders
 // =========================
 
 async function loadOrders() {
   const container =
-    document.getElementById("orders-list");
+    document.getElementById(
+      "orders-list"
+    );
 
   if (!container) return;
 
@@ -443,12 +606,16 @@ async function loadOrders() {
       response.status === 401
     ) {
       adminToken = "";
+
       throw new Error(
         "رمز مدیریت صحیح نیست."
       );
     }
 
-    if (!response.ok || !data.ok) {
+    if (
+      !response.ok ||
+      !data.ok
+    ) {
       throw new Error(
         data.message ||
         "خطا در دریافت سفارش‌ها."
@@ -471,7 +638,9 @@ async function loadOrders() {
 
 function renderOrders() {
   const container =
-    document.getElementById("orders-list");
+    document.getElementById(
+      "orders-list"
+    );
 
   if (!container) return;
 
@@ -482,107 +651,110 @@ function renderOrders() {
   }
 
   container.innerHTML =
-    orders.map(order => {
+    orders.map(
+      order => {
 
-      const status =
-        order.status || "pending";
+        const status =
+          order.status ||
+          "pending";
 
-      const statusLabel =
-        STATUS_LABELS[status] ||
-        status;
+        return `
+          <div class="order-admin-item">
 
-      return `
-        <div class="order-admin-item">
+            <div class="order-admin-main">
 
-          <div class="order-admin-main">
+              <div>
 
-            <div>
-              <strong>
-                سفارش شماره
-                ${Number(order.id)}
-              </strong>
+                <strong>
+                  سفارش شماره
+                  ${Number(order.id)}
+                </strong>
 
-              <span>
-                مشتری:
-                ${escapeHtml(
-                  order.customer_name
-                )}
-              </span>
+                <span>
+                  مشتری:
+                  ${escapeHtml(
+                    order.customer_name
+                  )}
+                </span>
 
-              <span>
-                مبلغ:
-                ${formatPrice(
-                  order.total
-                )}
-                تومان
-              </span>
+                <span>
+                  مبلغ:
+                  ${formatPrice(
+                    order.total
+                  )}
+                  تومان
+                </span>
 
-              <span>
-                تاریخ:
-                ${escapeHtml(
-                  formatDate(
-                    order.created_at
-                  )
-                )}
-              </span>
-            </div>
+                <span>
+                  تاریخ:
+                  ${escapeHtml(
+                    formatDate(
+                      order.created_at
+                    )
+                  )}
+                </span>
 
-            <div class="order-status-box">
+              </div>
 
-              <label>
-                وضعیت سفارش
-              </label>
+              <div class="order-status-box">
 
-              <select
-                class="order-status-select"
-                data-order-id="${Number(order.id)}"
-                onchange="changeOrderStatus(${Number(order.id)}, this.value)"
+                <label>
+                  وضعیت سفارش
+                </label>
+
+                <select
+                  class="order-status-select"
+                  onchange="changeOrderStatus(${Number(order.id)}, this.value)"
+                >
+
+                  ${Object.entries(
+                    STATUS_LABELS
+                  ).map(
+                    ([value, label]) => `
+                      <option
+                        value="${value}"
+                        ${
+                          value === status
+                            ? "selected"
+                            : ""
+                        }
+                      >
+                        ${label}
+                      </option>
+                    `
+                  ).join("")}
+
+                </select>
+
+                <small>
+                  وضعیت فعلی:
+                  ${escapeHtml(
+                    STATUS_LABELS[status] ||
+                    status
+                  )}
+                </small>
+
+              </div>
+
+              <button
+                type="button"
+                class="secondary-button"
+                onclick="showOrderDetails(${Number(order.id)})"
               >
-                ${Object.entries(
-                  STATUS_LABELS
-                ).map(
-                  ([value, label]) =>
-                    `
-                    <option
-                      value="${value}"
-                      ${
-                        value === status
-                          ? "selected"
-                          : ""
-                      }
-                    >
-                      ${label}
-                    </option>
-                    `
-                ).join("")}
-              </select>
-
-              <small>
-                ${escapeHtml(
-                  statusLabel
-                )}
-              </small>
+                جزئیات
+              </button>
 
             </div>
-
-            <button
-              type="button"
-              class="secondary-button"
-              onclick="showOrderDetails(${Number(order.id)})"
-            >
-              جزئیات
-            </button>
 
           </div>
-
-        </div>
-      `;
-    }).join("");
+        `;
+      }
+    ).join("");
 }
 
 
 // =========================
-// تغییر وضعیت سفارش
+// Change Order Status
 // =========================
 
 async function changeOrderStatus(
@@ -599,9 +771,13 @@ async function changeOrderStatus(
   if (!order) return;
 
   const oldStatus =
-    order.status || "pending";
+    order.status ||
+    "pending";
 
-  if (newStatus === oldStatus) {
+  if (
+    newStatus ===
+    oldStatus
+  ) {
     return;
   }
 
@@ -615,6 +791,18 @@ async function changeOrderStatus(
     );
 
   if (!confirmed) {
+    renderOrders();
+    return;
+  }
+
+  if (!adminToken) {
+    adminToken =
+      prompt(
+        "رمز مدیریت را وارد کنید:"
+      ) || "";
+  }
+
+  if (!adminToken) {
     renderOrders();
     return;
   }
@@ -636,7 +824,8 @@ async function changeOrderStatus(
 
           body:
             JSON.stringify({
-              status: newStatus,
+              status:
+                newStatus,
             }),
         }
       );
@@ -648,12 +837,16 @@ async function changeOrderStatus(
       response.status === 401
     ) {
       adminToken = "";
+
       throw new Error(
         "رمز مدیریت صحیح نیست."
       );
     }
 
-    if (!response.ok || !data.ok) {
+    if (
+      !response.ok ||
+      !data.ok
+    ) {
       throw new Error(
         data.message ||
         "تغییر وضعیت سفارش انجام نشد."
@@ -663,21 +856,24 @@ async function changeOrderStatus(
     order.status =
       newStatus;
 
+    renderOrders();
+
     alert(
       "وضعیت سفارش با موفقیت تغییر کرد."
     );
 
-    renderOrders();
-
   } catch (error) {
-    alert(error.message);
+    alert(
+      error.message
+    );
+
     renderOrders();
   }
 }
 
 
 // =========================
-// جزئیات سفارش
+// Order Details
 // =========================
 
 function showOrderDetails(id) {
@@ -702,8 +898,8 @@ function showOrderDetails(id) {
 
   const itemsText =
     items.length
-      ? items.map(item => {
-          return (
+      ? items.map(
+          item =>
             `${item.product_name} × ` +
             `${Number(
               item.quantity || 0
@@ -711,8 +907,7 @@ function showOrderDetails(id) {
             `${Number(
               item.price || 0
             ).toLocaleString("fa-IR")} تومان`
-          );
-        }).join("\n")
+        ).join("\n")
       : "بدون کالا";
 
   const statusLabel =
@@ -725,29 +920,23 @@ function showOrderDetails(id) {
   alert(
     "سفارش شماره " +
     order.id +
-    "\n\n" +
 
-    "نام مشتری: " +
+    "\n\nنام مشتری: " +
     order.customer_name +
-    "\n" +
 
-    "شماره تماس: " +
+    "\nشماره تماس: " +
     order.customer_phone +
-    "\n" +
 
-    "آدرس: " +
+    "\nآدرس: " +
     order.customer_address +
-    "\n\n" +
 
-    "وضعیت: " +
+    "\n\nوضعیت: " +
     statusLabel +
-    "\n\n" +
 
-    "کالاها:\n" +
+    "\n\nکالاها:\n" +
     itemsText +
-    "\n\n" +
 
-    "مبلغ کل: " +
+    "\n\nمبلغ کل: " +
     Number(
       order.total || 0
     ).toLocaleString("fa-IR") +
@@ -757,7 +946,7 @@ function showOrderDetails(id) {
 
 
 // =========================
-// شروع مدیریت
+// Start
 // =========================
 
 document.addEventListener(
@@ -810,7 +999,9 @@ document.addEventListener(
 
           if (!value) return;
 
-          productImages.push(value);
+          productImages.push(
+            value
+          );
 
           input.value = "";
 
