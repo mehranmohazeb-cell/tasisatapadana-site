@@ -3,1162 +3,248 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>جزئیات محصول | فروشگاه تأسیسات آپادانا</title>
-  <meta
-    name="description"
-    content="جزئیات محصول در فروشگاه تأسیسات آپادانا"
-  >
-
+  <title>جزئیات محصول | تأسیسات آپادانا</title>
   <link rel="stylesheet" href="store.css">
 </head>
 
 <body>
 
-  <header class="store-header">
-    <div class="container">
+<header class="store-header">
+  <div class="container">
+    <a href="index.html" class="logo-link">
+      <img src="../assets/logo-header.png" alt="تأسیسات آپادانا">
+    </a>
 
-      <a href="../index.html" class="logo-link">
-        <img
-          src="../assets/logo-header.png"
-          alt="تأسیسات آپادانا"
-        >
+    <nav class="store-nav">
+      <a href="index.html">فروشگاه</a>
+      <a href="cart.html">
+        سبد خرید <span id="cart-count">0</span>
       </a>
-
-      <nav class="store-nav">
-        <a href="index.html">فروشگاه</a>
-
-        <a href="cart.html">
-          سبد خرید <span id="cart-count">0</span>
-        </a>
-
-        <a href="track-order.html">پیگیری سفارش</a>
-        <a href="account.html">حساب کاربری</a>
-        <a href="../support.html">پشتیبانی</a>
-      </nav>
-
-    </div>
-  </header>
-
-
-  <main class="container">
-
-    <section
-      id="product-detail"
-      class="product-detail"
-    >
-      <p class="loading">
-        در حال بارگذاری محصول...
-      </p>
-    </section>
-
-  </main>
-
-
-  <!-- نمایش تمام‌صفحه تصویر -->
-  <div
-    id="image-lightbox"
-    class="image-lightbox"
-    hidden
-    aria-hidden="true"
-  >
-
-    <button
-      type="button"
-      class="lightbox-close"
-      onclick="closeLightbox()"
-      aria-label="بستن تصویر"
-    >
-      ×
-    </button>
-
-
-    <button
-      type="button"
-      id="lightbox-prev"
-      class="lightbox-arrow lightbox-prev"
-      onclick="changeLightboxImage(-1)"
-      aria-label="تصویر قبلی"
-    >
-      ‹
-    </button>
-
-
-    <div class="lightbox-content">
-
-      <img
-        id="lightbox-image"
-        src=""
-        alt=""
-        draggable="false"
-      >
-
-    </div>
-
-
-    <button
-      type="button"
-      id="lightbox-next"
-      class="lightbox-arrow lightbox-next"
-      onclick="changeLightboxImage(1)"
-      aria-label="تصویر بعدی"
-    >
-      ›
-    </button>
-
+    </nav>
   </div>
+</header>
 
+<main class="container">
+  <section id="product-detail" class="store-hero">
+    <p class="loading">در حال بارگذاری محصول...</p>
+  </section>
+</main>
 
-  <footer class="store-footer">
-    <div class="container">
-      <p>
-        © تأسیسات آپادانا - تمامی حقوق محفوظ است.
-      </p>
-    </div>
-  </footer>
+<footer class="store-footer">
+  <div class="container">
+    <p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p>
+  </div>
+</footer>
 
+<script>
+const API_BASE = "/api";
 
-  <script>
+function formatPrice(price) {
+  if (price === null || price === undefined || price === "") {
+    return "تماس بگیرید";
+  }
 
-    const API_BASE = "/api/store";
+  const n = Number(price);
 
-    let currentImageIndex = 0;
+  return Number.isNaN(n)
+    ? String(price)
+    : `${n.toLocaleString("fa-IR")} تومان`;
+}
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
-    function escapeHtml(value) {
+function getCart() {
+  try {
+    return JSON.parse(
+      localStorage.getItem("tasisat_apadana_cart") || "[]"
+    );
+  } catch {
+    return [];
+  }
+}
 
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+function saveCart(cart) {
+  localStorage.setItem(
+    "tasisat_apadana_cart",
+    JSON.stringify(cart)
+  );
 
+  updateCartCount();
+}
+
+function updateCartCount() {
+  const element = document.getElementById("cart-count");
+
+  if (!element) return;
+
+  element.textContent = getCart()
+    .reduce(
+      (total, item) => total + Number(item.quantity || 0),
+      0
+    )
+    .toLocaleString("fa-IR");
+}
+
+function getProductImage(product) {
+  let image = product.image || "";
+
+  if (
+    !image &&
+    Array.isArray(product.images) &&
+    product.images.length > 0
+  ) {
+    image = product.images[0].image || "";
+  }
+
+  if (
+    image &&
+    !image.startsWith("/") &&
+    !image.startsWith("http://") &&
+    !image.startsWith("https://")
+  ) {
+    image = "/assets/products/" + image;
+  }
+
+  if (!image) {
+    image = "/assets/products/placeholder.svg";
+  }
+
+  return image;
+}
+
+function addToCart(product) {
+  const cart = getCart();
+
+  const existing = cart.find(
+    item => String(item.id) === String(product.id)
+  );
+
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    cart.push({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: getProductImage(product),
+      quantity: 1
+    });
+  }
+
+  saveCart(cart);
+
+  alert("محصول به سبد خرید اضافه شد.");
+}
+
+async function loadProduct() {
+  const container = document.getElementById("product-detail");
+
+  const id = new URLSearchParams(
+    window.location.search
+  ).get("id");
+
+  if (!id) {
+    container.innerHTML = `
+      <h1>محصول پیدا نشد</h1>
+      <p>شناسه محصول مشخص نشده است.</p>
+      <a href="index.html">بازگشت به فروشگاه</a>
+    `;
+
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/products/${encodeURIComponent(id)}`
+    );
+
+    if (!response.ok) {
+      throw new Error("محصول پیدا نشد");
     }
 
+    const data = await response.json();
+    const product = data.product;
 
-    function formatPrice(value) {
-
-      return `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
-
+    if (!product) {
+      throw new Error("اطلاعات محصول دریافت نشد");
     }
 
+    const image = getProductImage(product);
 
-    function getProductImages(product) {
+    container.innerHTML = `
+      <div>
 
-      if (
-        Array.isArray(product.images) &&
-        product.images.length > 0
-      ) {
+        <img
+          src="${escapeHtml(image)}"
+          alt="${escapeHtml(product.name || "محصول")}"
+          style="
+            width:100%;
+            max-width:450px;
+            max-height:450px;
+            object-fit:contain;
+            border-radius:12px;
+          "
+        >
 
-        return product.images
-          .map(item => {
+        <h1>${escapeHtml(product.name || "محصول")}</h1>
 
-            if (typeof item === "string") {
-              return item;
-            }
-
-            return item?.image || "";
-
-          })
-          .filter(Boolean);
-
-      }
-
-
-      if (product.image) {
-        return [product.image];
-      }
-
-
-      return [];
-
-    }
-
-
-    function renderProductImages(product) {
-
-      const images = getProductImages(product);
-
-
-      if (images.length === 0) {
-
-        return `
-          <div class="product-detail-media">
-
-            <div class="product-main-image">
-
-              <img
-                src="../assets/products/placeholder.svg"
-                alt="${escapeHtml(product.name)}"
-                class="product-detail-image"
-              >
-
-            </div>
-
-          </div>
-        `;
-
-      }
-
-
-      currentImageIndex = 0;
-
-
-      const mainImage = images[0];
-
-
-      const thumbnails = images.length > 1
-        ? `
-          <div
-            class="product-thumbnails"
-            aria-label="تصاویر محصول"
-          >
-
-            ${images.map((image, index) => `
-              <button
-                type="button"
-                class="product-thumbnail ${index === 0 ? "active" : ""}"
-                onclick="selectProductImage(${index})"
-                aria-label="نمایش تصویر ${index + 1}"
-              >
-
-                <img
-                  src="${escapeHtml(image)}"
-                  alt="${escapeHtml(product.name)} - تصویر ${index + 1}"
-                  loading="lazy"
-                >
-
-              </button>
-            `).join("")}
-
-          </div>
-        `
-        : "";
-
-
-      const navigation = images.length > 1
-        ? `
-          <button
-            type="button"
-            class="product-image-arrow product-image-arrow-prev"
-            onclick="changeProductImage(-1)"
-            aria-label="تصویر قبلی"
-          >
-            ‹
-          </button>
-
-          <button
-            type="button"
-            class="product-image-arrow product-image-arrow-next"
-            onclick="changeProductImage(1)"
-            aria-label="تصویر بعدی"
-          >
-            ›
-          </button>
-        `
-        : "";
-
-
-      return `
-        <div class="product-detail-media">
-
-          <div
-            class="product-main-image"
-            id="product-image-slider"
-          >
-
-            <img
-              id="main-product-image"
-              src="${escapeHtml(mainImage)}"
-              alt="${escapeHtml(product.name)}"
-              class="product-detail-image"
-              draggable="false"
-              onclick="openLightbox()"
-            >
-
-            ${navigation}
-
-          </div>
-
-          ${thumbnails}
-
+        <div class="product-price">
+          ${formatPrice(product.price)}
         </div>
-      `;
 
-    }
-
-
-    function selectProductImage(index) {
-
-      const product = window.currentProduct;
-
-      if (!product) return;
-
-
-      const images = getProductImages(product);
-
-      if (!images[index]) return;
-
-
-      currentImageIndex = index;
-
-
-      const mainImage =
-        document.getElementById("main-product-image");
-
-
-      if (mainImage) {
-
-        mainImage.src = images[index];
-
-        mainImage.alt =
-          `${product.name} - تصویر ${index + 1}`;
-
-      }
-
-
-      document
-        .querySelectorAll(".product-thumbnail")
-        .forEach((thumbnail, thumbnailIndex) => {
-
-          thumbnail.classList.toggle(
-            "active",
-            thumbnailIndex === index
-          );
-
-        });
-
-    }
-
-
-    function changeProductImage(direction) {
-
-      const product = window.currentProduct;
-
-      if (!product) return;
-
-
-      const images = getProductImages(product);
-
-      if (images.length <= 1) return;
-
-
-      let newIndex =
-        currentImageIndex + direction;
-
-
-      if (newIndex < 0) {
-        newIndex = images.length - 1;
-      }
-
-
-      if (newIndex >= images.length) {
-        newIndex = 0;
-      }
-
-
-      selectProductImage(newIndex);
-
-    }
-
-
-    /*
-      لمس و سوایپ تصویر اصلی
-    */
-
-    function setupImageSwipe() {
-
-      const slider =
-        document.getElementById("product-image-slider");
-
-
-      if (!slider) return;
-
-
-      let startX = 0;
-      let startY = 0;
-      let isDragging = false;
-
-
-      slider.addEventListener(
-        "touchstart",
-        event => {
-
-          if (!event.touches || !event.touches.length) {
-            return;
-          }
-
-
-          startX = event.touches[0].clientX;
-          startY = event.touches[0].clientY;
-
-          isDragging = true;
-
-        },
-        { passive: true }
-      );
-
-
-      slider.addEventListener(
-        "touchend",
-        event => {
-
-          if (!isDragging) return;
-
-          isDragging = false;
-
-
-          if (
-            !event.changedTouches ||
-            !event.changedTouches.length
-          ) {
-            return;
-          }
-
-
-          const endX =
-            event.changedTouches[0].clientX;
-
-          const endY =
-            event.changedTouches[0].clientY;
-
-
-          const deltaX = endX - startX;
-          const deltaY = endY - startY;
-
-
-          if (
-            Math.abs(deltaX) < 45 ||
-            Math.abs(deltaX) < Math.abs(deltaY)
-          ) {
-            return;
-          }
-
-
-          if (deltaX < 0) {
-            changeProductImage(1);
-          } else {
-            changeProductImage(-1);
-          }
-
-        },
-        { passive: true }
-      );
-
-
-      slider.addEventListener(
-        "dragstart",
-        event => {
-          event.preventDefault();
-        }
-      );
-
-    }
-
-
-    /*
-      باز کردن تصویر به صورت تمام‌صفحه
-    */
-
-    function openLightbox() {
-
-      const product = window.currentProduct;
-
-      if (!product) return;
-
-
-      const images = getProductImages(product);
-
-      if (!images.length) return;
-
-
-      const lightbox =
-        document.getElementById("image-lightbox");
-
-      const image =
-        document.getElementById("lightbox-image");
-
-
-      if (!lightbox || !image) return;
-
-
-      image.src = images[currentImageIndex];
-
-      image.alt =
-        `${product.name} - تصویر ${currentImageIndex + 1}`;
-
-
-      updateLightboxNavigation();
-
-
-      lightbox.hidden = false;
-
-      lightbox.setAttribute(
-        "aria-hidden",
-        "false"
-      );
-
-
-      document.body.classList.add(
-        "lightbox-open"
-      );
-
-    }
-
-
-    /*
-      بستن تصویر تمام‌صفحه
-    */
-
-    function closeLightbox() {
-
-      const lightbox =
-        document.getElementById("image-lightbox");
-
-
-      if (!lightbox) return;
-
-
-      lightbox.hidden = true;
-
-      lightbox.setAttribute(
-        "aria-hidden",
-        "true"
-      );
-
-
-      document.body.classList.remove(
-        "lightbox-open"
-      );
-
-    }
-
-
-    /*
-      تغییر تصویر در حالت تمام‌صفحه
-    */
-
-    function changeLightboxImage(direction) {
-
-      const product = window.currentProduct;
-
-      if (!product) return;
-
-
-      const images = getProductImages(product);
-
-      if (images.length <= 1) return;
-
-
-      let newIndex =
-        currentImageIndex + direction;
-
-
-      if (newIndex < 0) {
-        newIndex = images.length - 1;
-      }
-
-
-      if (newIndex >= images.length) {
-        newIndex = 0;
-      }
-
-
-      selectProductImage(newIndex);
-
-
-      const lightboxImage =
-        document.getElementById("lightbox-image");
-
-
-      if (lightboxImage) {
-
-        lightboxImage.src =
-          images[newIndex];
-
-        lightboxImage.alt =
-          `${product.name} - تصویر ${newIndex + 1}`;
-
-      }
-
-
-      updateLightboxNavigation();
-
-    }
-
-
-    function updateLightboxNavigation() {
-
-      const product = window.currentProduct;
-
-      if (!product) return;
-
-
-      const images = getProductImages(product);
-
-
-      const previous =
-        document.getElementById("lightbox-prev");
-
-      const next =
-        document.getElementById("lightbox-next");
-
-
-      if (!previous || !next) return;
-
-
-      if (images.length <= 1) {
-
-        previous.hidden = true;
-        next.hidden = true;
-
-      } else {
-
-        previous.hidden = false;
-        next.hidden = false;
-
-      }
-
-    }
-
-
-    /*
-      لمس و سوایپ در حالت تمام‌صفحه
-    */
-
-    function setupLightboxSwipe() {
-
-      const lightbox =
-        document.getElementById("image-lightbox");
-
-
-      if (!lightbox) return;
-
-
-      let startX = 0;
-      let startY = 0;
-
-
-      lightbox.addEventListener(
-        "touchstart",
-        event => {
-
-          if (!event.touches || !event.touches.length) {
-            return;
-          }
-
-
-          startX =
-            event.touches[0].clientX;
-
-          startY =
-            event.touches[0].clientY;
-
-        },
-        { passive: true }
-      );
-
-
-      lightbox.addEventListener(
-        "touchend",
-        event => {
-
-          if (
-            !event.changedTouches ||
-            !event.changedTouches.length
-          ) {
-            return;
-          }
-
-
-          const endX =
-            event.changedTouches[0].clientX;
-
-          const endY =
-            event.changedTouches[0].clientY;
-
-
-          const deltaX = endX - startX;
-          const deltaY = endY - startY;
-
-
-          if (
-            Math.abs(deltaX) < 45 ||
-            Math.abs(deltaX) < Math.abs(deltaY)
-          ) {
-            return;
-          }
-
-
-          if (deltaX < 0) {
-            changeLightboxImage(1);
-          } else {
-            changeLightboxImage(-1);
-          }
-
-        },
-        { passive: true }
-      );
-
-    }
-
-
-    /*
-      بستن با کلیک روی فضای اطراف تصویر
-    */
-
-    function setupLightboxCloseOnOutsideClick() {
-
-      const lightbox =
-        document.getElementById("image-lightbox");
-
-      const content =
-        document.querySelector(".lightbox-content");
-
-
-      if (!lightbox || !content) return;
-
-
-      lightbox.addEventListener(
+        <p style="line-height:2;">
+          ${escapeHtml(
+            product.description ||
+            "توضیحی برای این محصول ثبت نشده است."
+          )}
+        </p>
+
+        <button
+          class="product-button"
+          type="button"
+          id="add-to-cart"
+        >
+          افزودن به سبد خرید
+        </button>
+
+        <p style="margin-top:20px;">
+          <a href="index.html">← بازگشت به فروشگاه</a>
+        </p>
+
+      </div>
+    `;
+
+    document
+      .getElementById("add-to-cart")
+      .addEventListener(
         "click",
-        event => {
-
-          if (event.target === lightbox) {
-            closeLightbox();
-          }
-
-        }
+        () => addToCart(product)
       );
 
-    }
-
-
-    /*
-      بستن با کلید ESC
-    */
-
-    document.addEventListener(
-      "keydown",
-      event => {
-
-        if (event.key === "Escape") {
-          closeLightbox();
-        }
-
-
-        if (
-          event.key === "ArrowLeft"
-        ) {
-          changeLightboxImage(1);
-        }
-
-
-        if (
-          event.key === "ArrowRight"
-        ) {
-          changeLightboxImage(-1);
-        }
-
-      }
-    );
-
-
-    /*
-      باز و بسته کردن توضیحات و مشخصات فنی
-    */
-
-    function toggleProductInfo() {
-
-      const panel =
-        document.getElementById(
-          "product-info-panel"
-        );
-
-      const button =
-        document.getElementById(
-          "product-info-toggle"
-        );
-
-
-      if (!panel || !button) return;
-
-
-      const isHidden =
-        panel.hasAttribute("hidden");
-
-
-      if (isHidden) {
-
-        panel.removeAttribute("hidden");
-
-        button.setAttribute(
-          "aria-expanded",
-          "true"
-        );
-
-        button.textContent =
-          "بستن توضیحات و مشخصات فنی";
-
-      } else {
-
-        panel.setAttribute(
-          "hidden",
-          ""
-        );
-
-        button.setAttribute(
-          "aria-expanded",
-          "false"
-        );
-
-        button.textContent =
-          "توضیحات و مشخصات فنی";
-
-      }
-
-    }
-
-
-    async function loadProduct() {
-
-      const container =
-        document.getElementById(
-          "product-detail"
-        );
-
-
-      const params =
-        new URLSearchParams(
-          window.location.search
-        );
-
-
-      const slug =
-        params.get("slug");
-
-
-      if (!slug) {
-
-        container.innerHTML = `
-          <p class="loading">
-            محصول مورد نظر پیدا نشد.
-          </p>
-
-          <a
-            href="index.html"
-            class="back-link"
-          >
-            بازگشت به فروشگاه
-          </a>
-        `;
-
-        return;
-      }
-
-
-      try {
-
-        const response =
-          await fetch(
-            `${API_BASE}/products/${encodeURIComponent(slug)}`
-          );
-
-
-        if (!response.ok) {
-          throw new Error("محصول پیدا نشد");
-        }
-
-
-        const data =
-          await response.json();
-
-
-        if (
-          !data.ok ||
-          !data.product
-        ) {
-
-          throw new Error(
-            "اطلاعات محصول معتبر نیست"
-          );
-
-        }
-
-
-        const product =
-          data.product;
-
-
-        window.currentProduct =
-          product;
-
-
-        container.innerHTML = `
-
-          <div class="product-detail-card">
-
-            ${renderProductImages(product)}
-
-
-            <div class="product-detail-content">
-
-              <h1>
-                ${escapeHtml(product.name)}
-              </h1>
-
-
-              ${
-                product.description
-                  ? `
-                    <button
-                      type="button"
-                      id="product-info-toggle"
-                      class="product-info-toggle"
-                      aria-expanded="false"
-                      onclick="toggleProductInfo()"
-                    >
-                      توضیحات و مشخصات فنی
-                    </button>
-
-                    <div
-                      id="product-info-panel"
-                      class="product-info-panel"
-                      hidden
-                    >
-                      <div class="product-description">
-                        ${escapeHtml(product.description)}
-                      </div>
-                    </div>
-                  `
-                  : ""
-              }
-
-
-              <div class="product-detail-price">
-                ${formatPrice(product.price)}
-              </div>
-
-
-              <div class="product-detail-stock">
-
-                موجودی:
-                ${Number(
-                  product.stock || 0
-                ).toLocaleString("fa-IR")}
-
-              </div>
-
-
-              <div class="product-actions">
-
-                <label for="quantity">
-                  تعداد:
-                </label>
-
-
-                <input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  max="${Math.max(
-                    Number(product.stock || 0),
-                    1
-                  )}"
-                  value="1"
-                >
-
-
-                <button
-                  type="button"
-                  class="product-button"
-                  onclick="addProductToCart()"
-                  ${
-                    Number(product.stock || 0) <= 0
-                      ? "disabled"
-                      : ""
-                  }
-                >
-                  افزودن به سبد خرید
-                </button>
-
-              </div>
-
-
-              <a
-                href="index.html"
-                class="back-link"
-              >
-                بازگشت به فروشگاه
-              </a>
-
-            </div>
-
-          </div>
-
-        `;
-
-
-        setupImageSwipe();
-
-        setupLightboxSwipe();
-
-        setupLightboxCloseOnOutsideClick();
-
-
-      } catch (error) {
-
-        console.error(error);
-
-
-        container.innerHTML = `
-          <p class="loading">
-            امکان دریافت اطلاعات محصول وجود ندارد.
-          </p>
-
-          <a
-            href="index.html"
-            class="back-link"
-          >
-            بازگشت به فروشگاه
-          </a>
-        `;
-
-      }
-
-    }
-
-
-    function addProductToCart() {
-
-      if (!window.currentProduct) return;
-
-
-      const quantityInput =
-        document.getElementById(
-          "quantity"
-        );
-
-
-      const quantity =
-        Number(
-          quantityInput.value || 1
-        );
-
-
-      const product =
-        window.currentProduct;
-
-
-      if (
-        quantity < 1 ||
-        quantity > Number(product.stock || 0)
-      ) {
-
-        alert(
-          "تعداد انتخاب‌شده بیشتر از موجودی محصول است."
-        );
-
-        return;
-      }
-
-
-      const cart =
-        JSON.parse(
-          localStorage.getItem(
-            "tasisat_apadana_cart"
-          ) || "[]"
-        );
-
-
-      const existing =
-        cart.find(
-          item =>
-            String(item.id) ===
-            String(product.id)
-        );
-
-
-      if (existing) {
-
-        existing.quantity += quantity;
-
-      } else {
-
-        cart.push({
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          image: product.image || "",
-          quantity
-        });
-
-      }
-
-
-      localStorage.setItem(
-        "tasisat_apadana_cart",
-        JSON.stringify(cart)
-      );
-
-
-      updateCartCount();
-
-
-      alert(
-        "محصول به سبد خرید اضافه شد."
-      );
-
-    }
-
-
-    function updateCartCount() {
-
-      const cart =
-        JSON.parse(
-          localStorage.getItem(
-            "tasisat_apadana_cart"
-          ) || "[]"
-        );
-
-
-      const count =
-        cart.reduce(
-          (total, item) =>
-            total +
-            Number(item.quantity || 0),
-          0
-        );
-
-
-      const element =
-        document.getElementById(
-          "cart-count"
-        );
-
-
-      if (element) {
-
-        element.textContent =
-          count.toLocaleString("fa-IR");
-
-      }
-
-    }
-
-
-    document.addEventListener(
-      "DOMContentLoaded",
-      () => {
-
-        updateCartCount();
-
-        loadProduct();
-
-      }
-    );
-
-  </script>
+  } catch (error) {
+
+    console.error(error);
+
+    container.innerHTML = `
+      <h1>محصول پیدا نشد</h1>
+      <p>امکان دریافت اطلاعات این محصول وجود ندارد.</p>
+      <a href="index.html">بازگشت به فروشگاه</a>
+    `;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  updateCartCount();
+  loadProduct();
+});
+</script>
 
 </body>
 </html>
