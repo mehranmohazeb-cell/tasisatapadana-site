@@ -9,13 +9,13 @@ window.ORDER_CONFIG = {
     "province",
     "city",
     "street",
-    "sub_street",
-    "alley",
     "plaque",
     "postal_code"
   ],
 
   optionalAddressFields: [
+    "sub_street",
+    "alley",
     "unit",
     "address_note",
     "latitude",
