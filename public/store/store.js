@@ -37,7 +37,11 @@ function renderProducts(items) {
 
   grid.innerHTML = items.map(product => {
 
-    let image = product.image || "/assets/products/placeholder.svg";
+    let image = product.image || "";
+
+if (!image && Array.isArray(product.images) && product.images.length > 0) {
+  image = product.images[0].image || "";
+}
 
 if (
   image &&
@@ -46,6 +50,10 @@ if (
   !image.startsWith("https://")
 ) {
   image = "/assets/products/" + image;
+}
+
+if (!image) {
+  image = "/assets/products/placeholder.svg";
 }
 
     const title = escapeHtml(product.name || "محصول");
