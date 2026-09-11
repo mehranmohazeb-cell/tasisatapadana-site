@@ -7,41 +7,126 @@
 
   <title>جزئیات محصول | تأسیسات آپادانا</title>
 
-  <link rel="stylesheet" href="store.css">
+  <meta
+    name="description"
+    content="جزئیات محصول در فروشگاه تأسیسات آپادانا"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap"
+  >
+
+  <link
+    rel="stylesheet"
+    href="store.css"
+  >
 </head>
+
 
 <body>
 
 <header class="store-header">
+
   <div class="container">
 
-    <a href="index.html" class="logo-link">
+    <a
+      href="../index.html"
+      class="logo-link"
+    >
       <img
         src="../assets/logo-header.png"
         alt="تأسیسات آپادانا"
       >
     </a>
 
+
     <nav class="store-nav">
-      <a href="index.html">فروشگاه</a>
+
+      <a href="../index.html">
+        سایت اصلی
+      </a>
+
+      <a href="index.html">
+        فروشگاه
+      </a>
 
       <a href="cart.html">
         سبد خرید
         <span id="cart-count">0</span>
       </a>
+
+      <a href="track-order.html">
+        پیگیری سفارش
+      </a>
+
+      <a href="account.html">
+        حساب کاربری
+      </a>
+
+      <a href="../support.html">
+        پشتیبانی
+      </a>
+
     </nav>
 
   </div>
+
 </header>
 
 
-<main class="container">
+<main>
 
-  <section id="product-detail" class="store-hero">
+  <section class="store-hero">
 
-    <p class="loading">
-      در حال بارگذاری محصول...
-    </p>
+    <div
+      class="store-hero-pattern"
+      aria-hidden="true"
+    ></div>
+
+
+    <div class="container store-hero-inner">
+
+      <span class="store-badge">
+        فروشگاه تأسیسات آپادانا
+      </span>
+
+      <h1>
+        جزئیات محصول
+      </h1>
+
+      <p>
+        اطلاعات، تصاویر و مشخصات محصول
+      </p>
+
+    </div>
+
+  </section>
+
+
+  <section class="container">
+
+    <div
+      id="product-detail"
+      class="product-detail"
+    >
+
+      <p class="loading">
+        در حال بارگذاری محصول...
+      </p>
+
+    </div>
 
   </section>
 
@@ -63,37 +148,38 @@
 
 <script>
 
-const API_BASE = "/api";
+const API_BASE = "/api/store";
 
 
-function formatPrice(price) {
+let currentProduct = null;
 
-  if (
-    price === null ||
-    price === undefined ||
-    price === ""
-  ) {
-    return "تماس بگیرید";
-  }
+let productImages = [];
 
-  const number = Number(price);
+let currentImageIndex = 0;
 
-  if (Number.isNaN(number)) {
-    return String(price);
-  }
+
+/* =========================================================
+   ابزارهای عمومی
+========================================================= */
+
+
+function formatPrice(value) {
+
+  const number = Number(value || 0);
 
   return `${number.toLocaleString("fa-IR")} تومان`;
+
 }
 
 
 function escapeHtml(value) {
 
   return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
 }
 
@@ -138,7 +224,9 @@ function updateCartCount() {
     return;
   }
 
+
   const cart = getCart();
+
 
   const count = cart.reduce(
     (total, item) =>
@@ -146,95 +234,312 @@ function updateCartCount() {
     0
   );
 
+
   element.textContent =
     count.toLocaleString("fa-IR");
 
 }
 
 
-function getProductImage(product) {
-
-  let image = product.image || "";
-
-
-  /*
-   * اگر تصویر اصلی در ستون image نبود،
-   * اولین تصویر ذخیره‌شده در product_images
-   * استفاده می‌شود.
-   */
-
-  if (
-    !image &&
-    Array.isArray(product.images) &&
-    product.images.length > 0
-  ) {
-
-    image =
-      product.images[0].image || "";
-
-  }
+/* =========================================================
+   مسیر تصویر
+========================================================= */
 
 
-  /*
-   * اگر فقط نام فایل ذخیره شده باشد،
-   * مسیر کامل ساخته می‌شود.
-   */
-
-  if (
-    image &&
-    !image.startsWith("/") &&
-    !image.startsWith("http://") &&
-    !image.startsWith("https://")
-  ) {
-
-    image =
-      "/assets/products/" + image;
-
-  }
-
+function getProductImageUrl(image) {
 
   if (!image) {
 
-    image =
-      "/assets/products/placeholder.svg";
+    return "/assets/products/placeholder.svg";
 
   }
 
 
-  return image;
+  const value =
+    String(image).trim();
+
+
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:")
+  ) {
+
+    return value;
+
+  }
+
+
+  if (value.startsWith("/")) {
+
+    return value;
+
+  }
+
+
+  if (value.startsWith("assets/")) {
+
+    return "/" + value;
+
+  }
+
+
+  if (value.startsWith("products/")) {
+
+    return "/assets/" + value;
+
+  }
+
+
+  return "/assets/products/" + value;
 
 }
 
 
-function addToCart(product) {
+/* =========================================================
+   تصاویر محصول
+========================================================= */
 
-  const cart = getCart();
+
+function prepareProductImages(product) {
+
+  let images = [];
 
 
-  const existing = cart.find(
-    item =>
-      String(item.id) ===
-      String(product.id)
+  if (
+    Array.isArray(product.images) &&
+    product.images.length > 0
+  ) {
+
+    images = product.images
+      .map(item => {
+
+        if (
+          typeof item === "string"
+        ) {
+
+          return item;
+
+        }
+
+        return item.image;
+
+      })
+      .filter(Boolean);
+
+  }
+
+
+  if (
+    images.length === 0 &&
+    product.image
+  ) {
+
+    images = [
+      product.image
+    ];
+
+  }
+
+
+  if (images.length === 0) {
+
+    images = [
+      "/assets/products/placeholder.svg"
+    ];
+
+  }
+
+
+  return images.map(
+    getProductImageUrl
   );
+
+}
+
+
+/* =========================================================
+   نمایش تصویر اصلی
+========================================================= */
+
+
+function showProductImage(index) {
+
+  if (!productImages.length) {
+    return;
+  }
+
+
+  if (index < 0) {
+
+    index =
+      productImages.length - 1;
+
+  }
+
+
+  if (
+    index >= productImages.length
+  ) {
+
+    index = 0;
+
+  }
+
+
+  currentImageIndex = index;
+
+
+  const mainImage =
+    document.getElementById(
+      "product-main-image"
+    );
+
+
+  if (mainImage) {
+
+    mainImage.src =
+      productImages[currentImageIndex];
+
+  }
+
+
+  document
+    .querySelectorAll(
+      ".product-thumbnail"
+    )
+    .forEach(
+      (thumbnail, thumbnailIndex) => {
+
+        thumbnail.classList.toggle(
+          "active",
+          thumbnailIndex ===
+            currentImageIndex
+        );
+
+      }
+    );
+
+}
+
+
+/* =========================================================
+   تغییر تصویر
+========================================================= */
+
+
+function previousImage() {
+
+  showProductImage(
+    currentImageIndex - 1
+  );
+
+}
+
+
+function nextImage() {
+
+  showProductImage(
+    currentImageIndex + 1
+  );
+
+}
+
+
+/* =========================================================
+   افزودن به سبد
+========================================================= */
+
+
+function addToCart() {
+
+  if (!currentProduct) {
+    return;
+  }
+
+
+  const quantityInput =
+    document.getElementById(
+      "product-quantity"
+    );
+
+
+  let quantity =
+    Number(
+      quantityInput?.value || 1
+    );
+
+
+  if (!Number.isInteger(quantity)) {
+
+    quantity = 1;
+
+  }
+
+
+  quantity =
+    Math.max(1, quantity);
+
+
+  if (
+    currentProduct.stock > 0
+  ) {
+
+    quantity =
+      Math.min(
+        quantity,
+        Number(currentProduct.stock)
+      );
+
+  }
+
+
+  const cart =
+    getCart();
+
+
+  const existing =
+    cart.find(
+      item =>
+        String(item.id) ===
+        String(currentProduct.id)
+    );
 
 
   if (existing) {
 
-    existing.quantity += 1;
+    existing.quantity += quantity;
+
+
+    if (
+      currentProduct.stock > 0
+    ) {
+
+      existing.quantity =
+        Math.min(
+          existing.quantity,
+          Number(currentProduct.stock)
+        );
+
+    }
 
   } else {
 
     cart.push({
 
-      id: product.id,
+      id: currentProduct.id,
 
-      name: product.name,
+      name: currentProduct.name,
 
-      price: product.price,
+      price: currentProduct.price,
 
-      image: getProductImage(product),
+      image:
+        productImages[0] ||
+        getProductImageUrl(
+          currentProduct.image
+        ),
 
-      quantity: 1
+      quantity
 
     });
 
@@ -251,7 +556,23 @@ function addToCart(product) {
 }
 
 
-async function loadProduct() {
+/* =========================================================
+   نمایش جزئیات محصول
+========================================================= */
+
+
+function renderProduct(product) {
+
+  currentProduct =
+    product;
+
+
+  productImages =
+    prepareProductImages(product);
+
+
+  currentImageIndex = 0;
+
 
   const container =
     document.getElementById(
@@ -259,11 +580,251 @@ async function loadProduct() {
     );
 
 
-  /*
-   * صفحه فروشگاه محصول را با slug باز می‌کند:
-   *
-   * product.html?slug=...
-   */
+  const stock =
+    Number(product.stock || 0);
+
+
+  let stockText;
+
+
+  if (stock > 0) {
+
+    stockText =
+      `موجودی: ${stock.toLocaleString("fa-IR")} عدد`;
+
+  } else {
+
+    stockText =
+      "در حال حاضر ناموجود";
+
+  }
+
+
+  container.innerHTML = `
+
+    <div class="product-detail-card">
+
+
+      <div class="product-detail-media">
+
+
+        <div class="product-main-image">
+
+
+          <img
+            id="product-main-image"
+            class="product-detail-image"
+            src="${escapeHtml(
+              productImages[0]
+            )}"
+            alt="${escapeHtml(
+              product.name
+            )}"
+          >
+
+
+          ${
+            productImages.length > 1
+              ? `
+
+                <button
+                  type="button"
+                  class="product-image-arrow product-image-arrow-prev"
+                  aria-label="تصویر قبلی"
+                  onclick="previousImage()"
+                >
+                  ‹
+                </button>
+
+
+                <button
+                  type="button"
+                  class="product-image-arrow product-image-arrow-next"
+                  aria-label="تصویر بعدی"
+                  onclick="nextImage()"
+                >
+                  ›
+                </button>
+
+              `
+              : ""
+          }
+
+
+        </div>
+
+
+        ${
+          productImages.length > 1
+            ? `
+
+              <div class="product-thumbnails">
+
+                ${productImages
+                  .map(
+                    (image, index) => `
+
+                      <button
+                        type="button"
+                        class="product-thumbnail ${
+                          index === 0
+                            ? "active"
+                            : ""
+                        }"
+                        onclick="showProductImage(${index})"
+                        aria-label="تصویر ${index + 1}"
+                      >
+
+                        <img
+                          src="${escapeHtml(
+                            image
+                          )}"
+                          alt="${escapeHtml(
+                            product.name
+                          )}"
+                        >
+
+                      </button>
+
+                    `
+                  )
+                  .join("")}
+
+              </div>
+
+            `
+            : ""
+        }
+
+
+      </div>
+
+
+      <div class="product-detail-content">
+
+
+        <h1>
+          ${escapeHtml(
+            product.name ||
+            "محصول"
+          )}
+        </h1>
+
+
+        <div class="product-detail-price">
+
+          ${formatPrice(
+            product.price
+          )}
+
+        </div>
+
+
+        <div class="product-detail-stock">
+
+          ${stockText}
+
+        </div>
+
+
+        ${
+          product.description
+            ? `
+
+              <div class="product-description">
+
+                ${escapeHtml(
+                  product.description
+                )}
+
+              </div>
+
+            `
+            : ""
+        }
+
+
+        ${
+          stock > 0
+            ? `
+
+              <div class="product-actions">
+
+                <label
+                  for="product-quantity"
+                >
+                  تعداد
+                </label>
+
+
+                <input
+                  id="product-quantity"
+                  type="number"
+                  min="1"
+                  max="${stock}"
+                  value="1"
+                >
+
+
+                <button
+                  type="button"
+                  class="product-button"
+                  onclick="addToCart()"
+                >
+                  افزودن به سبد خرید
+                </button>
+
+              </div>
+
+            `
+            : `
+
+              <div class="product-actions">
+
+                <button
+                  type="button"
+                  class="product-button"
+                  disabled
+                >
+                  محصول ناموجود است
+                </button>
+
+              </div>
+
+            `
+        }
+
+
+        <a
+          href="index.html"
+          class="back-link"
+        >
+          ← بازگشت به فروشگاه
+        </a>
+
+
+      </div>
+
+
+    </div>
+
+  `;
+
+}
+
+
+/* =========================================================
+   دریافت محصول
+========================================================= */
+
+
+async function loadProduct() {
+
+  const container =
+    document.getElementById(
+      "product-detail"
+    );
+
 
   const slug =
     new URLSearchParams(
@@ -275,17 +836,28 @@ async function loadProduct() {
 
     container.innerHTML = `
 
-      <h1>
-        محصول پیدا نشد
-      </h1>
+      <div class="product-detail-card">
 
-      <p>
-        شناسه محصول مشخص نشده است.
-      </p>
+        <div class="product-detail-content">
 
-      <a href="index.html">
-        بازگشت به فروشگاه
-      </a>
+          <h1>
+            محصول پیدا نشد
+          </h1>
+
+          <p class="product-description">
+            شناسه محصول مشخص نشده است.
+          </p>
+
+          <a
+            href="index.html"
+            class="back-link"
+          >
+            ← بازگشت به فروشگاه
+          </a>
+
+        </div>
+
+      </div>
 
     `;
 
@@ -298,14 +870,14 @@ async function loadProduct() {
 
     const response =
       await fetch(
-        `${API_BASE}/store/products/${encodeURIComponent(slug)}`
+        `${API_BASE}/products/${encodeURIComponent(slug)}`
       );
 
 
     if (!response.ok) {
 
       throw new Error(
-        "محصول پیدا نشد"
+        "PRODUCT_NOT_FOUND"
       );
 
     }
@@ -315,105 +887,21 @@ async function loadProduct() {
       await response.json();
 
 
-    const product =
-      data.product;
-
-
-    if (!product) {
+    if (
+      !data ||
+      !data.product
+    ) {
 
       throw new Error(
-        "اطلاعات محصول دریافت نشد"
+        "PRODUCT_NOT_FOUND"
       );
 
     }
 
 
-    const image =
-      getProductImage(product);
-
-
-    container.innerHTML = `
-
-      <div class="product-detail">
-
-        <div class="product-detail-image">
-
-          <img
-            src="${escapeHtml(image)}"
-            alt="${escapeHtml(
-              product.name || "محصول"
-            )}"
-            style="
-              width:100%;
-              max-width:450px;
-              max-height:450px;
-              object-fit:contain;
-              border-radius:12px;
-            "
-          >
-
-        </div>
-
-
-        <div class="product-detail-content">
-
-          <h1>
-            ${escapeHtml(
-              product.name || "محصول"
-            )}
-          </h1>
-
-
-          <div class="product-price">
-
-            ${formatPrice(product.price)}
-
-          </div>
-
-
-          <div class="product-description">
-
-            ${
-              product.description
-                ? escapeHtml(
-                    product.description
-                  )
-                : "توضیحی برای این محصول ثبت نشده است."
-            }
-
-          </div>
-
-
-          <button
-            class="product-button"
-            type="button"
-            id="add-to-cart"
-          >
-            افزودن به سبد خرید
-          </button>
-
-
-          <p style="margin-top:20px;">
-
-            <a href="index.html">
-              ← بازگشت به فروشگاه
-            </a>
-
-          </p>
-
-        </div>
-
-      </div>
-
-    `;
-
-
-    document
-      .getElementById("add-to-cart")
-      .addEventListener(
-        "click",
-        () => addToCart(product)
-      );
+    renderProduct(
+      data.product
+    );
 
 
   } catch (error) {
@@ -423,23 +911,39 @@ async function loadProduct() {
 
     container.innerHTML = `
 
-      <h1>
-        خطا در دریافت محصول
-      </h1>
+      <div class="product-detail-card">
 
-      <p>
-        امکان دریافت اطلاعات این محصول وجود ندارد.
-      </p>
+        <div class="product-detail-content">
 
-      <a href="index.html">
-        بازگشت به فروشگاه
-      </a>
+          <h1>
+            محصول پیدا نشد
+          </h1>
+
+          <p class="product-description">
+            امکان دریافت اطلاعات این محصول وجود ندارد.
+          </p>
+
+          <a
+            href="index.html"
+            class="back-link"
+          >
+            ← بازگشت به فروشگاه
+          </a>
+
+        </div>
+
+      </div>
 
     `;
 
   }
 
 }
+
+
+/* =========================================================
+   شروع صفحه
+========================================================= */
 
 
 document.addEventListener(
