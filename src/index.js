@@ -1079,7 +1079,7 @@ async function handleStoreApi(request, env) {
             customerId,
             customerName,
             mobile,
-            null,
+            composeAddressText(address),
             address.province,
             address.city,
             address.street,
