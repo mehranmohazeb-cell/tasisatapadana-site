@@ -1,187 +1,264 @@
-<!DOCTYPE html><html lang="fa" dir="rtl">
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>مدیریت فروشگاه | تأسیسات آپادانا</title>
   <link rel="stylesheet" href="admin.css">
-</head><body>  <header class="admin-header">
+</head>
+
+<body>
+
+  <header class="admin-header">
     <div class="container">
       <h1>مدیریت فروشگاه</h1>
       <a href="../store/" class="back-link">بازگشت به فروشگاه</a>
     </div>
-  </header>  <main class="container"><!-- ===== مدیریت محصولات ===== -->
+  </header>
 
-<section class="admin-card">
+  <main class="container">
 
-  <h2>افزودن / ویرایش محصول</h2>
+    <!-- ===== مدیریت محصولات ===== -->
 
-  <form id="product-form">
+    <section class="admin-card">
 
-    <input type="hidden" id="product-id">
+      <h2 id="form-title">افزودن محصول</h2>
 
-    <div class="form-grid">
+      <form id="product-form">
 
-      <div class="form-group">
-        <label for="name">نام محصول</label>
-        <input id="name" type="text" required>
-      </div>
+        <input type="hidden" id="product-id">
 
-      <div class="form-group">
-        <label for="slug">شناسه محصول (Slug)</label>
-        <input id="slug" type="text" required>
-        <small>مثلاً: test-product</small>
-      </div>
+        <div class="form-grid">
 
-      <div class="form-group full">
-        <label for="description">توضیحات</label>
-        <textarea id="description" rows="5"></textarea>
-      </div>
-
-      <div class="form-group">
-        <label for="price">قیمت (تومان)</label>
-        <input id="price" type="number" min="0" required>
-      </div>
-
-      <div class="form-group">
-        <label for="stock">موجودی</label>
-        <input id="stock" type="number" min="0" value="0" required>
-      </div>
-
-      <div class="form-group full">
-
-        <label>تصاویر محصول</label>
-
-        <div class="image-path-lock">
-          <span>📁 /assets/products/</span>
-          <span>🔒</span>
-        </div>
-
-        <div id="image-fields">
-
-          <div class="image-field">
+          <div class="form-group">
+            <label for="product-name">نام محصول</label>
             <input
+              id="product-name"
               type="text"
-              class="product-image-input"
-              placeholder="مثلاً: test-product.jpeg"
+              required
             >
+          </div>
+
+          <div class="form-group">
+            <label for="product-slug">شناسه محصول (Slug)</label>
+            <input
+              id="product-slug"
+              type="text"
+              required
+            >
+            <small>مثلاً: test-product</small>
+          </div>
+
+          <div class="form-group full">
+            <label for="product-description">توضیحات</label>
+            <textarea
+              id="product-description"
+              rows="5"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="product-price">قیمت (تومان)</label>
+            <input
+              id="product-price"
+              type="number"
+              min="0"
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="product-stock">موجودی</label>
+            <input
+              id="product-stock"
+              type="number"
+              min="0"
+              value="0"
+              required
+            >
+          </div>
+
+          <div class="form-group full">
+
+            <label>تصاویر محصول</label>
+
+            <div class="image-path-lock">
+              <span>📁 /assets/products/</span>
+              <span>🔒</span>
+            </div>
+
+            <div class="image-add-row">
+
+              <input
+                id="product-image"
+                type="text"
+                placeholder="مثلاً: test-product.jpeg"
+              >
+
+              <button
+                type="button"
+                id="add-image"
+                class="secondary-button"
+              >
+                + افزودن تصویر
+              </button>
+
+            </div>
+
+            <div id="image-list">
+              <p class="loading">
+                هنوز عکسی اضافه نشده است.
+              </p>
+            </div>
+
+            <small>
+              فقط نام فایل تصویر را وارد کنید؛
+              مسیر پوشه به‌صورت خودکار اضافه می‌شود.
+            </small>
+
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input
+                id="product-active"
+                type="checkbox"
+                checked
+              >
+              محصول فعال باشد
+            </label>
           </div>
 
         </div>
 
+        <div class="form-actions">
+
+          <button
+            type="submit"
+            class="primary-button"
+          >
+            ذخیره محصول
+          </button>
+
+          <button
+            type="button"
+            id="cancel-edit"
+            class="secondary-button"
+          >
+            لغو / پاک کردن فرم
+          </button>
+
+        </div>
+
+      </form>
+
+    </section>
+
+
+    <section class="admin-card">
+
+      <div class="section-heading">
+
+        <h2>محصولات موجود</h2>
+
         <button
-          type="button"
-          id="add-image"
+          id="refresh-products"
           class="secondary-button"
+          type="button"
         >
-          + افزودن تصویر
+          بروزرسانی
         </button>
 
-        <small>
-          فقط نام فایل تصویر را وارد کنید؛ مسیر پوشه به‌صورت خودکار اضافه می‌شود.
-        </small>
+      </div>
+
+      <div id="products-list">
+        <p class="loading">
+          در حال بارگذاری محصولات...
+        </p>
+      </div>
+
+    </section>
+
+
+    <!-- ===== مدیریت سفارش‌ها ===== -->
+
+    <section class="admin-card">
+
+      <div class="section-heading">
+
+        <h2>سفارش‌ها</h2>
+
+        <button
+          id="refresh-orders"
+          class="secondary-button"
+          type="button"
+        >
+          بروزرسانی سفارش‌ها
+        </button>
 
       </div>
 
-      <div class="form-group checkbox-group">
-        <label>
-          <input id="active" type="checkbox" checked>
-          محصول فعال باشد
-        </label>
+      <div class="orders-filter-bar">
+
+        <input
+          id="orders-search"
+          type="text"
+          placeholder="جست‌وجو بر اساس کد پیگیری، شماره موبایل یا نام مشتری"
+        >
+
+        <select id="orders-status-filter">
+
+          <option value="">
+            همه وضعیت‌ها
+          </option>
+
+          <option value="pending">
+            در حال بررسی
+          </option>
+
+          <option value="confirmed">
+            تأیید شده
+          </option>
+
+          <option value="preparing">
+            در حال آماده‌سازی
+          </option>
+
+          <option value="shipped">
+            ارسال شده
+          </option>
+
+          <option value="completed">
+            تکمیل شده
+          </option>
+
+          <option value="cancelled">
+            لغو شده
+          </option>
+
+        </select>
+
+        <button
+          id="orders-search-button"
+          class="secondary-button"
+          type="button"
+        >
+          جست‌وجو
+        </button>
+
       </div>
 
-    </div>
+      <div id="orders-list">
+        <p class="loading">
+          در حال بارگذاری سفارش‌ها...
+        </p>
+      </div>
 
-    <div class="form-actions">
+    </section>
 
-      <button
-        type="submit"
-        class="primary-button"
-      >
-        ذخیره محصول
-      </button>
+  </main>
 
-      <button
-        type="button"
-        id="cancel-edit"
-        class="secondary-button"
-      >
-        لغو / پاک کردن فرم
-      </button>
+  <script src="admin.js"></script>
 
-    </div>
-
-  </form>
-
-</section>
-
-<section class="admin-card">
-
-  <div class="section-heading">
-
-    <h2>محصولات موجود</h2>
-
-    <button
-      id="refresh-products"
-      class="secondary-button"
-    >
-      بروزرسانی
-    </button>
-
-  </div>
-
-  <div id="products-list">
-    <p class="loading">در حال بارگذاری محصولات...</p>
-  </div>
-
-</section>
-
-
-<!-- ===== مدیریت سفارش‌ها ===== -->
-
-<section class="admin-card">
-
-  <div class="section-heading">
-
-    <h2>سفارش‌ها</h2>
-
-    <button
-      id="refresh-orders"
-      class="secondary-button"
-    >
-      بروزرسانی سفارش‌ها
-    </button>
-
-  </div>
-
-  <div class="orders-filter-bar">
-
-    <input
-      id="orders-search"
-      type="text"
-      placeholder="جست‌وجو بر اساس کد پیگیری، شماره موبایل یا نام مشتری"
-    >
-
-    <select id="orders-status-filter">
-      <option value="">همه وضعیت‌ها</option>
-      <option value="pending">در حال بررسی</option>
-      <option value="confirmed">تأیید شده</option>
-      <option value="preparing">در حال آماده‌سازی</option>
-      <option value="shipped">ارسال شده</option>
-      <option value="completed">تکمیل شده</option>
-      <option value="cancelled">لغو شده</option>
-    </select>
-
-    <button id="orders-search-button" class="secondary-button" type="button">
-      جست‌وجو
-    </button>
-
-  </div>
-
-  <div id="orders-list">
-    <p class="loading">در حال بارگذاری سفارش‌ها...</p>
-  </div>
-
-</section>
-
-  </main>  <script src="admin.js"></script></body>
-</html> 
+</body>
+</html>
