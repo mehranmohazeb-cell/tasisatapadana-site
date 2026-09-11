@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تماس با ما و پشتیبانی | تأسیسات آپادانا</title>
+  <meta name="description" content="ثبت و پیگیری درخواست پشتیبانی تأسیسات آپادانا، در کنار تماس تلفنی، واتساپ و ایمیل.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="store/store.css">
+</head>
+<body>
+
+<header class="store-header">
+  <div class="container">
+    <a href="index.html" class="logo-link">
+      <img src="assets/logo-header.png" alt="تأسیسات آپادانا">
+    </a>
+    <nav class="store-nav">
+      <a href="index.html">سایت اصلی</a>
+      <a href="store/index.html">فروشگاه</a>
+      <a href="support.html">پشتیبانی</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="order-page-title" style="text-align:center;">
+    <h1>تماس با ما و پشتیبانی</h1>
+    <p>می‌توانید تماس تلفنی یا واتساپ بگیرید، ایمیل بزنید، یا اگر این‌ها برایتان مناسب نیست، همین‌جا درخواست خود را ثبت کنید تا با کد پیگیری از وضعیت آن مطلع شوید.</p>
+  </section>
+
+  <div class="form-card" style="max-width:640px;margin:0 auto 40px;">
+    <div class="cta-group" style="justify-content:center;">
+      <a href="tel:" data-phone-link class="btn btn-call">تماس فوری</a>
+      <a href="https://wa.me/" data-whatsapp-link class="btn btn-whatsapp" target="_blank" rel="noopener">واتساپ</a>
+      <a href="mailto:" data-email-link class="btn" style="background:var(--bg-alt);color:var(--ink);">ایمیل</a>
+    </div>
+  </div>
+
+  <div class="form-card" style="max-width:640px;margin:0 auto;">
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab-button is-active" data-tab="new-ticket">ثبت درخواست جدید</button>
+      <button type="button" class="auth-tab-button" data-tab="track-ticket">پیگیری درخواست</button>
+    </div>
+
+    <form id="new-ticket-form" class="auth-form is-active" novalidate>
+      <div class="field-grid">
+        <label class="field field-full">
+          نام و نام خانوادگی *
+          <input id="ticket-name" type="text" required>
+        </label>
+        <label class="field">
+          شماره موبایل *
+          <input id="ticket-mobile" type="tel" inputmode="numeric" placeholder="09xxxxxxxxx" maxlength="11" required>
+        </label>
+        <label class="field">
+          ایمیل (اختیاری)
+          <input id="ticket-email" type="email">
+        </label>
+        <label class="field field-full">
+          موضوع *
+          <input id="ticket-subject" type="text" required>
+        </label>
+        <label class="field field-full">
+          متن درخواست *
+          <textarea id="ticket-message" rows="5" required></textarea>
+        </label>
+      </div>
+      <div class="form-submit-row">
+        <button type="submit" class="product-button" id="ticket-submit-button">ثبت درخواست</button>
+      </div>
+      <div id="new-ticket-message" class="form-message"></div>
+    </form>
+
+    <div id="ticket-success" style="display:none;text-align:center;">
+      <div class="order-success-icon">✅</div>
+      <h2>درخواست شما ثبت شد</h2>
+      <p>این کد پیگیری را نزد خود نگه دارید:</p>
+      <div class="tracking-code-box" id="ticket-tracking-code"></div>
+    </div>
+
+    <form id="track-ticket-form" class="auth-form" novalidate>
+      <div class="field-grid">
+        <label class="field field-full">
+          کد پیگیری
+          <input id="track-ticket-code" type="text" placeholder="TK-XXXXXXXXXX" required style="text-transform:uppercase;">
+        </label>
+        <label class="field field-full">
+          شماره موبایل
+          <input id="track-ticket-mobile" type="tel" inputmode="numeric" placeholder="09xxxxxxxxx" maxlength="11" required>
+        </label>
+      </div>
+      <div class="form-submit-row">
+        <button type="submit" class="product-button" id="track-ticket-button">پیگیری درخواست</button>
+      </div>
+      <div id="track-ticket-message" class="form-message"></div>
+    </form>
+
+    <div id="ticket-result" style="margin-top:20px;"></div>
+
+  </div>
+
+</main>
+
+<footer class="store-footer">
+  <div class="container">
+    <p>© تأسیسات آپادانا - تمامی حقوق محفوظ است.</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+<script src="store/order-config.js"></script>
+<script>
+const API_BASE = "/api/support";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+
+function formatDate(value) {
+  try { return new Date(value).toLocaleString("fa-IR"); }
+  catch { return String(value); }
+}
+
+function showMessage(id, text, type) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = `form-message is-visible ${type === "error" ? "is-error" : "is-success"}`;
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".auth-tab-button").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.tab === tab);
+  });
+  document.getElementById("new-ticket-form").classList.toggle("is-active", tab === "new-ticket");
+  document.getElementById("track-ticket-form").classList.toggle("is-active", tab === "track-ticket");
+  document.getElementById("ticket-result").innerHTML = "";
+  document.getElementById("ticket-success").style.display = "none";
+
+  if (tab === "new-ticket") {
+    document.getElementById("new-ticket-form").style.display = "block";
+  }
+}
+
+async function submitTicket(event) {
+  event.preventDefault();
+
+  const name = document.getElementById("ticket-name").value.trim();
+  const mobile = window.normalizeDigits(document.getElementById("ticket-mobile").value).trim();
+  const email = document.getElementById("ticket-email").value.trim();
+  const subject = document.getElementById("ticket-subject").value.trim();
+  const message = document.getElementById("ticket-message").value.trim();
+
+  if (name.length < 3 || !window.ORDER_CONFIG.mobilePattern.test(mobile) || !subject || message.length < 5) {
+    showMessage("new-ticket-message", "لطفاً همه فیلدهای اجباری را به‌درستی تکمیل کنید.", "error");
+    return;
+  }
+
+  const button = document.getElementById("ticket-submit-button");
+  button.disabled = true;
+  button.textContent = "در حال ارسال...";
+
+  try {
+    const response = await fetch(`${API_BASE}/tickets`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, mobile, email, subject, message }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.message || "ثبت درخواست ناموفق بود.");
+
+    document.getElementById("new-ticket-form").style.display = "none";
+    document.getElementById("ticket-success").style.display = "block";
+    document.getElementById("ticket-tracking-code").textContent = data.tracking_code;
+  } catch (error) {
+    showMessage("new-ticket-message", error.message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "ثبت درخواست";
+  }
+}
+
+async function submitTrackTicket(event) {
+  event.preventDefault();
+
+  const trackingCode = document.getElementById("track-ticket-code").value.trim().toUpperCase();
+  const mobile = window.normalizeDigits(document.getElementById("track-ticket-mobile").value).trim();
+
+  if (!trackingCode || !window.ORDER_CONFIG.mobilePattern.test(mobile)) {
+    showMessage("track-ticket-message", "کد پیگیری و شماره موبایل معتبر را وارد کنید.", "error");
+    return;
+  }
+
+  const button = document.getElementById("track-ticket-button");
+  button.disabled = true;
+  button.textContent = "در حال جست‌وجو...";
+  document.getElementById("ticket-result").innerHTML = "";
+  document.getElementById("track-ticket-message").className = "form-message";
+
+  try {
+    const response = await fetch(`${API_BASE}/tickets/track?tracking_code=${encodeURIComponent(trackingCode)}&mobile=${encodeURIComponent(mobile)}`);
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) throw new Error(data.message || "درخواستی با این مشخصات پیدا نشد.");
+
+    const ticket = data.ticket;
+    const messagesHtml = (ticket.messages || []).map((m) => `
+      <div class="summary-line" style="align-items:flex-start;">
+        <span style="max-width:80%;">
+          <strong>${m.sender_type === "admin" ? "پاسخ پشتیبانی" : "پیام شما"}:</strong><br>
+          ${escapeHtml(m.message)}
+        </span>
+        <small>${escapeHtml(formatDate(m.created_at))}</small>
+      </div>
+    `).join("");
+
+    document.getElementById("ticket-result").innerHTML = `
+      <div class="summary-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <h3 style="margin:0;">${escapeHtml(ticket.tracking_code)}</h3>
+          <span class="status-badge ${ticket.status === "answered" || ticket.status === "closed" ? "is-shipped" : ""}">${escapeHtml(ticket.status_label)}</span>
+        </div>
+        <div class="summary-line"><span>موضوع</span><strong>${escapeHtml(ticket.subject)}</strong></div>
+        <div class="summary-line"><span>تاریخ ثبت</span><strong>${escapeHtml(formatDate(ticket.created_at))}</strong></div>
+        <h4 style="margin-top:16px;">گفتگو</h4>
+        ${messagesHtml}
+      </div>
+    `;
+  } catch (error) {
+    showMessage("track-ticket-message", error.message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "پیگیری درخواست";
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".auth-tab-button").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  document.getElementById("new-ticket-form").addEventListener("submit", submitTicket);
+  document.getElementById("track-ticket-form").addEventListener("submit", submitTrackTicket);
+});
+</script>
+</body>
+</html>

@@ -1516,3 +1516,364 @@ body.lightbox-open {
   }
 
 }
+
+
+/* =========================================================
+   سیستم سفارش — Checkout / پیگیری سفارش / حساب کاربری
+   (بخش جدید؛ استایل‌های بالا دست‌نخورده باقی ماندند)
+   ========================================================= */
+
+.order-page-title {
+  margin: 30px 0 10px;
+}
+
+.order-page-title p {
+  color: var(--ink-soft);
+}
+
+.checkout-layout {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 24px;
+  align-items: start;
+  margin: 20px 0 60px;
+}
+
+@media (max-width: 860px) {
+  .checkout-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-card,
+.summary-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 22px;
+}
+
+.form-card h2,
+.summary-card h2 {
+  margin-top: 0;
+  font-size: 18px;
+}
+
+.form-note {
+  background: var(--bg-alt);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 18px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+
+@media (max-width: 560px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field-grid .field-full {
+  grid-column: 1 / -1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.field input,
+.field select,
+.field textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+  font-family: inherit;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--turquoise);
+}
+
+.field small.field-error {
+  color: #b3261e;
+  font-weight: 400;
+}
+
+.field-checkbox {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.field-checkbox input {
+  width: 17px;
+  height: 17px;
+}
+
+.form-submit-row {
+  margin-top: 22px;
+}
+
+.form-submit-row .product-button {
+  width: 100%;
+}
+
+.form-message {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  display: none;
+}
+
+.form-message.is-visible {
+  display: block;
+}
+
+.form-message.is-error {
+  background: #fdecea;
+  color: #7a1f18;
+  border: 1px solid #f3c1bc;
+}
+
+.form-message.is-success {
+  background: #e8f6ef;
+  color: #14532d;
+  border: 1px solid #b6e3cb;
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.summary-line:last-of-type {
+  border-bottom: none;
+}
+
+.summary-total {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 2px solid var(--ink);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.account-banner {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.account-banner a {
+  color: var(--turquoise-dark);
+  font-weight: 700;
+}
+
+/* ---------- Order Success ---------- */
+
+.order-success-card {
+  max-width: 620px;
+  margin: 40px auto 60px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 32px;
+  text-align: center;
+}
+
+.order-success-icon {
+  font-size: 52px;
+  margin-bottom: 10px;
+}
+
+.tracking-code-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-alt);
+  border: 1px dashed var(--turquoise);
+  border-radius: var(--radius-sm);
+  padding: 14px 22px;
+  margin: 18px 0;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--primary-dark);
+}
+
+.order-success-details {
+  text-align: right;
+  margin-top: 24px;
+}
+
+.order-success-details .summary-line {
+  font-size: 15px;
+}
+
+/* ---------- Track Order ---------- */
+
+.track-form {
+  max-width: 480px;
+  margin: 0 auto 30px;
+}
+
+.track-result {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--bg-alt);
+  color: var(--primary-dark);
+  border: 1px solid var(--border);
+}
+
+.status-badge.is-shipped,
+.status-badge.is-completed {
+  background: #e8f6ef;
+  color: #14532d;
+  border-color: #b6e3cb;
+}
+
+.status-badge.is-cancelled {
+  background: #fdecea;
+  color: #7a1f18;
+  border-color: #f3c1bc;
+}
+
+.status-timeline {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  border-inline-start: 2px solid var(--border);
+}
+
+.status-timeline li {
+  position: relative;
+  padding: 0 0 18px 0;
+  padding-inline-start: 18px;
+  font-size: 14px;
+}
+
+.status-timeline li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -7px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--turquoise);
+}
+
+.status-timeline li small {
+  display: block;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+/* ---------- Account / My Orders ---------- */
+
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.auth-tab-button {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+
+.auth-tab-button.is-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.auth-form {
+  display: none;
+}
+
+.auth-form.is-active {
+  display: block;
+}
+
+.my-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.my-order-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.my-order-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.my-order-card-top strong {
+  font-size: 15px;
+}
+
+.my-order-meta {
+  color: var(--ink-soft);
+  font-size: 13px;
+}

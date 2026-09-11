@@ -153,6 +153,30 @@
 
   </div>
 
+  <div class="orders-filter-bar">
+
+    <input
+      id="orders-search"
+      type="text"
+      placeholder="جست‌وجو بر اساس کد پیگیری، شماره موبایل یا نام مشتری"
+    >
+
+    <select id="orders-status-filter">
+      <option value="">همه وضعیت‌ها</option>
+      <option value="pending">در حال بررسی</option>
+      <option value="confirmed">تأیید شده</option>
+      <option value="preparing">در حال آماده‌سازی</option>
+      <option value="shipped">ارسال شده</option>
+      <option value="completed">تکمیل شده</option>
+      <option value="cancelled">لغو شده</option>
+    </select>
+
+    <button id="orders-search-button" class="secondary-button" type="button">
+      جست‌وجو
+    </button>
+
+  </div>
+
   <div id="orders-list">
     <p class="loading">در حال بارگذاری سفارش‌ها...</p>
   </div>

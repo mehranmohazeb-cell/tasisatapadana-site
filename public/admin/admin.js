@@ -15,6 +15,13 @@ const STATUS_LABELS = {
   cancelled: "لغو شده",
 };
 
+const PAYMENT_STATUS_LABELS = {
+  unpaid: "پرداخت‌نشده",
+  paid: "پرداخت‌شده",
+  failed: "پرداخت ناموفق",
+  refunded: "بازگشت وجه",
+};
+
 
 // =========================
 // Helpers
@@ -586,10 +593,40 @@ async function loadOrders() {
     return;
   }
 
+  const searchInput =
+    document.getElementById(
+      "orders-search"
+    );
+
+  const statusFilter =
+    document.getElementById(
+      "orders-status-filter"
+    );
+
+  const params =
+    new URLSearchParams();
+
+  if (searchInput?.value.trim()) {
+    params.set(
+      "q",
+      searchInput.value.trim()
+    );
+  }
+
+  if (statusFilter?.value) {
+    params.set(
+      "status",
+      statusFilter.value
+    );
+  }
+
+  const queryString =
+    params.toString();
+
   try {
     const response =
       await fetch(
-        `${API_BASE}/orders`,
+        `${API_BASE}/orders${queryString ? "?" + queryString : ""}`,
         {
           method: "GET",
           headers: {
@@ -658,6 +695,11 @@ function renderOrders() {
           order.status ||
           "pending";
 
+        const paymentLabel =
+          PAYMENT_STATUS_LABELS[order.payment_status] ||
+          order.payment_status ||
+          "پرداخت‌نشده";
+
         return `
           <div class="order-admin-item">
 
@@ -666,15 +708,21 @@ function renderOrders() {
               <div>
 
                 <strong>
-                  سفارش شماره
-                  ${Number(order.id)}
+                  سفارش
+                  ${escapeHtml(order.tracking_code || ("#" + order.id))}
                 </strong>
 
                 <span>
-                  مشتری:
+                  ${order.is_guest ? "مهمان" : "مشتری ثبت‌نامی"}:
                   ${escapeHtml(
                     order.customer_name
                   )}
+                  (${escapeHtml(order.customer_phone || "")})
+                </span>
+
+                <span>
+                  آدرس:
+                  ${escapeHtml(order.customer_address || "-")}
                 </span>
 
                 <span>
@@ -683,6 +731,7 @@ function renderOrders() {
                     order.total
                   )}
                   تومان
+                  &middot; پرداخت: ${escapeHtml(paymentLabel)}
                 </span>
 
                 <span>
@@ -733,6 +782,32 @@ function renderOrders() {
                     status
                   )}
                 </small>
+
+                <div class="postal-info-box">
+
+                  <input
+                    type="text"
+                    placeholder="شرکت پستی/باربری"
+                    id="postal-carrier-${Number(order.id)}"
+                    value="${escapeAttribute(order.postal_carrier || "")}"
+                  >
+
+                  <input
+                    type="text"
+                    placeholder="کد مرسوله پستی"
+                    id="postal-code-${Number(order.id)}"
+                    value="${escapeAttribute(order.postal_tracking_code || "")}"
+                  >
+
+                  <button
+                    type="button"
+                    class="secondary-button"
+                    onclick="savePostalInfo(${Number(order.id)})"
+                  >
+                    ثبت اطلاعات ارسال
+                  </button>
+
+                </div>
 
               </div>
 
@@ -873,6 +948,71 @@ async function changeOrderStatus(
 
 
 // =========================
+// Save Shipment / Postal Info
+// =========================
+
+async function savePostalInfo(orderId) {
+  const order = orders.find(
+    (item) => Number(item.id) === Number(orderId)
+  );
+
+  if (!order) return;
+
+  const carrierInput = document.getElementById(
+    `postal-carrier-${Number(orderId)}`
+  );
+  const codeInput = document.getElementById(
+    `postal-code-${Number(orderId)}`
+  );
+
+  const postalCarrier = carrierInput?.value.trim() || "";
+  const postalTrackingCode = codeInput?.value.trim() || "";
+
+  if (!adminToken) {
+    adminToken = prompt("رمز مدیریت را وارد کنید:") || "";
+  }
+
+  if (!adminToken) return;
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/orders/${Number(orderId)}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": adminToken,
+        },
+        body: JSON.stringify({
+          status: order.status || "pending",
+          postal_carrier: postalCarrier,
+          postal_tracking_code: postalTrackingCode,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      adminToken = "";
+      throw new Error("رمز مدیریت صحیح نیست.");
+    }
+
+    if (!response.ok || !data.ok) {
+      throw new Error(data.message || "ثبت اطلاعات ارسال انجام نشد.");
+    }
+
+    order.postal_carrier = postalCarrier;
+    order.postal_tracking_code = postalTrackingCode;
+
+    alert("اطلاعات ارسال با موفقیت ثبت شد.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+
+// =========================
 // Order Details
 // =========================
 
@@ -917,9 +1057,14 @@ function showOrderDetails(id) {
     order.status ||
     "-";
 
+  const paymentLabel =
+    PAYMENT_STATUS_LABELS[order.payment_status] ||
+    order.payment_status ||
+    "-";
+
   alert(
-    "سفارش شماره " +
-    order.id +
+    "کد پیگیری: " +
+    (order.tracking_code || "-") +
 
     "\n\nنام مشتری: " +
     order.customer_name +
@@ -932,6 +1077,14 @@ function showOrderDetails(id) {
 
     "\n\nوضعیت: " +
     statusLabel +
+
+    "\nوضعیت پرداخت: " +
+    paymentLabel +
+
+    (order.postal_tracking_code
+      ? "\nکد مرسوله پستی: " + order.postal_tracking_code +
+        " (" + (order.postal_carrier || "-") + ")"
+      : "") +
 
     "\n\nکالاها:\n" +
     itemsText +
@@ -1030,6 +1183,47 @@ document.addEventListener(
     if (refreshOrders) {
       refreshOrders.addEventListener(
         "click",
+        loadOrders
+      );
+    }
+
+    const ordersSearchButton =
+      document.getElementById(
+        "orders-search-button"
+      );
+
+    if (ordersSearchButton) {
+      ordersSearchButton.addEventListener(
+        "click",
+        loadOrders
+      );
+    }
+
+    const ordersSearchInput =
+      document.getElementById(
+        "orders-search"
+      );
+
+    if (ordersSearchInput) {
+      ordersSearchInput.addEventListener(
+        "keydown",
+        (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            loadOrders();
+          }
+        }
+      );
+    }
+
+    const ordersStatusFilter =
+      document.getElementById(
+        "orders-status-filter"
+      );
+
+    if (ordersStatusFilter) {
+      ordersStatusFilter.addEventListener(
+        "change",
         loadOrders
       );
     }

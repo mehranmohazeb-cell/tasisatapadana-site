@@ -143,6 +143,16 @@ p {
   background: var(--whatsapp-dark);
 }
 
+.btn-support {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-support:hover,
+.btn-support:focus-visible {
+  background: var(--primary-dark);
+}
+
 .cta-group {
   display: flex;
   flex-wrap: wrap;

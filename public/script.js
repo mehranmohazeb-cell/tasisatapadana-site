@@ -9,6 +9,9 @@ const CONTACT_CONFIG = {
 
   // شماره واتساپ همراه با کد کشور و بدون + یا صفر ابتدایی، مثال ایران: '98912xxxxxxx'
   whatsapp: '989139029945',
+
+  // ایمیل پشتیبانی/تماس با ما
+  email: 'info@tasisatapadanaesfahan.ir',
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -24,6 +27,10 @@ function applyContactInfo() {
 
   document.querySelectorAll('[data-whatsapp-link]').forEach((el) => {
     el.setAttribute('href', `https://wa.me/${CONTACT_CONFIG.whatsapp}`);
+  });
+
+  document.querySelectorAll('[data-email-link]').forEach((el) => {
+    el.setAttribute('href', `mailto:${CONTACT_CONFIG.email}`);
   });
 
   document.querySelectorAll('[data-phone-text]').forEach((el) => {

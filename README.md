@@ -91,4 +91,36 @@ Cloudflare deployment test
 
 ## توسعه سفارش و مشتری
 
-جزئیات معماری توسعه در `ORDER-DEVELOPMENT.md` و SQL مرجع در `database/orders-and-customers.sql` قرار دارد.
+جزئیات معماری توسعه در `ORDER-DEVELOPMENT.md` قرار دارد.
+
+### قبل از دیپلوی این نسخه، حتماً Migrationهای دیتابیس را اجرا کن
+
+این نسخه به ستون‌ها و جدول‌های جدیدی در D1 نیاز دارد (سفارش ساختاریافته، حساب
+مشتری، تیکت پشتیبانی). **قبل از دیپلوی نهایی**، این دو دستور را یک‌بار اجرا کن:
+
+```bash
+npx wrangler d1 execute tasisatapadana-db --remote --file=./database/orders-and-customers.sql
+npx wrangler d1 execute tasisatapadana-db --remote --file=./database/support-tickets.sql
+```
+
+(برای تست محلی با `wrangler dev`، پرچم `--remote` را حذف کن تا روی دیتابیس
+محلی اجرا شود.)
+
+اگر این Migrationها اجرا نشوند، صفحات checkout، پیگیری سفارش، حساب کاربری و
+پشتیبانی با خطای دیتابیس مواجه می‌شوند (چون ستون‌ها/جدول‌های لازم وجود ندارند)؛
+بقیه سایت (صفحه اصلی، فروشگاه، مشاهده محصولات) بدون تغییر کار می‌کند.
+
+### صفحات جدید این نسخه
+
+- `public/store/checkout.html` — ثبت سفارش واقعی با آدرس کامل
+- `public/store/order-success.html` — نمایش کد پیگیری بعد از ثبت سفارش
+- `public/store/track-order.html` — پیگیری سفارش با کد پیگیری + موبایل
+- `public/store/account.html` — ورود / ثبت‌نام مشتری
+- `public/store/my-orders.html` — سفارش‌های مشتری واردشده به حساب
+- `public/support.html` — تماس با ما + ثبت و پیگیری تیکت پشتیبانی
+
+### قبل از دیپلوی نهایی فراموش نکن
+
+در `public/script.js` مقدار `CONTACT_CONFIG.email` را با ایمیل واقعی جایگزین کن
+(در کنار شماره تلفن و واتساپ که قبلاً باید تنظیم شده باشند).
+
