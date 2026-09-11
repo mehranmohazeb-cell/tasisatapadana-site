@@ -922,7 +922,7 @@ async function handleStoreApi(request, env) {
 
       // --- اعتبارسنجی آدرس (اجباری و کامل) ---
 
-      const requiredAddressFields = ["province", "city", "street", "sub_street", "alley", "plaque"];
+      const requiredAddressFields = ["province", "city", "street", "plaque"];
       for (const field of requiredAddressFields) {
         if (!address[field]) {
           return Response.json(
