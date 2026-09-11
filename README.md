@@ -88,3 +88,7 @@ Cloudflare deployment test
 - اصلاح decode شدن Slug در API جزئیات محصول
 
 تصاویر خدمات در `public/assets/services/` به صورت SVG داخلی قرار داده شده‌اند و در آینده می‌توانند با تصاویر واقعی جایگزین شوند.
+
+## توسعه سفارش و مشتری
+
+جزئیات معماری توسعه در `ORDER-DEVELOPMENT.md` و SQL مرجع در `database/orders-and-customers.sql` قرار دارد.

@@ -1,0 +1,73 @@
+<!--
+  فرم استاندارد آدرس ارسال — برای اتصال به checkout.html
+  همه فیلدهای ضروری دارای required هستند.
+-->
+<div class="shipping-address-form" id="shipping-address-form">
+
+  <h2>آدرس ارسال</h2>
+
+  <div class="address-grid">
+
+    <label>
+      استان *
+      <select id="province" name="province" required>
+        <option value="">انتخاب استان</option>
+      </select>
+    </label>
+
+    <label>
+      شهر *
+      <select id="city" name="city" required disabled>
+        <option value="">ابتدا استان را انتخاب کنید</option>
+      </select>
+    </label>
+
+    <label>
+      خیابان *
+      <input id="street" name="street" type="text" required>
+    </label>
+
+    <label>
+      خیابان فرعی *
+      <input id="sub_street" name="sub_street" type="text" required>
+    </label>
+
+    <label>
+      کوچه *
+      <input id="alley" name="alley" type="text" required>
+    </label>
+
+    <label>
+      پلاک *
+      <input id="plaque" name="plaque" type="text" required>
+    </label>
+
+    <label>
+      واحد
+      <input id="unit" name="unit" type="text">
+    </label>
+
+    <label>
+      کد پستی ۱۰ رقمی *
+      <input
+        id="postal_code"
+        name="postal_code"
+        type="text"
+        inputmode="numeric"
+        autocomplete="postal-code"
+        maxlength="10"
+        pattern="[0-9۰-۹]{10}"
+        required
+      >
+    </label>
+
+  </div>
+
+  <button type="button" id="pick-location" class="secondary-button">
+    📍 انتخاب موقعیت روی نقشه (اختیاری)
+  </button>
+
+  <input type="hidden" id="latitude" name="latitude">
+  <input type="hidden" id="longitude" name="longitude">
+
+</div>
