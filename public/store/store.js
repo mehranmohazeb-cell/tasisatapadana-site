@@ -37,7 +37,11 @@ function renderProducts(items) {
 
   grid.innerHTML = items.map(product => {
 
-    const image = product.image || "/assets/products/placeholder.svg";
+    const image =
+      product.images?.[0]?.image ||
+      product.image ||
+      "/assets/products/placeholder.svg";
+
     const title = escapeHtml(product.name || "محصول");
     const price = formatPrice(product.price);
 
@@ -85,6 +89,7 @@ function renderProducts(items) {
 
   }).join("");
 }
+
 
 function formatPrice(value) {
   return `${Number(value || 0).toLocaleString("fa-IR")} تومان`;
