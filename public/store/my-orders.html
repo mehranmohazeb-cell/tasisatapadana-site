@@ -16,6 +16,7 @@
     <a href="index.html" class="logo-link">
       <img src="../assets/logo-header.png" alt="تأسیسات آپادانا">
     </a>
+
     <nav class="store-nav">
       <a href="index.html">فروشگاه</a>
       <a href="cart.html">سبد خرید <span id="cart-count">0</span></a>
@@ -46,85 +47,251 @@
 </footer>
 
 <script src="order-config.js"></script>
+
 <script>
 const API_BASE = "/api/store";
 
+
 function getCart() {
-  try { return JSON.parse(localStorage.getItem("tasisat_apadana_cart")) || []; }
-  catch { return []; }
+  try {
+    return JSON.parse(
+      localStorage.getItem("tasisat_apadana_cart")
+    ) || [];
+  } catch {
+    return [];
+  }
 }
+
 
 function updateCartCount() {
   const el = document.getElementById("cart-count");
+
   if (!el) return;
-  el.textContent = getCart().reduce((t, i) => t + Number(i.quantity || 0), 0).toLocaleString("fa-IR");
+
+  el.textContent = getCart()
+    .reduce(
+      (t, i) => t + Number(i.quantity || 0),
+      0
+    )
+    .toLocaleString("fa-IR");
 }
+
 
 function formatPrice(price) {
   return `${(Number(price) || 0).toLocaleString("fa-IR")} تومان`;
 }
 
+
 function escapeHtml(value) {
   return String(value ?? "")
-    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
+
 
 function formatDate(value) {
-  try { return new Date(value).toLocaleString("fa-IR"); }
-  catch { return String(value); }
+  try {
+    return new Date(value).toLocaleString("fa-IR");
+  } catch {
+    return String(value);
+  }
 }
 
-async function loadOrders() {
-  const container = document.getElementById("orders-content");
 
-  const sessionResponse = await fetch(`${API_BASE}/customers/me`, { credentials: "include" });
-  const sessionData = await sessionResponse.json();
+async function loadOrders() {
+
+  const container =
+    document.getElementById("orders-content");
+
+
+  // بررسی ورود مشتری
+  const sessionResponse =
+    await fetch(
+      `${API_BASE}/customers/me`,
+      {
+        credentials: "include"
+      }
+    );
+
+
+  const sessionData =
+    await sessionResponse.json();
+
 
   if (!sessionData.logged_in) {
+
     container.innerHTML = `
-      <p>برای مشاهده سفارش‌های خود باید ابتدا وارد حساب کاربری شوید.</p>
-      <a href="account.html" class="product-button" style="display:inline-block;width:auto;">ورود / ثبت‌نام</a>
+      <p>
+        برای مشاهده سفارش‌های خود باید ابتدا
+        وارد حساب کاربری شوید.
+      </p>
+
+      <a
+        href="account.html"
+        class="product-button"
+        style="display:inline-block;width:auto;"
+      >
+        ورود / ثبت‌نام
+      </a>
     `;
+
     return;
   }
 
+
   try {
-    const response = await fetch(`${API_BASE}/customers/orders`, { credentials: "include" });
-    const data = await response.json();
 
-    if (!response.ok || !data.ok) throw new Error(data.message || "دریافت سفارش‌ها با خطا مواجه شد.");
+    // دریافت سفارش‌های مشتری
+    const response =
+      await fetch(
+        `${API_BASE}/customers/orders`,
+        {
+          credentials: "include"
+        }
+      );
 
-    const orders = data.orders || [];
 
+    const data =
+      await response.json();
+
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message ||
+        "دریافت سفارش‌ها با خطا مواجه شد."
+      );
+    }
+
+
+    const orders =
+      data.orders || [];
+
+
+    // بدون سفارش
     if (orders.length === 0) {
-      container.innerHTML = `<p>هنوز سفارشی ثبت نکرده‌اید.</p><a href="index.html" class="product-button" style="display:inline-block;width:auto;">رفتن به فروشگاه</a>`;
+
+      container.innerHTML = `
+        <p>
+          هنوز سفارشی ثبت نکرده‌اید.
+        </p>
+
+        <a
+          href="index.html"
+          class="product-button"
+          style="display:inline-block;width:auto;"
+        >
+          رفتن به فروشگاه
+        </a>
+      `;
+
       return;
     }
 
-    container.innerHTML = `<div class="my-orders-list">${orders.map((order) => `
-      <div class="my-order-card">
-        <div class="my-order-card-top">
-          <strong>${escapeHtml(order.tracking_code)}</strong>
-          <span class="status-badge">${escapeHtml(order.status_label)}</span>
-        </div>
-        <div class="my-order-meta">
-          ${Number(order.item_count).toLocaleString("fa-IR")} قلم کالا ·
-          ${formatPrice(order.total)} ·
-          ${escapeHtml(formatDate(order.created_at))}
-        </div>
-        ${order.postal_tracking_code ? `<div class="my-order-meta">کد مرسوله پستی: ${escapeHtml(order.postal_tracking_code)}</div>` : ""}
+
+    // نمایش سفارش‌ها
+    container.innerHTML = `
+      <div class="my-orders-list">
+
+        ${orders.map((order) => `
+
+          <div class="my-order-card">
+
+            <div class="my-order-card-top">
+
+              <strong>
+                ${escapeHtml(order.tracking_code)}
+              </strong>
+
+              <span class="status-badge">
+                ${escapeHtml(order.status_label)}
+              </span>
+
+            </div>
+
+
+            <div class="my-order-meta">
+
+              ${Number(order.item_count).toLocaleString("fa-IR")}
+              قلم کالا
+              ·
+              ${formatPrice(order.total)}
+              ·
+              ${escapeHtml(
+                formatDate(order.created_at)
+              )}
+
+            </div>
+
+
+            ${
+              order.postal_tracking_code
+                ? `
+                  <div class="my-order-meta">
+                    کد مرسوله پستی:
+                    ${escapeHtml(
+                      order.postal_tracking_code
+                    )}
+                  </div>
+                `
+                : ""
+            }
+
+
+            <!-- دکمه‌های سفارش -->
+
+            <div
+              style="
+                display:flex;
+                flex-wrap:wrap;
+                gap:8px;
+                margin-top:14px;
+              "
+            >
+
+              <a
+                href="invoice.html?order_id=${encodeURIComponent(order.id)}"
+                class="product-button"
+                style="
+                  display:inline-block;
+                  width:auto;
+                "
+              >
+                مشاهده فاکتور
+              </a>
+
+            </div>
+
+          </div>
+
+        `).join("")}
+
       </div>
-    `).join("")}</div>`;
+    `;
+
+
   } catch (error) {
-    container.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+
+    container.innerHTML = `
+      <p>
+        ${escapeHtml(error.message)}
+      </p>
+    `;
+
   }
 }
 
+
 document.addEventListener("DOMContentLoaded", () => {
+
   updateCartCount();
+
   loadOrders();
+
 });
 </script>
+
 </body>
 </html>
