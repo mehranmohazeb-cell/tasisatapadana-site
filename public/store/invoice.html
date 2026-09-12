@@ -491,56 +491,192 @@
       }
     }
 
-    @media print {
-      @page {
-        size: A4;
-        margin: 12mm;
-      }
+   @media print {
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
 
-      body {
-        background: white;
-      }
+  body {
+    background: white;
+    line-height: 1.5;
+  }
 
-      .page-header,
-      .action-bar {
-        display: none !important;
-      }
+  .page-header,
+  .action-bar {
+    display: none !important;
+  }
 
-      .invoice-wrapper {
-        max-width: none;
-        margin: 0;
-        padding: 0;
-      }
+  .invoice-wrapper {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
 
-      .invoice {
-        box-shadow: none;
-        border-radius: 0;
-      }
+  .invoice {
+    box-shadow: none;
+    border-radius: 0;
+  }
 
-      .invoice-top {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
+  .invoice-top {
+    padding: 16px 20px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 
-      .invoice-body {
-        padding: 20px 0;
-      }
+  .invoice-top-inner {
+    gap: 12px;
+  }
 
-      .items-table-wrapper {
-        overflow: visible;
-      }
+  .invoice-title h1 {
+    font-size: 23px;
+    margin-bottom: 2px;
+  }
 
-      .items-table {
-        min-width: 0;
-      }
+  .invoice-title p {
+    font-size: 12px;
+  }
 
-      .info-box,
-      .status-box,
-      .postal-info,
-      .signature-box {
-        break-inside: avoid;
-      }
-    }
+  .invoice-logo {
+    width: 58px;
+    height: 58px;
+  }
+
+  .invoice-body {
+    padding: 14px 0 18px;
+  }
+
+  .info-grid {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .info-box {
+    padding: 8px 11px;
+    border-radius: 6px;
+  }
+
+  .info-box h3 {
+    margin-bottom: 5px;
+    padding-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .info-row {
+    margin: 2px 0;
+    font-size: 11px;
+    gap: 8px;
+  }
+
+  .address-value {
+    line-height: 1.5;
+    font-size: 11px;
+  }
+
+  .section-title {
+    margin: 12px 0 6px;
+    font-size: 13px;
+  }
+
+  .items-table-wrapper {
+    border-radius: 6px;
+  }
+
+  .items-table {
+    min-width: 0;
+  }
+
+  .items-table th {
+    padding: 6px 5px;
+    font-size: 10px;
+  }
+
+  .items-table td {
+    padding: 7px 5px;
+    font-size: 10px;
+  }
+
+  .total-box {
+    margin-top: 9px;
+  }
+
+  .total-inner {
+    width: 300px;
+  }
+
+  .total-row {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+
+  .total-row.final {
+    font-size: 13px;
+  }
+
+  .status-area {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .status-box {
+    padding: 7px 10px;
+    border-radius: 6px;
+  }
+
+  .status-box strong {
+    font-size: 9px;
+    margin-bottom: 1px;
+  }
+
+  .status-box span {
+    font-size: 11px;
+  }
+
+  .postal-info {
+    margin-top: 8px;
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+
+  .signature-area {
+    gap: 15px;
+    margin-top: 18px;
+  }
+
+  .signature-box {
+    min-height: 82px;
+    padding: 8px;
+    border-radius: 6px;
+  }
+
+  .signature-box strong {
+    font-size: 11px;
+  }
+
+  .signature-line {
+    margin-top: 40px;
+    padding-top: 4px;
+    font-size: 9px;
+  }
+
+  .invoice-note {
+    margin-top: 12px;
+    padding-top: 7px;
+    font-size: 9px;
+  }
+
+  .items-table-wrapper {
+    overflow: visible;
+  }
+
+  .info-box,
+  .status-box,
+  .postal-info,
+  .signature-box,
+  .items-table-wrapper {
+    break-inside: avoid;
+  }
+}
   </style>
 </head>
 
