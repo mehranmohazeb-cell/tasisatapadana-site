@@ -318,7 +318,7 @@ async function handleStoreApi(request, env) {
     return { id: row.id, full_name: row.full_name, phone: row.phone, _token: token };
   }
 
- // =========================
+// =========================
 // Helpers — Notifications
 // =========================
 async function queueSms(orderId, phone, eventType, message) {
@@ -436,13 +436,7 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
       }
     }
   }
-}
-        .run();
-    } catch (error) {
-      // ارسال/ذخیره ایمیل هرگز نباید ثبت تیکت یا سفارش را مختل کند.
-      console.error("queueEmail failed", error);
-    }
-  }
+} 
 
   // =========================
   // Store Health
