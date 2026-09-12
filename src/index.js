@@ -1238,8 +1238,10 @@ async function handleStoreApi(request, env) {
         ok: true,
         order: {
           tracking_code: order.tracking_code,
-          customer_name: order.customer_name,
-          mobile: order.customer_phone,
+invoice_number: INV-${String(order.id).padStart(6, "0")},
+customer_name: order.customer_name,
+mobile: order.customer_phone,
+postal_code: order.postal_code,
           address: composeAddressText(order),
           total: order.total,
           status: order.status,
