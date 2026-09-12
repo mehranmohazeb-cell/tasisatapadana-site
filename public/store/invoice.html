@@ -490,7 +490,35 @@
         gap: 15px;
       }
     }
+  .product-image-cell {
+  width: 58px;
+  text-align: center;
+  vertical-align: middle;
+}
 
+.product-image {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+}
+
+@media print {
+  .product-image-cell {
+    width: 50px;
+    padding: 4px !important;
+  }
+
+  .product-image {
+    width: 40px;
+    height: 40px;
+  }
+}
+    
    @media print {
   @page {
     size: A4;
@@ -1267,79 +1295,51 @@
 
       // اقلام
 
-      const itemsBody =
-        document.getElementById("itemsBody");
+      const itemsBody = document.getElementById("itemsBody");
+itemsBody.innerHTML = "";
 
+const items = Array.isArray(order.items) ? order.items : [];
 
-      itemsBody.innerHTML = "";
+if (items.length === 0) {
+  itemsBody.innerHTML = `
+    <tr>
+      <td colspan="6">
+        اطلاعات اقلام سفارش موجود نیست.
+      </td>
+    </tr>
+  `;
+} else {
+  items.forEach((item, index) => {
+    const productName = escapeHtml(item.product_name || "کالا");
+    const quantity = Number(item.quantity || 0);
+    const price = Number(item.price || 0);
+    const subtotal = Number(item.subtotal || price * quantity);
 
+    const productImage = item.product_image
+      ? `
+        <img
+          class="product-image"
+          src="${escapeHtml(item.product_image)}"
+          alt=""
+          onerror="this.style.display='none';"
+        >
+      `
+      : "—";
 
-      const items =
-        Array.isArray(order.items)
-          ? order.items
-          : [];
-
-
-      if (items.length === 0) {
-
-        itemsBody.innerHTML = `
-          <tr>
-            <td colspan="5">
-              اطلاعات اقلام سفارش موجود نیست.
-            </td>
-          </tr>
-        `;
-
-      } else {
-
-        items.forEach((item, index) => {
-
-          const productName =
-            escapeHtml(
-              item.product_name || "کالا"
-            );
-
-
-          const quantity =
-            Number(item.quantity || 0);
-
-
-          const price =
-            Number(item.price || 0);
-
-
-          const subtotal =
-            Number(
-              item.subtotal ||
-              price * quantity
-            );
-
-
-          itemsBody.innerHTML += `
-            <tr>
-              <td>${formatNumber(index + 1)}</td>
-
-              <td class="product-name">
-                ${productName}
-              </td>
-
-              <td>
-                ${formatNumber(quantity)}
-              </td>
-
-              <td>
-                ${formatMoney(price)}
-              </td>
-
-              <td>
-                ${formatMoney(subtotal)}
-              </td>
-            </tr>
-          `;
-
-        });
-
-      }
+    itemsBody.innerHTML += `
+      <tr>
+        <td>${formatNumber(index + 1)}</td>
+        <td class="product-image-cell">
+          ${productImage}
+        </td>
+        <td class="product-name">${productName}</td>
+        <td>${formatNumber(quantity)}</td>
+        <td>${formatMoney(price)}</td>
+        <td>${formatMoney(subtotal)}</td>
+      </tr>
+    `;
+  });
+}
 
 
       // مبلغ کل
