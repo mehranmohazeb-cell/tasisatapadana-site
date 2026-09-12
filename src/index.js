@@ -318,49 +318,125 @@ async function handleStoreApi(request, env) {
     return { id: row.id, full_name: row.full_name, phone: row.phone, _token: token };
   }
 
-  // =========================
-  // Helpers — SMS (آماده برای اتصال بعدی؛ فعلاً فقط در صف ذخیره می‌شود)
-  // =========================
+ // =========================
+// Helpers — Notifications
+// =========================
+async function queueSms(orderId, phone, eventType, message) {
+  try {
+    await env.DB
+      .prepare(
+        "INSERT INTO sms_notifications (order_id, phone, event_type, message, status) " +
+        "VALUES (?, ?, ?, ?, 'pending')"
+      )
+      .bind(orderId, phone, eventType, message)
+      .run();
+  } catch (error) {
+    // ارسال/ذخیره پیامک هرگز نباید ثبت سفارش را مختل کند.
+    console.error("queueSms failed", error);
+  }
+}
 
-  async function queueSms(orderId, phone, eventType, message) {
-    try {
+async function queueTicketSms(ticketId, phone, eventType, message) {
+  try {
+    await env.DB
+      .prepare(
+        "INSERT INTO sms_notifications (ticket_id, phone, event_type, message, status) " +
+        "VALUES (?, ?, ?, ?, 'pending')"
+      )
+      .bind(ticketId, phone, eventType, message)
+      .run();
+  } catch (error) {
+    // ارسال/ذخیره پیامک هرگز نباید ثبت تیکت را مختل کند.
+    console.error("queueTicketSms failed", error);
+  }
+}
+
+async function queueEmail(orderId, ticketId, toEmail, subject, body) {
+  if (!toEmail) return;
+
+  let notificationId = null;
+
+  try {
+    // ابتدا ایمیل را در D1 ثبت می‌کنیم.
+    const insertResult = await env.DB
+      .prepare(
+        "INSERT INTO email_notifications " +
+        "(order_id, ticket_id, to_email, subject, body, status) " +
+        "VALUES (?, ?, ?, ?, ?, 'pending')"
+      )
+      .bind(orderId, ticketId, toEmail, subject, body)
+      .run();
+
+    notificationId = insertResult.meta?.last_row_id ?? null;
+
+    // اگر Secret در Cloudflare تنظیم نشده باشد،
+    // ارسال واقعی انجام نمی‌شود.
+    if (!env.RESEND_API_KEY) {
+      throw new Error("RESEND_API_KEY is not configured");
+    }
+
+    const resendResponse = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "تأسیسات آپادانا <support@tasisatapadanaesfahan.ir>",
+        to: [toEmail],
+        reply_to: "support@tasisatapadanaesfahan.ir",
+        subject,
+        text: body,
+      }),
+    });
+
+    const resendData = await resendResponse.json().catch(() => ({}));
+
+    if (!resendResponse.ok) {
+      throw new Error(
+        resendData?.message ||
+        resendData?.error ||
+        `Resend API error: ${resendResponse.status}`
+      );
+    }
+
+    // ایمیل با موفقیت توسط Resend پذیرفته شد.
+    if (notificationId) {
       await env.DB
         .prepare(
-          "INSERT INTO sms_notifications (order_id, phone, event_type, message, status) " +
-          "VALUES (?, ?, ?, ?, 'pending')"
+          "UPDATE email_notifications " +
+          "SET status = 'sent', sent_at = CURRENT_TIMESTAMP " +
+          "WHERE id = ?"
         )
-        .bind(orderId, phone, eventType, message)
+        .bind(notificationId)
         .run();
-    } catch (error) {
-      // ارسال/ذخیره پیامک هرگز نباید ثبت سفارش را مختل کند.
-      console.error("queueSms failed", error);
+    }
+
+    console.log(
+      "Email sent successfully:",
+      resendData?.id || "no-provider-id"
+    );
+
+  } catch (error) {
+    // خطای ایمیل نباید ثبت تیکت یا سفارش را مختل کند.
+    console.error("queueEmail failed:", error);
+
+    if (notificationId) {
+      try {
+        await env.DB
+          .prepare(
+            "UPDATE email_notifications " +
+            "SET status = 'failed' " +
+            "WHERE id = ?"
+          )
+          .bind(notificationId)
+          .run();
+      } catch (dbError) {
+        console.error("queueEmail status update failed:", dbError);
+      }
     }
   }
-
-  async function queueTicketSms(ticketId, phone, eventType, message) {
-    try {
-      await env.DB
-        .prepare(
-          "INSERT INTO sms_notifications (ticket_id, phone, event_type, message, status) " +
-          "VALUES (?, ?, ?, ?, 'pending')"
-        )
-        .bind(ticketId, phone, eventType, message)
-        .run();
-    } catch (error) {
-      console.error("queueTicketSms failed", error);
-    }
-  }
-
-  async function queueEmail(orderId, ticketId, toEmail, subject, body) {
-    if (!toEmail) return;
-
-    try {
-      await env.DB
-        .prepare(
-          "INSERT INTO email_notifications (order_id, ticket_id, to_email, subject, body, status) " +
-          "VALUES (?, ?, ?, ?, ?, 'pending')"
-        )
-        .bind(orderId, ticketId, toEmail, subject, body)
+}
         .run();
     } catch (error) {
       // ارسال/ذخیره ایمیل هرگز نباید ثبت تیکت یا سفارش را مختل کند.
