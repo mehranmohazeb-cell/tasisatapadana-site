@@ -1594,7 +1594,7 @@ if (
     order.address = composeAddressText(order);
 
     // شماره فاکتور
-    order.invoice_number = INV-${String(order.id).padStart(6, "0")};
+    order.invoice_number = `INV-${String(order.id).padStart(6, "0")}`;
 
     order.status_label =
       STATUS_LABELS[order.status] || order.status;
@@ -1628,6 +1628,7 @@ if (
     );
   }
 }
+
   // =========================
   // پشتیبانی — ثبت تیکت جدید (مهمان یا مشتری ثبت‌نام‌شده)
   // POST /api/support/tickets
