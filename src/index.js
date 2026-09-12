@@ -1484,71 +1484,114 @@ postal_code: order.postal_code,
   }
 
   // =========================
-  // حساب مشتری — جزئیات یک سفارش
-  // GET /api/store/customers/orders/:id
-  // =========================
+// حساب مشتری — جزئیات یک سفارش
+// GET /api/store/customers/orders/:id
+// =========================
 
-  if (
-    url.pathname.startsWith("/api/store/customers/orders/") &&
-    request.method === "GET"
-  ) {
-    const sessionCustomer = await getSessionCustomer(request);
+if (
+  url.pathname.startsWith("/api/store/customers/orders/") &&
+  request.method === "GET"
+) {
+  const sessionCustomer = await getSessionCustomer(request);
 
-    if (!sessionCustomer) {
-      return Response.json({ ok: false, error: "UNAUTHORIZED", message: "لطفاً وارد حساب کاربری شوید." }, { status: 401 });
-    }
-
-    try {
-      const orderId = Number(url.pathname.split("/").pop());
-
-      if (!Number.isInteger(orderId) || orderId <= 0) {
-        return Response.json({ ok: false, error: "INVALID_ORDER_ID" }, { status: 400 });
-      }
-
-      const order = await env.DB
-        .prepare(
-          "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
-          "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
-          "total, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
-          "FROM orders WHERE id = ? LIMIT 1"
-        )
-        .bind(orderId)
-        .first();
-
-      if (!order || order.customer_id !== sessionCustomer.id) {
-        return Response.json({ ok: false, error: "ORDER_NOT_FOUND", message: "سفارش پیدا نشد." }, { status: 404 });
-      }
-
-      const itemsResult = await env.DB
-        .prepare("SELECT product_name, price, quantity, subtotal FROM order_items WHERE order_id = ? ORDER BY id ASC")
-        .bind(orderId)
-        .all();
-
-      const historyResult = await env.DB
-        .prepare("SELECT status, note, created_at FROM order_status_history WHERE order_id = ? ORDER BY id ASC")
-        .bind(orderId)
-        .all();
-
-      order.address = composeAddressText(order);
-      order.status_label = STATUS_LABELS[order.status] || order.status;
-      order.payment_status_label = PAYMENT_STATUS_LABELS[order.payment_status] || order.payment_status;
-      order.items = itemsResult.results || [];
-      order.history = (historyResult.results || []).map((h) => ({
-        status: h.status,
-        status_label: STATUS_LABELS[h.status] || h.status,
-        note: h.note,
-        created_at: h.created_at,
-      }));
-
-      return Response.json({ ok: true, order });
-    } catch (error) {
-      return Response.json(
-        { ok: false, error: "DATABASE_ERROR", message: error.message },
-        { status: 500 }
-      );
-    }
+  if (!sessionCustomer) {
+    return Response.json(
+      {
+        ok: false,
+        error: "UNAUTHORIZED",
+        message: "لطفاً وارد حساب کاربری شوید."
+      },
+      { status: 401 }
+    );
   }
 
+  try {
+    const orderId = Number(url.pathname.split("/").pop());
+
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return Response.json(
+        {
+          ok: false,
+          error: "INVALID_ORDER_ID"
+        },
+        { status: 400 }
+      );
+    }
+
+    const order = await env.DB
+      .prepare(
+        "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
+        "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
+        "total, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
+        "FROM orders WHERE id = ? LIMIT 1"
+      )
+      .bind(orderId)
+      .first();
+
+    if (!order || order.customer_id !== sessionCustomer.id) {
+      return Response.json(
+        {
+          ok: false,
+          error: "ORDER_NOT_FOUND",
+          message: "سفارش پیدا نشد."
+        },
+        { status: 404 }
+      );
+    }
+
+    const itemsResult = await env.DB
+      .prepare(
+        "SELECT product_name, price, quantity, subtotal " +
+        "FROM order_items WHERE order_id = ? ORDER BY id ASC"
+      )
+      .bind(orderId)
+      .all();
+
+    const historyResult = await env.DB
+      .prepare(
+        "SELECT status, note, created_at " +
+        "FROM order_status_history WHERE order_id = ? ORDER BY id ASC"
+      )
+      .bind(orderId)
+      .all();
+
+    order.address = composeAddressText(order);
+
+    // شماره فاکتور
+    order.invoice_number = INV-${String(order.id).padStart(6, "0")};
+
+    order.status_label =
+      STATUS_LABELS[order.status] || order.status;
+
+    order.payment_status_label =
+      PAYMENT_STATUS_LABELS[order.payment_status] ||
+      order.payment_status;
+
+    order.items = itemsResult.results || [];
+
+    order.history = (historyResult.results || []).map((h) => ({
+      status: h.status,
+      status_label: STATUS_LABELS[h.status] || h.status,
+      note: h.note,
+      created_at: h.created_at,
+    }));
+
+    return Response.json({
+      ok: true,
+      order
+    });
+
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: "DATABASE_ERROR",
+        message: error.message
+      },
+      { status: 500 }
+    );
+  }
+}
   // =========================
   // پشتیبانی — ثبت تیکت جدید (مهمان یا مشتری ثبت‌نام‌شده)
   // POST /api/support/tickets
