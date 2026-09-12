@@ -1188,19 +1188,29 @@ async function handleStoreApi(request, env) {
     }
   }
 
-  // =========================
+  
+// =========================
   // پیگیری سفارش مهمان / هر مشتری
   // GET /api/store/track?tracking_code=AP-XXXX&mobile=09xxxxxxxxx
   // =========================
 
   if (url.pathname === "/api/store/track" && request.method === "GET") {
     try {
-      const trackingCode = (url.searchParams.get("tracking_code") || "").trim().toUpperCase();
-      const mobile = normalizeDigits(url.searchParams.get("mobile") || "").trim();
+      const trackingCode = (url.searchParams.get("tracking_code") || "")
+        .trim()
+        .toUpperCase();
+
+      const mobile = normalizeDigits(
+        url.searchParams.get("mobile") || ""
+      ).trim();
 
       if (!trackingCode || !mobile) {
         return Response.json(
-          { ok: false, error: "MISSING_PARAMS", message: "کد پیگیری و شماره موبایل را وارد کنید." },
+          {
+            ok: false,
+            error: "MISSING_PARAMS",
+            message: "کد پیگیری و شماره موبایل را وارد کنید."
+          },
           { status: 400 }
         );
       }
@@ -1217,20 +1227,28 @@ async function handleStoreApi(request, env) {
 
       if (!order) {
         return Response.json(
-          { ok: false, error: "ORDER_NOT_FOUND", message: "سفارشی با این مشخصات پیدا نشد." },
+          {
+            ok: false,
+            error: "ORDER_NOT_FOUND",
+            message: "سفارشی با این مشخصات پیدا نشد."
+          },
           { status: 404 }
         );
       }
 
       const itemsResult = await env.DB
         .prepare(
-          "SELECT product_name, price, quantity, subtotal FROM order_items WHERE order_id = ? ORDER BY id ASC"
+          "SELECT product_name, price, quantity, subtotal " +
+          "FROM order_items WHERE order_id = ? ORDER BY id ASC"
         )
         .bind(order.id)
         .all();
 
       const historyResult = await env.DB
-        .prepare("SELECT status, created_at FROM order_status_history WHERE order_id = ? ORDER BY id ASC")
+        .prepare(
+          "SELECT status, created_at " +
+          "FROM order_status_history WHERE order_id = ? ORDER BY id ASC"
+        )
         .bind(order.id)
         .all();
 
@@ -1238,35 +1256,53 @@ async function handleStoreApi(request, env) {
         ok: true,
         order: {
           tracking_code: order.tracking_code,
-invoice_number: INV-${String(order.id).padStart(6, "0")},
-customer_name: order.customer_name,
-mobile: order.customer_phone,
-postal_code: order.postal_code,
+
+          // شماره فاکتور بر اساس شماره سفارش
+          invoice_number: INV-${String(order.id).padStart(6, "0")},
+
+          customer_name: order.customer_name,
+          mobile: order.customer_phone,
+          postal_code: order.postal_code,
+
           address: composeAddressText(order),
+
           total: order.total,
+
           status: order.status,
-          status_label: STATUS_LABELS[order.status] || order.status,
+          status_label:
+            STATUS_LABELS[order.status] || order.status,
+
           payment_status: order.payment_status,
-          payment_status_label: PAYMENT_STATUS_LABELS[order.payment_status] || order.payment_status,
+          payment_status_label:
+            PAYMENT_STATUS_LABELS[order.payment_status] ||
+            order.payment_status,
+
           postal_carrier: order.postal_carrier,
           postal_tracking_code: order.postal_tracking_code,
+
           created_at: order.created_at,
+
           items: itemsResult.results || [],
+
           history: (historyResult.results || []).map((h) => ({
             status: h.status,
-            status_label: STATUS_LABELS[h.status] || h.status,
-            created_at: h.created_at,
-          })),
-        },
+            status_label:
+              STATUS_LABELS[h.status] || h.status,
+            created_at: h.created_at
+          }))
+        }
       });
     } catch (error) {
       return Response.json(
-        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        {
+          ok: false,
+          error: "DATABASE_ERROR",
+          message: error.message
+        },
         { status: 500 }
       );
     }
   }
-
   // =========================
   // حساب مشتری — ثبت‌نام
   // =========================
