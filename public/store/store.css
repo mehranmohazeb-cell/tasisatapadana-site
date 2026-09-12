@@ -1877,3 +1877,31 @@ body.lightbox-open {
   color: var(--ink-soft);
   font-size: 13px;
 }
+/* =========================================================
+   Checkout Hero — هماهنگ با بنر اصلی سایت
+   فقط صفحه ثبت سفارش
+   ========================================================= */
+
+.checkout-hero {
+  background:
+    linear-gradient(
+      45deg,
+      transparent 48%,
+      rgba(255,255,255,.12) 48% 52%,
+      transparent 52%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 48%,
+      rgba(255,255,255,.12) 48% 52%,
+      transparent 52%
+    ),
+    var(--primary-dark);
+
+  background-size: 46px 46px;
+  color: #fff;
+}
+
+.checkout-hero h1 {
+  color: #fff;
+}
