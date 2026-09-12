@@ -262,6 +262,23 @@
       font-weight: 600;
     }
 
+    .product-image-cell {
+      width: 58px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .product-image {
+      width: 46px;
+      height: 46px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: #fff;
+    }
+
     .total-box {
       margin-top: 18px;
       display: flex;
@@ -489,222 +506,210 @@
       .signature-area {
         gap: 15px;
       }
+
+      .product-image {
+        width: 42px;
+        height: 42px;
+      }
     }
-  .product-image-cell {
-  width: 58px;
-  text-align: center;
-  vertical-align: middle;
-}
 
-.product-image {
-  width: 46px;
-  height: 46px;
-  object-fit: contain;
-  display: block;
-  margin: 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: #fff;
-}
+    /* =========================
+       چاپ فاکتور
+       ========================= */
 
-@media print {
-  .product-image-cell {
-    width: 50px;
-    padding: 4px !important;
-  }
+    @media print {
+      @page {
+        size: A4;
+        margin: 8mm;
+      }
 
-  .product-image {
-    width: 40px;
-    height: 40px;
-  }
-}
-    
-   @media print {
-  @page {
-    size: A4;
-    margin: 8mm;
-  }
+      body {
+        background: white;
+        line-height: 1.5;
+      }
 
-  body {
-    background: white;
-    line-height: 1.5;
-  }
+      .page-header,
+      .action-bar {
+        display: none !important;
+      }
 
-  .page-header,
-  .action-bar {
-    display: none !important;
-  }
+      .invoice-wrapper {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+      }
 
-  .invoice-wrapper {
-    max-width: none;
-    margin: 0;
-    padding: 0;
-  }
+      .invoice {
+        box-shadow: none;
+        border-radius: 0;
+      }
 
-  .invoice {
-    box-shadow: none;
-    border-radius: 0;
-  }
+      .invoice-top {
+        padding: 16px 20px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
 
-  .invoice-top {
-    padding: 16px 20px;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+      .invoice-top-inner {
+        gap: 12px;
+      }
 
-  .invoice-top-inner {
-    gap: 12px;
-  }
+      .invoice-title h1 {
+        font-size: 23px;
+        margin-bottom: 2px;
+      }
 
-  .invoice-title h1 {
-    font-size: 23px;
-    margin-bottom: 2px;
-  }
+      .invoice-title p {
+        font-size: 12px;
+      }
 
-  .invoice-title p {
-    font-size: 12px;
-  }
+      .invoice-logo {
+        width: 58px;
+        height: 58px;
+      }
 
-  .invoice-logo {
-    width: 58px;
-    height: 58px;
-  }
+      .invoice-body {
+        padding: 14px 0 18px;
+      }
 
-  .invoice-body {
-    padding: 14px 0 18px;
-  }
+      .info-grid {
+        gap: 8px;
+        margin-bottom: 12px;
+      }
 
-  .info-grid {
-    gap: 8px;
-    margin-bottom: 12px;
-  }
+      .info-box {
+        padding: 8px 11px;
+        border-radius: 6px;
+      }
 
-  .info-box {
-    padding: 8px 11px;
-    border-radius: 6px;
-  }
+      .info-box h3 {
+        margin-bottom: 5px;
+        padding-bottom: 4px;
+        font-size: 12px;
+      }
 
-  .info-box h3 {
-    margin-bottom: 5px;
-    padding-bottom: 4px;
-    font-size: 12px;
-  }
+      .info-row {
+        margin: 2px 0;
+        font-size: 11px;
+        gap: 8px;
+      }
 
-  .info-row {
-    margin: 2px 0;
-    font-size: 11px;
-    gap: 8px;
-  }
+      .address-value {
+        line-height: 1.5;
+        font-size: 11px;
+      }
 
-  .address-value {
-    line-height: 1.5;
-    font-size: 11px;
-  }
+      .section-title {
+        margin: 12px 0 6px;
+        font-size: 13px;
+      }
 
-  .section-title {
-    margin: 12px 0 6px;
-    font-size: 13px;
-  }
+      .items-table-wrapper {
+        border-radius: 6px;
+        overflow: visible;
+      }
 
-  .items-table-wrapper {
-    border-radius: 6px;
-  }
+      .items-table {
+        min-width: 0;
+      }
 
-  .items-table {
-    min-width: 0;
-  }
+      .items-table th {
+        padding: 6px 5px;
+        font-size: 10px;
+      }
 
-  .items-table th {
-    padding: 6px 5px;
-    font-size: 10px;
-  }
+      .items-table td {
+        padding: 5px 5px;
+        font-size: 10px;
+      }
 
-  .items-table td {
-    padding: 7px 5px;
-    font-size: 10px;
-  }
+      .product-image-cell {
+        width: 48px;
+        padding: 3px !important;
+      }
 
-  .total-box {
-    margin-top: 9px;
-  }
+      .product-image {
+        width: 40px;
+        height: 40px;
+      }
 
-  .total-inner {
-    width: 300px;
-  }
+      .total-box {
+        margin-top: 9px;
+      }
 
-  .total-row {
-    padding: 7px 10px;
-    font-size: 11px;
-  }
+      .total-inner {
+        width: 300px;
+      }
 
-  .total-row.final {
-    font-size: 13px;
-  }
+      .total-row {
+        padding: 7px 10px;
+        font-size: 11px;
+      }
 
-  .status-area {
-    gap: 8px;
-    margin-top: 10px;
-  }
+      .total-row.final {
+        font-size: 13px;
+      }
 
-  .status-box {
-    padding: 7px 10px;
-    border-radius: 6px;
-  }
+      .status-area {
+        gap: 8px;
+        margin-top: 10px;
+      }
 
-  .status-box strong {
-    font-size: 9px;
-    margin-bottom: 1px;
-  }
+      .status-box {
+        padding: 7px 10px;
+        border-radius: 6px;
+      }
 
-  .status-box span {
-    font-size: 11px;
-  }
+      .status-box strong {
+        font-size: 9px;
+        margin-bottom: 1px;
+      }
 
-  .postal-info {
-    margin-top: 8px;
-    padding: 7px 10px;
-    font-size: 10px;
-  }
+      .status-box span {
+        font-size: 11px;
+      }
 
-  .signature-area {
-    gap: 15px;
-    margin-top: 18px;
-  }
+      .postal-info {
+        margin-top: 8px;
+        padding: 7px 10px;
+        font-size: 10px;
+      }
 
-  .signature-box {
-    min-height: 82px;
-    padding: 8px;
-    border-radius: 6px;
-  }
+      .signature-area {
+        gap: 15px;
+        margin-top: 18px;
+      }
 
-  .signature-box strong {
-    font-size: 11px;
-  }
+      .signature-box {
+        min-height: 82px;
+        padding: 8px;
+        border-radius: 6px;
+      }
 
-  .signature-line {
-    margin-top: 40px;
-    padding-top: 4px;
-    font-size: 9px;
-  }
+      .signature-box strong {
+        font-size: 11px;
+      }
 
-  .invoice-note {
-    margin-top: 12px;
-    padding-top: 7px;
-    font-size: 9px;
-  }
+      .signature-line {
+        margin-top: 40px;
+        padding-top: 4px;
+        font-size: 9px;
+      }
 
-  .items-table-wrapper {
-    overflow: visible;
-  }
+      .invoice-note {
+        margin-top: 12px;
+        padding-top: 7px;
+        font-size: 9px;
+      }
 
-  .info-box,
-  .status-box,
-  .postal-info,
-  .signature-box,
-  .items-table-wrapper {
-    break-inside: avoid;
-  }
-}
+      .info-box,
+      .status-box,
+      .postal-info,
+      .signature-box,
+      .items-table-wrapper {
+        break-inside: avoid;
+      }
+    }
   </style>
 </head>
 
@@ -845,20 +850,20 @@
             <table class="items-table">
 
               <thead>
-               
+                <tr>
+                  <th>ردیف</th>
+                  <th>تصویر</th>
+                  <th>شرح کالا</th>
+                  <th>تعداد</th>
+                  <th>قیمت واحد</th>
+                  <th>مبلغ</th>
+                </tr>
               </thead>
 
               <tbody id="itemsBody"></tbody>
 
             </table>
-<tr>
-  <th>ردیف</th>
-  <th>تصویر</th>
-  <th>شرح کالا</th>
-  <th>تعداد</th>
-  <th>قیمت واحد</th>
-  <th>مبلغ</th>
-</tr>
+
           </div>
 
 
@@ -1293,56 +1298,107 @@
         "-";
 
 
-      // اقلام
+      // =========================
+      // اقلام سفارش
+      // =========================
 
-      const itemsBody = document.getElementById("itemsBody");
-itemsBody.innerHTML = "";
+      const itemsBody =
+        document.getElementById("itemsBody");
 
-const items = Array.isArray(order.items) ? order.items : [];
+      itemsBody.innerHTML = "";
 
-if (items.length === 0) {
-  itemsBody.innerHTML = `
-    <tr>
-      <td colspan="6">
-        اطلاعات اقلام سفارش موجود نیست.
-      </td>
-    </tr>
-  `;
-} else {
-  items.forEach((item, index) => {
-    const productName = escapeHtml(item.product_name || "کالا");
-    const quantity = Number(item.quantity || 0);
-    const price = Number(item.price || 0);
-    const subtotal = Number(item.subtotal || price * quantity);
-
-    const productImage = item.product_image
-      ? `
-        <img
-          class="product-image"
-          src="${escapeHtml(item.product_image)}"
-          alt=""
-          onerror="this.style.display='none';"
-        >
-      `
-      : "—";
-
-    itemsBody.innerHTML += `
-      <tr>
-        <td>${formatNumber(index + 1)}</td>
-        <td class="product-image-cell">
-          ${productImage}
-        </td>
-        <td class="product-name">${productName}</td>
-        <td>${formatNumber(quantity)}</td>
-        <td>${formatMoney(price)}</td>
-        <td>${formatMoney(subtotal)}</td>
-      </tr>
-    `;
-  });
-}
+      const items =
+        Array.isArray(order.items)
+          ? order.items
+          : [];
 
 
+      if (items.length === 0) {
+
+        itemsBody.innerHTML = `
+          <tr>
+            <td colspan="6">
+              اطلاعات اقلام سفارش موجود نیست.
+            </td>
+          </tr>
+        `;
+
+      } else {
+
+        items.forEach((item, index) => {
+
+          const productName =
+            escapeHtml(
+              item.product_name || "کالا"
+            );
+
+          const quantity =
+            Number(item.quantity || 0);
+
+          const price =
+            Number(item.price || 0);
+
+          const subtotal =
+            Number(
+              item.subtotal ||
+              price * quantity
+            );
+
+
+          let productImage = "—";
+
+
+          if (item.product_image) {
+
+            productImage = `
+              <img
+                class="product-image"
+                src="${escapeHtml(item.product_image)}"
+                alt=""
+                onerror="this.style.display='none';"
+              >
+            `;
+          }
+
+
+          itemsBody.innerHTML += `
+            <tr>
+
+              <td>
+                ${formatNumber(index + 1)}
+              </td>
+
+              <td class="product-image-cell">
+                ${productImage}
+              </td>
+
+              <td class="product-name">
+                ${productName}
+              </td>
+
+              <td>
+                ${formatNumber(quantity)}
+              </td>
+
+              <td>
+                ${formatMoney(price)}
+              </td>
+
+              <td>
+                ${formatMoney(subtotal)}
+              </td>
+
+            </tr>
+          `;
+
+        });
+
+      }
+
+
+      // =========================
       // مبلغ کل
+      // =========================
 
       const total =
         Number(order.total || 0);
@@ -1358,7 +1414,9 @@ if (items.length === 0) {
         formatMoney(total);
 
 
+      // =========================
       // اطلاعات مرسوله
+      // =========================
 
       const postalInfo =
         document.getElementById("postalInfo");
@@ -1377,7 +1435,9 @@ if (items.length === 0) {
 
           html +=
             "روش ارسال: " +
-            escapeHtml(order.postal_carrier);
+            escapeHtml(
+              order.postal_carrier
+            );
 
         }
 
@@ -1396,13 +1456,18 @@ if (items.length === 0) {
         }
 
 
-        postalInfo.innerHTML = html;
+        postalInfo.innerHTML =
+          html;
 
-        postalInfo.classList.remove("hidden");
+        postalInfo.classList.remove(
+          "hidden"
+        );
 
       } else {
 
-        postalInfo.classList.add("hidden");
+        postalInfo.classList.add(
+          "hidden"
+        );
 
       }
 
