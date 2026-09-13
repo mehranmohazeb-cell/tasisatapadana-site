@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مدیریت محصولات | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <!-- ===== فرم افزودن/ویرایش محصول ===== -->
+
+    <section class="admin-card">
+
+      <h2 id="form-title">افزودن محصول</h2>
+
+      <form id="product-form">
+
+        <input type="hidden" id="product-id">
+
+        <div class="form-grid">
+
+          <div class="form-group">
+            <label for="product-name">نام محصول</label>
+            <input id="product-name" type="text" required>
+          </div>
+
+          <div class="form-group">
+            <label for="product-slug">شناسه محصول (Slug)</label>
+            <input id="product-slug" type="text" required>
+            <small>مثلاً: test-product</small>
+          </div>
+
+          <div class="form-group full">
+            <label for="product-description">توضیحات</label>
+            <textarea id="product-description" rows="5"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="product-price">قیمت (تومان)</label>
+            <input id="product-price" type="number" min="0" required>
+          </div>
+
+          <div class="form-group">
+            <label for="product-stock">موجودی</label>
+            <input id="product-stock" type="number" min="0" value="0" required>
+          </div>
+
+          <div class="form-group full">
+
+            <label>تصاویر محصول</label>
+
+            <div class="image-path-lock">
+              <span>📁 /assets/products/</span>
+              <span>🔒</span>
+            </div>
+
+            <div class="image-add-row" style="display:flex; gap:8px; margin: 8px 0;">
+              <input id="product-image" type="text" placeholder="مثلاً: test-product.jpeg" style="flex:1; border:1px solid #cbd6d3; border-radius:8px; padding:10px 12px;">
+              <button type="button" id="add-image" class="secondary-button">+ افزودن تصویر</button>
+            </div>
+
+            <div id="image-list">
+              <p class="loading">هنوز عکسی اضافه نشده است.</p>
+            </div>
+
+            <small>فقط نام فایل تصویر را وارد کنید؛ مسیر پوشه به‌صورت خودکار اضافه می‌شود.</small>
+
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input id="product-active" type="checkbox" checked>
+              محصول فعال باشد
+            </label>
+          </div>
+
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-button">ذخیره محصول</button>
+          <button type="button" id="cancel-edit" class="secondary-button">لغو / پاک کردن فرم</button>
+        </div>
+
+      </form>
+
+    </section>
+
+    <!-- ===== لیست محصولات ===== -->
+
+    <section class="admin-card">
+
+      <div class="section-heading">
+        <h2>محصولات موجود</h2>
+        <button id="refresh-products" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+
+      <div class="filter-bar">
+        <input id="products-search" type="text" placeholder="جست‌وجو بر اساس نام یا Slug">
+        <select id="products-active-filter">
+          <option value="">همه</option>
+          <option value="1">فعال</option>
+          <option value="0">غیرفعال</option>
+        </select>
+        <button id="products-search-button" class="secondary-button" type="button">جست‌وجو</button>
+      </div>
+
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری محصولات...</p>
+      </div>
+
+      <div id="pagination-container"></div>
+
+    </section>
+
+  </main>
+
+  <script src="../admin-common.js"></script>
+  <script src="products.js"></script>
+</body>
+</html>

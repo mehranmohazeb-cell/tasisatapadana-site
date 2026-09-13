@@ -1,0 +1,843 @@
+/* =========================================================================
+   تأسیسات آپادانا — پنل مدیریت (استایل مشترک همه صفحات)
+   رنگ‌ها و فونت دقیقاً همان مقادیر قبلی پنل مدیریت حفظ شده‌اند:
+   Petroleum: #123b3b / #173b3b — Copper: #b87345 — فونت: Vazirmatn
+   ========================================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  margin: 0;
+  font-family: "Vazirmatn", Tahoma, Arial, sans-serif;
+  background: #f1f4f3;
+  color: #173b3b;
+  line-height: 1.8;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+.container {
+  width: min(1150px, 94%);
+  margin: 0 auto;
+}
+
+/* =========================
+   Header + Nav
+   ========================= */
+
+.admin-header {
+  background: #123b3b;
+  color: #fff;
+  border-bottom: 3px solid #b87345;
+  padding: 16px 0;
+  margin-bottom: 22px;
+}
+
+.admin-header .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-header h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.admin-nav {
+  background: #173b3b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-nav .container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.admin-nav a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+}
+
+.admin-nav a.active {
+  color: #fff;
+  border-bottom-color: #b87345;
+}
+
+.admin-nav .nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #d94f4f;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-nav .nav-badge.orange {
+  background: #b87345;
+}
+
+/* =========================
+   Alerts bar (dashboard warnings)
+   ========================= */
+
+.alerts-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.alert-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #fff;
+  border: 1px solid #d8e0de;
+  cursor: pointer;
+  text-decoration: none;
+  color: #173b3b;
+}
+
+.alert-pill.danger {
+  border-color: #f0c4c4;
+  background: #fdf1f1;
+  color: #a23b3b;
+}
+
+.alert-pill.warning {
+  border-color: #ecd3bd;
+  background: #fdf6f0;
+  color: #8a5223;
+}
+
+/* =========================
+   Cards
+   ========================= */
+
+.admin-card {
+  background: #fff;
+  border: 1px solid #d8e0de;
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 22px;
+}
+
+.admin-card h2 {
+  margin: 0 0 20px;
+  color: #173b3b;
+  font-size: 20px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.section-heading h2 {
+  margin: 0;
+}
+
+/* =========================
+   Dashboard stat grid
+   ========================= */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.stat-box {
+  border: 1px solid #dce4e2;
+  border-radius: 11px;
+  background: #fbfcfc;
+  padding: 14px 16px;
+}
+
+.stat-box .stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #123b3b;
+}
+
+.stat-box .stat-label {
+  font-size: 13px;
+  color: #647773;
+  margin-top: 2px;
+}
+
+/* =========================
+   Buttons
+   ========================= */
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 17px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: #b87345;
+  color: #fff;
+}
+
+.secondary-button {
+  background: #e7ecea;
+  color: #173b3b;
+  border: 1px solid #d2dcda;
+}
+
+.danger-button {
+  background: #fdf1f1;
+  color: #a23b3b;
+  border: 1px solid #f0c4c4;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* =========================
+   Forms
+   ========================= */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.form-group.full {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  font-weight: 700;
+  color: #244848;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  border: 1px solid #cbd6d3;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #fff;
+  color: #173b3b;
+  font-size: 14px;
+  outline: none;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.form-group small {
+  color: #71817e;
+  font-size: 12px;
+}
+
+.checkbox-group {
+  justify-content: center;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+}
+
+.checkbox-group input {
+  width: auto;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+/* =========================
+   Filter bar (shared by products/orders/support)
+   ========================= */
+
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.filter-bar input[type="text"],
+.filter-bar select {
+  flex: 1;
+  min-width: 160px;
+  border: 1px solid #cbd6d3;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #173b3b;
+  background: #fff;
+}
+
+/* =========================
+   Pagination
+   ========================= */
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.pagination-bar button {
+  border: 1px solid #cbd6d3;
+  background: #fff;
+  color: #173b3b;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 36px;
+}
+
+.pagination-bar button.active {
+  background: #123b3b;
+  color: #fff;
+  border-color: #123b3b;
+}
+
+.pagination-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pagination-summary {
+  text-align: center;
+  color: #71817e;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* =========================
+   Badges
+   ========================= */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge.red {
+  background: #fdf1f1;
+  color: #a23b3b;
+  border: 1px solid #f0c4c4;
+}
+
+.badge.gray {
+  background: #eef1f0;
+  color: #56655f;
+  border: 1px solid #dbe2e0;
+}
+
+.status-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #eef1f0;
+  color: #355653;
+}
+
+/* =========================
+   Toast feedback
+   ========================= */
+
+#toast-container {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: min(94%, 420px);
+}
+
+.toast {
+  background: #173b3b;
+  color: #fff;
+  padding: 11px 18px;
+  border-radius: 9px;
+  font-size: 13px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  width: 100%;
+  text-align: center;
+}
+
+.toast.error {
+  background: #a23b3b;
+}
+
+.toast.success {
+  background: #2f6b4f;
+}
+
+/* =========================
+   Modal / Panel (order & ticket details)
+   ========================= */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 59, 59, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 30px 14px;
+  overflow-y: auto;
+  z-index: 500;
+}
+
+.modal-box {
+  background: #fff;
+  border-radius: 14px;
+  width: min(640px, 100%);
+  padding: 22px;
+  margin-top: 10px;
+}
+
+.modal-box .modal-close {
+  float: left;
+  border: 0;
+  background: #e7ecea;
+  color: #173b3b;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.modal-title {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #123b3b;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dashed #e1e7e5;
+  font-size: 13px;
+}
+
+.detail-row span:first-child {
+  color: #71817e;
+}
+
+.detail-row span:last-child {
+  font-weight: 600;
+  text-align: left;
+}
+
+/* =========================
+   Product image path lock (products page)
+   ========================= */
+
+.image-path-lock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #71817e;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+/* =========================
+   List items (products / orders)
+   ========================= */
+
+#list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product-admin-item {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 15px;
+  padding: 12px;
+  border: 1px solid #dce4e2;
+  border-radius: 11px;
+  background: #fbfcfc;
+}
+
+.product-admin-image {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 9px;
+  background: #fff;
+  border: 1px solid #d9e1df;
+  padding: 5px;
+}
+
+.product-admin-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.product-admin-info strong {
+  color: #173b3b;
+  font-size: 15px;
+}
+
+.product-admin-info span {
+  color: #647773;
+  font-size: 13px;
+}
+
+.order-admin-item {
+  border: 1px solid #d8e2df;
+  border-radius: 12px;
+  background: #fbfcfc;
+  padding: 15px;
+}
+
+.order-admin-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.order-admin-main > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.order-admin-main strong {
+  color: #173b3b;
+  font-size: 16px;
+}
+
+.order-admin-main span {
+  color: #647773;
+  font-size: 13px;
+}
+
+.order-status-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.order-status-box label {
+  color: #355653;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.order-status-select {
+  width: 100%;
+  border: 1px solid #cbd6d3;
+  border-radius: 8px;
+  background: #fff;
+  color: #173b3b;
+  padding: 9px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.order-status-box small {
+  color: #7b8986;
+  font-size: 11px;
+}
+
+.postal-info-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #cbd6d3;
+}
+
+.postal-info-box input {
+  border: 1px solid #cbd6d3;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  color: #173b3b;
+}
+
+.postal-info-box button {
+  font-size: 12px;
+  padding: 8px;
+}
+
+.order-admin-item > button,
+.order-admin-main > button {
+  white-space: nowrap;
+}
+
+/* =========================
+   Support / Tickets
+   ========================= */
+
+.ticket-admin-item {
+  border: 1px solid #d8e2df;
+  border-radius: 12px;
+  background: #fbfcfc;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  cursor: pointer;
+}
+
+.ticket-admin-item:hover {
+  border-color: #b9c9c5;
+}
+
+.ticket-admin-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ticket-admin-info strong {
+  color: #173b3b;
+  font-size: 15px;
+}
+
+.ticket-admin-info span {
+  color: #647773;
+  font-size: 13px;
+}
+
+.ticket-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding-inline-end: 4px;
+}
+
+.ticket-message {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  max-width: 88%;
+}
+
+.ticket-message.customer {
+  background: #eef1f0;
+  align-self: flex-start;
+}
+
+.ticket-message.admin {
+  background: #123b3b;
+  color: #fff;
+  align-self: flex-end;
+}
+
+.ticket-message .meta {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.reply-box textarea {
+  width: 100%;
+  border: 1px solid #cbd6d3;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 90px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+/* =========================
+   Loading / Empty
+   ========================= */
+
+.loading {
+  text-align: center;
+  color: #71817e;
+  padding: 20px;
+  margin: 0;
+}
+
+/* =========================
+   Mobile
+   ========================= */
+
+@media (max-width: 800px) {
+  .order-admin-main {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .order-status-box {
+    width: 100%;
+  }
+
+  .product-admin-item {
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+
+  .product-admin-item > button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .product-admin-image {
+    width: 60px;
+    height: 60px;
+  }
+
+  .ticket-admin-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-header .container {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .admin-header h1 {
+    font-size: 19px;
+  }
+
+  .back-link {
+    justify-content: center;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-group.full {
+    grid-column: auto;
+  }
+
+  .admin-card {
+    padding: 16px;
+  }
+
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .section-heading .secondary-button {
+    width: 100%;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مدیریت پشتیبانی | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <section class="admin-card">
+
+      <div class="section-heading">
+        <h2>تیکت‌های پشتیبانی</h2>
+        <button id="refresh-tickets" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+
+      <div id="order-filter-banner" style="display:none;"></div>
+
+      <div class="filter-bar">
+        <input id="tickets-search" type="text" placeholder="جست‌وجو بر اساس کد پیگیری، موبایل، نام یا موضوع">
+        <select id="tickets-status-filter">
+          <option value="">همه وضعیت‌ها</option>
+          <option value="received">ثبت شده</option>
+          <option value="in_review">در حال بررسی</option>
+          <option value="answered">پاسخ داده شد</option>
+          <option value="closed">بسته شد</option>
+        </select>
+        <button id="tickets-search-button" class="secondary-button" type="button">جست‌وجو</button>
+      </div>
+
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری تیکت‌ها...</p>
+      </div>
+
+      <div id="pagination-container"></div>
+
+    </section>
+
+  </main>
+
+  <div id="modal-root"></div>
+
+  <script src="../admin-common.js"></script>
+  <script src="support.js"></script>
+</body>
+</html>

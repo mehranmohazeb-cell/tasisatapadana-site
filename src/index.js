@@ -464,16 +464,164 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
   }
 
   // =========================
+  // Admin Dashboard — Summary (فقط COUNT، بدون ارسال کل داده‌ها)
+  // GET /api/store/admin/summary
+  // =========================
+
+  if (url.pathname === "/api/store/admin/summary" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const productsTotalRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM products")
+        .first();
+
+      const productsActiveRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM products WHERE active = 1")
+        .first();
+
+      const productsTotal = productsTotalRow?.c || 0;
+      const productsActive = productsActiveRow?.c || 0;
+
+      const ordersTotalRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM orders")
+        .first();
+
+      const ordersByStatusResult = await env.DB
+        .prepare("SELECT status, COUNT(*) AS c FROM orders GROUP BY status")
+        .all();
+
+      const ordersByStatus = {};
+      for (const row of ordersByStatusResult.results || []) {
+        ordersByStatus[row.status] = row.c;
+      }
+
+      const ticketsTotalRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM tickets")
+        .first();
+
+      const ticketsByStatusResult = await env.DB
+        .prepare("SELECT status, COUNT(*) AS c FROM tickets GROUP BY status")
+        .all();
+
+      const ticketsByStatus = {};
+      for (const row of ticketsByStatusResult.results || []) {
+        ticketsByStatus[row.status] = row.c;
+      }
+
+      // تعریف مرکزی «جدید» / گروه‌بندی وضعیت‌ها — طبق مقادیر واقعی backend:
+      // orders: pending=جدید, confirmed+preparing=در حال بررسی/آماده‌سازی, shipped, completed
+      // tickets: received=جدید, in_review=در حال پیگیری, (received+in_review)=پاسخ‌داده‌نشده
+      const orders = {
+        total: ordersTotalRow?.c || 0,
+        new: ordersByStatus.pending || 0,
+        in_review: (ordersByStatus.confirmed || 0) + (ordersByStatus.preparing || 0),
+        shipped: ordersByStatus.shipped || 0,
+        completed: ordersByStatus.completed || 0,
+        cancelled: ordersByStatus.cancelled || 0,
+      };
+
+      const tickets = {
+        total: ticketsTotalRow?.c || 0,
+        new: ticketsByStatus.received || 0,
+        in_progress: ticketsByStatus.in_review || 0,
+        unanswered: (ticketsByStatus.received || 0) + (ticketsByStatus.in_review || 0),
+      };
+
+      return Response.json({
+        ok: true,
+        products: {
+          total: productsTotal,
+          active: productsActive,
+          inactive: productsTotal - productsActive,
+        },
+        orders,
+        tickets,
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // =========================
   // Products - Public List
   // =========================
 
   if (url.pathname === "/api/store/products" && request.method === "GET") {
+    const adminRequest = isAdmin(request, env);
+
+    // حالت عمومی (فروشگاه): دقیقاً همان رفتار قبلی، بدون هیچ تغییری.
+    if (!adminRequest) {
+      try {
+        const result = await env.DB
+          .prepare(
+            "SELECT id, name, slug, description, price, image, stock, active " +
+            "FROM products WHERE active = 1 ORDER BY id DESC"
+          )
+          .all();
+
+        const products = result.results || [];
+
+        for (const product of products) {
+          product.images = await getProductImages(product.id);
+
+          if (product.images.length === 0 && product.image) {
+            product.images = [{ id: null, image: product.image, sort_order: 0 }];
+          }
+        }
+
+        return Response.json({ ok: true, products });
+      } catch (error) {
+        return Response.json(
+          { ok: false, error: "DATABASE_ERROR", message: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // حالت مدیریت: pagination واقعی + جست‌وجو + فیلتر فعال/غیرفعال،
+    // تا لیست محصولات هرگز یکجا به مرورگر ارسال نشود.
     try {
+      const page = Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 20));
+      const q = (url.searchParams.get("q") || "").trim();
+      const activeParam = url.searchParams.get("active"); // "1" | "0" | null (همه)
+
+      const conditions = [];
+      const params = [];
+
+      if (activeParam === "1" || activeParam === "0") {
+        conditions.push("active = ?");
+        params.push(Number(activeParam));
+      }
+
+      if (q) {
+        conditions.push("(name LIKE ? OR slug LIKE ?)");
+        params.push(`%${q}%`, `%${q}%`);
+      }
+
+      const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const countRow = await env.DB
+        .prepare(`SELECT COUNT(*) AS c FROM products ${whereClause}`)
+        .bind(...params)
+        .first();
+
+      const total = countRow?.c || 0;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const offset = (page - 1) * limit;
+
       const result = await env.DB
         .prepare(
           "SELECT id, name, slug, description, price, image, stock, active " +
-          "FROM products WHERE active = 1 ORDER BY id DESC"
+          `FROM products ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
         )
+        .bind(...params, limit, offset)
         .all();
 
       const products = result.results || [];
@@ -486,7 +634,14 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
         }
       }
 
-      return Response.json({ ok: true, products });
+      return Response.json({
+        ok: true,
+        products,
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+      });
     } catch (error) {
       return Response.json(
         { ok: false, error: "DATABASE_ERROR", message: error.message },
@@ -511,6 +666,8 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
     try {
       const statusFilter = (url.searchParams.get("status") || "").trim();
       const query = (url.searchParams.get("q") || "").trim();
+      const page = Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 20));
 
       const conditions = [];
       const params = [];
@@ -529,17 +686,28 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
 
       const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
+      const countRow = await env.DB
+        .prepare(`SELECT COUNT(*) AS c FROM orders ${whereClause}`)
+        .bind(...params)
+        .first();
+
+      const total = countRow?.c || 0;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const offset = (page - 1) * limit;
+
       const ordersResult = await env.DB
         .prepare(
           "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
           "customer_address, province, city, street, sub_street, alley, plaque, " +
           "unit, postal_code, address_note, total, status, payment_status, " +
-          "postal_carrier, postal_tracking_code, created_at, updated_at " +
+          "postal_carrier, postal_tracking_code, created_at, updated_at, " +
+          "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id) AS ticket_count, " +
+          "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id AND t.status != 'closed') AS open_ticket_count " +
           "FROM orders " +
           whereClause +
-          " ORDER BY id DESC LIMIT 200"
+          " ORDER BY id DESC LIMIT ? OFFSET ?"
         )
-        .bind(...params)
+        .bind(...params, limit, offset)
         .all();
 
       const orders = ordersResult.results || [];
@@ -558,7 +726,14 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
         order.is_guest = !order.customer_id;
       }
 
-      return Response.json({ ok: true, orders });
+      return Response.json({
+        ok: true,
+        orders,
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+      });
     } catch (error) {
       return Response.json(
         { ok: false, error: "DATABASE_ERROR", message: error.message },
@@ -845,6 +1020,7 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
 
       const id = Number(body.id);
       const name = String(body.name || "").trim();
+      const slug = body.slug != null ? String(body.slug).trim() : "";
       const description = String(body.description || "").trim();
       const image = String(body.image || "").trim();
       const price = Number(body.price);
@@ -865,11 +1041,27 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
         );
       }
 
+      if (slug) {
+        const slugOwner = await env.DB
+          .prepare("SELECT id FROM products WHERE slug = ? AND id != ? LIMIT 1")
+          .bind(slug, id)
+          .first();
+
+        if (slugOwner) {
+          return Response.json(
+            { ok: false, error: "SLUG_TAKEN", message: "این شناسه (Slug) قبلاً برای محصول دیگری استفاده شده است." },
+            { status: 400 }
+          );
+        }
+      }
+
+      // اگر slug ارسال نشود (تماس‌های قدیمی)، مقدار فعلی حفظ می‌شود.
       const result = await env.DB
         .prepare(
-          "UPDATE products SET name = ?, description = ?, price = ?, image = ?, stock = ?, active = ? WHERE id = ?"
+          "UPDATE products SET name = ?, slug = COALESCE(NULLIF(?, ''), slug), " +
+          "description = ?, price = ?, image = ?, stock = ?, active = ? WHERE id = ?"
         )
-        .bind(name, description, price, image, stock, active, id)
+        .bind(name, slug, description, price, image, stock, active, id)
         .run();
 
       if (!result.meta?.changes) {
@@ -1941,6 +2133,9 @@ if (
     try {
       const statusFilter = (url.searchParams.get("status") || "").trim();
       const query = (url.searchParams.get("q") || "").trim();
+      const orderIdFilter = (url.searchParams.get("order_id") || "").trim();
+      const page = Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 20));
 
       const conditions = [];
       const params = [];
@@ -1951,20 +2146,34 @@ if (
       }
 
       if (query) {
-        conditions.push("(tracking_code LIKE ? OR mobile LIKE ? OR name LIKE ?)");
-        params.push(`%${query}%`, `%${query}%`, `%${query}%`);
+        conditions.push("(tracking_code LIKE ? OR mobile LIKE ? OR name LIKE ? OR subject LIKE ?)");
+        params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
+      }
+
+      if (orderIdFilter && Number.isInteger(Number(orderIdFilter))) {
+        conditions.push("order_id = ?");
+        params.push(Number(orderIdFilter));
       }
 
       const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const countRow = await env.DB
+        .prepare(`SELECT COUNT(*) AS c FROM tickets ${whereClause}`)
+        .bind(...params)
+        .first();
+
+      const total = countRow?.c || 0;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const offset = (page - 1) * limit;
 
       const result = await env.DB
         .prepare(
           "SELECT id, tracking_code, customer_id, order_id, name, mobile, email, subject, " +
           "status, created_at, updated_at FROM tickets " +
           whereClause +
-          " ORDER BY id DESC LIMIT 200"
+          " ORDER BY id DESC LIMIT ? OFFSET ?"
         )
-        .bind(...params)
+        .bind(...params, limit, offset)
         .all();
 
       const tickets = (result.results || []).map((t) => ({
@@ -1972,7 +2181,14 @@ if (
         status_label: TICKET_STATUS_LABELS[t.status] || t.status,
       }));
 
-      return Response.json({ ok: true, tickets });
+      return Response.json({
+        ok: true,
+        tickets,
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+      });
     } catch (error) {
       return Response.json(
         { ok: false, error: "DATABASE_ERROR", message: error.message },
