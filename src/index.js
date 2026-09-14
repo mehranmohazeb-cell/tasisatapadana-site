@@ -375,11 +375,12 @@ async function sendSmsIrVerify(mobile, templateId, parameters) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-  throw new Error(
-    data?.message ||
-    data?.Message ||
-   
-}SMS.ir API error: ${response.status}
+    throw new Error(
+      data?.message ||
+      data?.Message ||
+      SMS.ir API error: ${response.status}
+    );
+  }
 
   return data;
 }
