@@ -15,6 +15,8 @@
   --accent-dark: #944417;
   --whatsapp: #2e9e5b;
   --whatsapp-dark: #257e49;
+  --support-btn: #b8860b;
+  --support-btn-dark: #96700a;
   --bg: #ffffff;
   --bg-alt: #eef3f3;
   --border: #dde3e2;
@@ -144,13 +146,23 @@ p {
 }
 
 .btn-support {
-  background: var(--primary);
-  color: #fff;
+  background: var(--support-btn);
+  color: var(--ink);
 }
 
 .btn-support:hover,
 .btn-support:focus-visible {
-  background: var(--primary-dark);
+  background: var(--support-btn-dark);
+}
+
+.btn-email {
+  background: var(--bg-alt);
+  color: var(--ink);
+}
+
+.btn-email:hover,
+.btn-email:focus-visible {
+  background: var(--border);
 }
 
 .cta-group {
@@ -498,8 +510,17 @@ p {
 }
 
 .urgent-contact .cta-group {
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   margin-top: 8px;
+}
+
+.urgent-contact .cta-group .btn {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 /* =========================
