@@ -350,7 +350,40 @@ async function queueTicketSms(ticketId, phone, eventType, message) {
     console.error("queueTicketSms failed", error);
   }
 }
+// =========================
+// SMS.ir — ارسال پیامک Verify
+// =========================
+async function sendSmsIrVerify(mobile, templateId, parameters) {
+  if (!env.SMS_IR_API_KEY) {
+    throw new Error("SMS_IR_API_KEY is not configured");
+  }
 
+  const response = await fetch("https://api.sms.ir/v1/send/verify", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "X-API-KEY": env.SMS_IR_API_KEY,
+    },
+    body: JSON.stringify({
+      mobile,
+      templateId,
+      parameters,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ||
+      data?.Message ||
+      SMS.ir API error: ${response.status}
+    );
+  }
+
+  return data;
+}
 async function queueEmail(orderId, ticketId, toEmail, subject, body) {
   if (!toEmail) return;
 
