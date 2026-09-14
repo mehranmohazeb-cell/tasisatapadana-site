@@ -321,7 +321,7 @@ async function handleStoreApi(request, env) {
 // =========================
 // Helpers — Notifications
 // =========================
-async function queueSms(orderId, phone, eventType, message) {
+async function queueSms(env, orderId, phone, eventType, message) {
   try {
     await env.DB
       .prepare(
@@ -336,7 +336,7 @@ async function queueSms(orderId, phone, eventType, message) {
   }
 }
 
-async function queueTicketSms(ticketId, phone, eventType, message) {
+async function queueTicketSms(env, ticketId, phone, eventType, message) {
   try {
     await env.DB
       .prepare(
@@ -353,7 +353,7 @@ async function queueTicketSms(ticketId, phone, eventType, message) {
 // =========================
 // SMS.ir — ارسال پیامک Verify
 // =========================
-async function sendSmsIrVerify(mobile, templateId, parameters) {
+async function sendSmsIrVerify(env, mobile, templateId, parameters) {
   if (!env.SMS_IR_API_KEY) {
     throw new Error("SMS_IR_API_KEY is not configured");
   }
@@ -384,7 +384,7 @@ async function sendSmsIrVerify(mobile, templateId, parameters) {
 
   return data;
 }
-async function queueEmail(orderId, ticketId, toEmail, subject, body) {
+async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   if (!toEmail) return;
 
   let notificationId = null;
@@ -952,7 +952,7 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
           message += ` کد مرسوله پستی: ${postalTrackingCode}`;
         }
 
-        await queueSms(orderId, existingOrder.customer_phone, "status_changed", message);
+        await queueSms(env, orderId, existingOrder.customer_phone, "status_changed", message);
       }
 
       return Response.json({
@@ -1455,6 +1455,7 @@ async function queueEmail(orderId, ticketId, toEmail, subject, body) {
       }
 
       await queueSms(
+        env,
         orderId,
         mobile,
         "order_created",
@@ -2020,6 +2021,7 @@ if (
         .run();
 
       await queueTicketSms(
+        env,
         ticketId,
         mobile,
         "ticket_created",
@@ -2028,6 +2030,7 @@ if (
 
       if (email) {
         await queueEmail(
+          env,
           null,
           ticketId,
           email,
@@ -2380,6 +2383,7 @@ if (
         .run();
 
       await queueTicketSms(
+        env,
         ticketId,
         ticket.mobile,
         "ticket_replied",
@@ -2388,6 +2392,7 @@ if (
 
       if (ticket.email) {
         await queueEmail(
+          env,
           null,
           ticketId,
           ticket.email,
@@ -2401,6 +2406,75 @@ if (
       return Response.json(
         { ok: false, error: "DATABASE_ERROR", message: error.message },
         { status: 500 }
+      );
+    }
+  }
+
+  // =========================
+  // SMS.ir — Test Endpoint (فقط Admin)
+  // POST /api/sms/test
+  // =========================
+
+  if (url.pathname === "/api/sms/test" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const ALLOWED_SMS_TEMPLATES = [916162, 222638];
+
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json(
+        { ok: false, error: "INVALID_JSON", message: "بدنه درخواست JSON معتبر نیست." },
+        { status: 400 }
+      );
+    }
+
+    const mobileRaw = body?.mobile;
+    const templateId = Number(body?.templateId);
+    const code = normalizeDigits(body?.code).trim();
+
+    if (!mobileRaw || !isValidMobile(mobileRaw)) {
+      return Response.json(
+        { ok: false, error: "INVALID_MOBILE", message: "شماره موبایل معتبر نیست. فرمت صحیح: 09xxxxxxxxx" },
+        { status: 400 }
+      );
+    }
+
+    if (!ALLOWED_SMS_TEMPLATES.includes(templateId)) {
+      return Response.json(
+        {
+          ok: false,
+          error: "INVALID_TEMPLATE",
+          message: "Template ID مجاز نیست. مقادیر مجاز: 916162 یا 222638",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!/^\d{6}$/.test(code)) {
+      return Response.json(
+        { ok: false, error: "INVALID_CODE", message: "کد باید دقیقاً ۶ رقم و فقط عدد باشد." },
+        { status: 400 }
+      );
+    }
+
+    const normalizedMobile = normalizeDigits(mobileRaw).trim();
+
+    try {
+      await sendSmsIrVerify(env, normalizedMobile, templateId, [
+        { name: "CODE", value: code },
+      ]);
+
+      // مقدار مبایل/کد عمداً در response برنگردانده می‌شود.
+      return Response.json({ ok: true, message: "پیامک با موفقیت ارسال شد." });
+    } catch (error) {
+      // پیام خطا هرگز حاوی مقدار SMS_IR_API_KEY نیست؛ فقط پیام خطای SMS.ir یا عدم تنظیم Secret را منعکس می‌کند.
+      return Response.json(
+        { ok: false, error: "SMS_SEND_FAILED", message: error.message },
+        { status: 502 }
       );
     }
   }
@@ -2423,7 +2497,8 @@ export default {
 
     if (
       url.pathname.startsWith("/api/store/") ||
-      url.pathname.startsWith("/api/support/")
+      url.pathname.startsWith("/api/support/") ||
+      url.pathname.startsWith("/api/sms/")
     ) {
       return handleStoreApi(request, env);
     }
