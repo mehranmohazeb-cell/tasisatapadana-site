@@ -11,7 +11,7 @@ const CONTACT_CONFIG = {
   whatsapp: '989139029945',
 
   // ایمیل پشتیبانی/تماس با ما
-  email: 'info@tasisatapadanaesfahan.ir',
+  email: 'support@tasisatapadanaesfahan.ir',
 };
 
 document.addEventListener('DOMContentLoaded', () => {

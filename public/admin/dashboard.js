@@ -20,18 +20,18 @@ function renderAlerts(data) {
   const unansweredTickets = data.tickets?.unanswered || 0;
   if (unansweredTickets > 0) {
     alerts.push(`
-      <a href="../support/" class="alert-pill danger">
+      <span class="alert-pill danger">
         🔴 پشتیبانی ${unansweredTickets.toLocaleString("fa-IR")}
-      </a>
+      </span>
     `);
   }
 
   const newOrders = data.orders?.new || 0;
   if (newOrders > 0) {
     alerts.push(`
-      <a href="../orders/" class="alert-pill warning">
+      <span class="alert-pill warning">
         🟠 سفارش‌های جدید ${newOrders.toLocaleString("fa-IR")}
-      </a>
+      </span>
     `);
   }
 
