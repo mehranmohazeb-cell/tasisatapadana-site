@@ -378,7 +378,7 @@ async function sendSmsIrVerify(mobile, templateId, parameters) {
     throw new Error(
       data?.message ||
       data?.Message ||
-      SMS.ir API error: ${response.status}
+      String(SMS.ir API error: ${response.status})
     );
   }
 
