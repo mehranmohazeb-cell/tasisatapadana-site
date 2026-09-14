@@ -3,7 +3,11 @@
 // (داشبورد / محصولات / سفارش‌ها / پشتیبانی)
 // =========================================================================
 
+// نکته مهم: endpointهای «محصولات/سفارش‌ها/خلاصه» زیر مسیر /api/store هستند،
+// اما endpointهای «پشتیبانی/تیکت» زیر مسیر جدای /api/support ثبت شده‌اند
+// (طبق ساختار واقعی src/index.js). هر دو باید جدا نگه داشته شوند.
 const ADMIN_API_BASE = "/api/store";
+const SUPPORT_API_BASE = "/api/support";
 const ADMIN_TOKEN_STORAGE_KEY = "apadana_admin_token";
 
 // وضعیت‌ها دقیقاً همان مقادیر backend (src/index.js) — یک محل مرکزی
@@ -57,16 +61,16 @@ function requireAdminToken() {
   return token;
 }
 
-// درخواست به API مدیریت؛ در صورت 401 توکن پاک شده و دوباره پرسیده می‌شود
-// (فقط یک بار retry تا حلقه بی‌نهایت ایجاد نشود).
-async function fetchAdmin(path, options = {}, _retried = false) {
+// درخواست به API مدیریت با یک مسیر کامل (مثلاً "/api/support/admin/tickets").
+// در صورت 401 توکن پاک شده و دوباره پرسیده می‌شود (فقط یک بار retry).
+async function fetchAdminPath(fullPath, options = {}, _retried = false) {
   const token = requireAdminToken();
 
   if (!token) {
     throw new Error("ورود به مدیریت لغو شد.");
   }
 
-  const response = await fetch(`${ADMIN_API_BASE}${path}`, {
+  const response = await fetch(fullPath, {
     ...options,
     headers: {
       ...(options.headers || {}),
@@ -77,7 +81,7 @@ async function fetchAdmin(path, options = {}, _retried = false) {
   if (response.status === 401) {
     setAdminToken("");
     if (!_retried) {
-      return fetchAdmin(path, options, true);
+      return fetchAdminPath(fullPath, options, true);
     }
     throw new Error("رمز مدیریت صحیح نیست.");
   }
@@ -94,6 +98,16 @@ async function fetchAdmin(path, options = {}, _retried = false) {
   }
 
   return data;
+}
+
+// درخواست به endpointهای زیر /api/store (محصولات، سفارش‌ها، خلاصه داشبورد).
+async function fetchAdmin(path, options = {}) {
+  return fetchAdminPath(`${ADMIN_API_BASE}${path}`, options);
+}
+
+// درخواست به endpointهای زیر /api/support (تیکت‌های پشتیبانی).
+async function fetchSupportAdmin(path, options = {}) {
+  return fetchAdminPath(`${SUPPORT_API_BASE}${path}`, options);
 }
 
 // =========================
@@ -140,6 +154,22 @@ function getProductImageUrl(image) {
   if (value.startsWith("assets/")) return "/" + value;
   if (value.startsWith("products/")) return "/assets/" + value;
   return "/assets/products/" + value;
+}
+
+// عکس نمایشی یک محصول را دقیقاً به همان ترتیب اولویتی که فروشگاه عمومی
+// استفاده می‌کند برمی‌گرداند: products.image → اولین ردیف product_images →
+// placeholder. محصولاتی که فقط از طریق «تصاویر محصول» (product_images) عکس
+// دارند و ستون قدیمی image آن‌ها خالی است، قبلاً در پنل مدیریت دیده نمی‌شدند
+// چون فقط product.image بررسی می‌شد؛ این تابع همان مشکل را رفع می‌کند.
+function getProductDisplayImage(product) {
+  let source = product?.image || "";
+
+  if (!source && Array.isArray(product?.images) && product.images.length > 0) {
+    source = product.images[0]?.image || "";
+  }
+
+  const resolved = getProductImageUrl(source);
+  return resolved || "/assets/products/placeholder.svg";
 }
 
 // =========================

@@ -29,7 +29,7 @@ async function loadTickets(page = currentPage) {
   if (orderId) params.set("order_id", orderId);
 
   try {
-    const data = await fetchAdmin(`/support/admin/tickets?${params.toString()}`);
+    const data = await fetchSupportAdmin(`/admin/tickets?${params.toString()}`);
     currentPage = data.page || page;
     ticketsCache = data.tickets || [];
     renderTickets();
@@ -145,7 +145,7 @@ async function showTicketDetails(ticketId) {
   `;
 
   try {
-    const data = await fetchAdmin(`/support/admin/tickets/${Number(ticketId)}`);
+    const data = await fetchSupportAdmin(`/admin/tickets/${Number(ticketId)}`);
     root.innerHTML = renderTicketModal(data.ticket);
   } catch (error) {
     root.innerHTML = `
@@ -161,7 +161,7 @@ async function showTicketDetails(ticketId) {
 
 async function changeTicketStatus(ticketId, status) {
   try {
-    await fetchAdmin(`/support/admin/tickets/${Number(ticketId)}`, {
+    await fetchSupportAdmin(`/admin/tickets/${Number(ticketId)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -184,7 +184,7 @@ async function sendTicketReply(ticketId) {
   }
 
   try {
-    await fetchAdmin(`/support/admin/tickets/${Number(ticketId)}/reply`, {
+    await fetchSupportAdmin(`/admin/tickets/${Number(ticketId)}/reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),

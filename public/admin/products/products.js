@@ -52,16 +52,17 @@ function renderProducts(products) {
   }
 
   container.innerHTML = products.map((product) => {
-    const image = getProductImageUrl(product.image);
+    const image = getProductDisplayImage(product);
     const isActive = Number(product.active) === 1;
 
     return `
       <div class="product-admin-item">
-        ${
-          image
-            ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" class="product-admin-image" onerror="this.style.display='none';">`
-            : `<div class="product-admin-image"></div>`
-        }
+        <img
+          src="${escapeHtml(image)}"
+          alt="${escapeHtml(product.name)}"
+          class="product-admin-image"
+          onerror="this.onerror=null; this.src='/assets/products/placeholder.svg';"
+        >
         <div class="product-admin-info">
           <strong>${escapeHtml(product.name)}</strong>
           <span>قیمت: ${formatPrice(product.price)} تومان</span>
