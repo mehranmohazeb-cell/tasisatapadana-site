@@ -1817,12 +1817,13 @@ body.lightbox-open {
 
 .auth-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
 }
 
 .auth-tab-button {
-  flex: 1;
+  flex: 1 1 calc(50% - 8px);
   padding: 12px;
   border: 1px solid var(--border);
   background: var(--bg);

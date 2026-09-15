@@ -32,6 +32,63 @@ const TICKET_STATUS_LABELS = {
 
 const ALLOWED_TICKET_STATUSES = Object.keys(TICKET_STATUS_LABELS);
 
+// =========================================================================
+// SMS Template Registry (مرکزی)
+// این تنها محل مجاز برای نگهداری Template IDهای SMS.ir در کل پروژه است.
+// مقدار null یعنی: این رویداد هنوز در پنل SMS.ir قالب تأییدشده ندارد؛
+// Central SMS Service (تابع sendSms) در این حالت هرگز درخواست واقعی به
+// SMS.ir نمی‌زند و فقط با status='skipped_no_template' در sms_messages
+// ثبت می‌کند. این جلوی ارسال با template ID ساختگی را می‌گیرد.
+// =========================================================================
+const SMS_TEMPLATES = {
+  // --- احراز هویت مشتری (فعال و متصل) ---
+  AUTH_VERIFY: 222638, // تأیید شماره / ثبت‌نام / ورود OTP / تغییر شماره
+  PASSWORD_RESET: 916162, // بازیابی رمز عبور
+
+  // --- سفارش (بخش ۱۵) — هنوز template واقعی در SMS.ir ساخته نشده ---
+  ORDER_CREATED: null,
+  ORDER_CONFIRMED: null,
+  ORDER_PREPARING: null,
+  ORDER_SHIPPED: null,
+  ORDER_TRACKING: null,
+  ORDER_DELIVERED: null,
+  ORDER_CANCELLED: null,
+  ORDER_PROBLEM: null,
+
+  // --- پشتیبانی (بخش ۱۶) ---
+  SUPPORT_TICKET_CREATED: null,
+  SUPPORT_TICKET_REPLY: null,
+  SUPPORT_STATUS_CHANGED: null,
+  SUPPORT_CLOSED: null,
+
+  // --- خدمات فنی (بخش ۱۷) ---
+  SERVICE_REQUEST: null,
+  SERVICE_CONFIRMED: null,
+  SERVICE_APPOINTMENT: null,
+  SERVICE_REMINDER: null,
+  TECHNICIAN_DISPATCHED: null,
+  SERVICE_COMPLETED: null,
+  INVOICE_READY: null,
+
+  // --- بازاریابی و مناسبت‌ها (بخش ۲۱ و ۲۲) ---
+  MARKETING_GENERIC: null,
+  EVENT_BIRTHDAY: null,
+  EVENT_NOWRUZ: null,
+  EVENT_YALDA: null,
+};
+
+// انواع purpose مجاز برای OTP Engine (بخش ۱۰ تا ۱۳)
+const OTP_PURPOSES = ["register", "login", "password_reset", "phone_change"];
+
+// این دو purpose نباید فاش کنند شماره موبایل در سیستم وجود دارد یا نه
+// (بخش ۷/۱۲ — enumeration protection برای login و forgot-password).
+const OTP_ENUMERATION_SAFE_PURPOSES = ["login", "password_reset"];
+
+const OTP_CODE_TTL_SECONDS = 5 * 60; // اعتبار کد: ۵ دقیقه
+const OTP_RESEND_COOLDOWN_SECONDS = 90; // حداقل فاصله بین دو ارسال برای همان mobile+purpose
+const OTP_MAX_VERIFY_ATTEMPTS = 5; // حداکثر تلاش اشتباه برای یک کد
+const OTP_MAX_REQUESTS_PER_HOUR = 5; // حداکثر تعداد درخواست کد در هر ساعت برای همان mobile+purpose
+
 // کد پیگیری: حروف/ارقامی که با هم اشتباه گرفته می‌شوند (0/O، 1/I/L) حذف شده‌اند.
 const TRACKING_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const TRACKING_CODE_LENGTH = 10;
@@ -384,6 +441,95 @@ async function sendSmsIrVerify(env, mobile, templateId, parameters) {
 
   return data;
 }
+
+// =========================================================================
+// OTP Code Generator — بخش ۸
+// کد ۶ رقمی با crypto.getRandomValues (rejection sampling برای حذف bias)
+// =========================================================================
+function generateOtpCode() {
+  const max = 1000000; // 0..999999
+  const range = Math.floor(0x100000000 / max) * max;
+  let value;
+  do {
+    value = crypto.getRandomValues(new Uint32Array(1))[0];
+  } while (value >= range);
+  return String(value % max).padStart(6, "0");
+}
+
+// =========================================================================
+// Central SMS Service — بخش ۶
+// همه پیامک‌های سایت (OTP، سفارش، پشتیبانی، خدمات، ...) باید از همین تابع
+// عبور کنند: Business Event → sendSms → sendSmsIrVerify (provider) → نتیجه
+// در جدول sms_messages ثبت می‌شود. اگر eventType هنوز در SMS_TEMPLATES مقدار
+// null داشته باشد (template واقعی در SMS.ir ساخته نشده)، هیچ درخواستی به
+// SMS.ir زده نمی‌شود؛ فقط یک ردیف skipped_no_template در تاریخچه ثبت می‌شود.
+// =========================================================================
+async function sendSms(env, { mobile, eventType, code, customerId = null, purpose = null }) {
+  const templateId = SMS_TEMPLATES[eventType];
+
+  if (!templateId) {
+    try {
+      await env.DB
+        .prepare(
+          "INSERT INTO sms_messages (customer_id, mobile, event_type, purpose, template_id, status, provider) " +
+          "VALUES (?, ?, ?, ?, NULL, 'skipped_no_template', 'sms.ir')"
+        )
+        .bind(customerId, mobile, eventType, purpose)
+        .run();
+    } catch (dbError) {
+      console.error("sendSms: failed to log skipped message for", eventType, dbError.message);
+    }
+    return { ok: false, skipped: true, reason: "TEMPLATE_NOT_CONFIGURED" };
+  }
+
+  let status = "failed";
+  let errorCode = null;
+  let providerMessageId = null;
+
+  try {
+    const providerResult = await sendSmsIrVerify(env, mobile, templateId, [
+      { name: "CODE", value: code },
+    ]);
+    status = "sent";
+    providerMessageId = providerResult?.data?.messageId
+      ? String(providerResult.data.messageId)
+      : null;
+  } catch (error) {
+    status = "failed";
+    errorCode = error.message;
+  }
+
+  try {
+    await env.DB
+      .prepare(
+        "INSERT INTO sms_messages " +
+        "(customer_id, mobile, event_type, purpose, template_id, status, provider, provider_message_id, error_code, sent_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, 'sms.ir', ?, ?, ?)"
+      )
+      .bind(
+        customerId,
+        mobile,
+        eventType,
+        purpose,
+        templateId,
+        status,
+        providerMessageId,
+        errorCode,
+        status === "sent" ? new Date().toISOString() : null
+      )
+      .run();
+  } catch (dbError) {
+    console.error("sendSms: failed to log message for", eventType, dbError.message);
+  }
+
+  if (status !== "sent") {
+    // پیام خطا هرگز شامل SMS_IR_API_KEY نیست (فقط پیام برگشتی از sendSmsIrVerify).
+    throw new Error(errorCode || "SMS_SEND_FAILED");
+  }
+
+  return { ok: true };
+}
+
 async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   if (!toEmail) return;
 
@@ -479,7 +625,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     return Response.json({
       ok: true,
       service: "tasisat-apadana-store",
-      version: "2.0.0",
+      version: "2.1.0",
+      sms_architecture_version: "1.0.0",
       database: !!env.DB,
     });
   }
@@ -1749,6 +1896,405 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
       logged_in: true,
       customer: { id: sessionCustomer.id, full_name: sessionCustomer.full_name, phone: sessionCustomer.phone },
     });
+  }
+
+  // =========================
+  // حساب مشتری — OTP Engine (بخش ۸ تا ۱۳)
+  // این دو endpoint موتور مرکزی OTP هستند و برای هر ۴ purpose استفاده می‌شوند:
+  // register | login | password_reset | phone_change
+  // منطق ثبت‌نام/ورود قدیمی (بالا) دست‌نخورده باقی می‌ماند؛ این‌ها قابلیت
+  // افزوده هستند و frontend جدید از همین‌ها استفاده می‌کند.
+  // =========================
+
+  if (url.pathname === "/api/store/customers/otp/request" && request.method === "POST") {
+    try {
+      const body = await request.json();
+      const mobile = normalizeDigits(body.mobile || body.phone || "").trim();
+      const purpose = String(body.purpose || "").trim();
+
+      if (!isValidMobile(mobile)) {
+        return Response.json(
+          { ok: false, error: "INVALID_MOBILE", message: "شماره موبایل معتبر نیست." },
+          { status: 400 }
+        );
+      }
+
+      if (!OTP_PURPOSES.includes(purpose)) {
+        return Response.json(
+          { ok: false, error: "INVALID_PURPOSE", message: "نوع درخواست نامعتبر است." },
+          { status: 400 }
+        );
+      }
+
+      const enumerationSafe = OTP_ENUMERATION_SAFE_PURPOSES.includes(purpose);
+      const genericSentResponse = () =>
+        Response.json({
+          ok: true,
+          message: "در صورت معتبر بودن این شماره، کد تأیید برای آن ارسال شد.",
+          expires_in: OTP_CODE_TTL_SECONDS,
+        });
+
+      let customer = await env.DB
+        .prepare("SELECT id, full_name, phone, phone_verified FROM customers WHERE phone = ? LIMIT 1")
+        .bind(mobile)
+        .first();
+
+      // --- اعتبارسنجی و منطق مخصوص هر purpose ---
+
+      if (purpose === "register") {
+        const fullName = String(body.full_name || body.name || "").trim();
+        const password = String(body.password || "");
+
+        if (fullName.length < 3) {
+          return Response.json(
+            { ok: false, error: "INVALID_NAME", message: "نام و نام خانوادگی را کامل وارد کنید." },
+            { status: 400 }
+          );
+        }
+
+        if (password.length < 6) {
+          return Response.json(
+            { ok: false, error: "WEAK_PASSWORD", message: "رمز عبور باید حداقل ۶ کاراکتر باشد." },
+            { status: 400 }
+          );
+        }
+
+        if (customer && customer.phone_verified) {
+          return Response.json(
+            { ok: false, error: "PHONE_EXISTS", message: "این شماره موبایل قبلاً ثبت‌نام کرده است." },
+            { status: 409 }
+          );
+        }
+
+        const passwordHash = await hashPassword(password);
+
+        if (customer) {
+          // تلاش ثبت‌نام قبلی هنوز تأیید نشده بود؛ اطلاعات را به‌روزرسانی می‌کنیم.
+          await env.DB
+            .prepare("UPDATE customers SET full_name = ?, password_hash = ?, updated_at = ? WHERE id = ?")
+            .bind(fullName, passwordHash, nowIso(), customer.id)
+            .run();
+        } else {
+          const insertResult = await env.DB
+            .prepare(
+              "INSERT INTO customers (full_name, phone, password_hash, phone_verified) VALUES (?, ?, ?, 0)"
+            )
+            .bind(fullName, mobile, passwordHash)
+            .run();
+          customer = { id: insertResult.meta?.last_row_id };
+        }
+      } else if (purpose === "login") {
+        if (!customer) {
+          return genericSentResponse();
+        }
+      } else if (purpose === "password_reset") {
+        if (!customer) {
+          return genericSentResponse();
+        }
+      } else if (purpose === "phone_change") {
+        const sessionCustomer = await getSessionCustomer(request);
+        if (!sessionCustomer) {
+          return Response.json(
+            { ok: false, error: "UNAUTHORIZED", message: "برای تغییر شماره ابتدا وارد حساب شوید." },
+            { status: 401 }
+          );
+        }
+
+        const owner = await env.DB
+          .prepare("SELECT id FROM customers WHERE phone = ? AND id != ? LIMIT 1")
+          .bind(mobile, sessionCustomer.id)
+          .first();
+
+        if (owner) {
+          return Response.json(
+            { ok: false, error: "PHONE_EXISTS", message: "این شماره متعلق به حساب دیگری است." },
+            { status: 409 }
+          );
+        }
+
+        customer = { id: sessionCustomer.id };
+      }
+
+      // --- Rate limit: فاصله حداقل بین دو ارسال (resend cooldown) ---
+
+      const lastRow = await env.DB
+        .prepare(
+          "SELECT created_at FROM otp_codes WHERE mobile = ? AND purpose = ? ORDER BY id DESC LIMIT 1"
+        )
+        .bind(mobile, purpose)
+        .first();
+
+      if (lastRow) {
+        const elapsedSeconds = (Date.now() - new Date(lastRow.created_at).getTime()) / 1000;
+        if (elapsedSeconds < OTP_RESEND_COOLDOWN_SECONDS) {
+          if (enumerationSafe) return genericSentResponse();
+          return Response.json(
+            {
+              ok: false,
+              error: "RESEND_COOLDOWN",
+              message: `لطفاً ${Math.ceil(OTP_RESEND_COOLDOWN_SECONDS - elapsedSeconds)} ثانیه دیگر دوباره تلاش کنید.`,
+            },
+            { status: 429 }
+          );
+        }
+      }
+
+      // --- Rate limit: حداکثر تعداد درخواست در یک ساعت ---
+
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const countRow = await env.DB
+        .prepare(
+          "SELECT COUNT(*) AS c FROM otp_codes WHERE mobile = ? AND purpose = ? AND created_at > ?"
+        )
+        .bind(mobile, purpose, hourAgo)
+        .first();
+
+      if ((countRow?.c || 0) >= OTP_MAX_REQUESTS_PER_HOUR) {
+        if (enumerationSafe) return genericSentResponse();
+        return Response.json(
+          {
+            ok: false,
+            error: "RATE_LIMITED",
+            message: "تعداد درخواست‌های شما بیش از حد مجاز است. کمی بعد دوباره تلاش کنید.",
+          },
+          { status: 429 }
+        );
+      }
+
+      // --- تولید، hash، و ذخیره OTP ---
+
+      const code = generateOtpCode();
+      const codeHash = await hashPassword(code);
+      const expiresAt = new Date(Date.now() + OTP_CODE_TTL_SECONDS * 1000).toISOString();
+
+      await env.DB
+        .prepare(
+          "INSERT INTO otp_codes (mobile, code_hash, purpose, expires_at, status) VALUES (?, ?, ?, ?, 'pending')"
+        )
+        .bind(mobile, codeHash, purpose, expiresAt)
+        .run();
+
+      // --- ارسال از طریق Central SMS Service ---
+
+      const eventType = purpose === "password_reset" ? "PASSWORD_RESET" : "AUTH_VERIFY";
+
+      try {
+        await sendSms(env, {
+          mobile,
+          eventType,
+          code,
+          customerId: customer?.id || null,
+          purpose,
+        });
+      } catch (smsError) {
+        // برای login/password_reset هرگز جزئیات خطای provider را افشا نمی‌کنیم
+        // (enumeration protection) — فقط برای register/phone_change که وجود
+        // حساب از قبل مشخص است، خطای واقعی را برمی‌گردانیم.
+        console.error("OTP SMS send failed:", smsError.message);
+        if (enumerationSafe) return genericSentResponse();
+        return Response.json(
+          { ok: false, error: "SMS_SEND_FAILED", message: "ارسال پیامک ناموفق بود. لطفاً بعداً تلاش کنید." },
+          { status: 502 }
+        );
+      }
+
+      if (enumerationSafe) return genericSentResponse();
+
+      return Response.json({
+        ok: true,
+        message: "کد تأیید ارسال شد.",
+        expires_in: OTP_CODE_TTL_SECONDS,
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "SERVER_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (url.pathname === "/api/store/customers/otp/verify" && request.method === "POST") {
+    try {
+      const body = await request.json();
+      const mobile = normalizeDigits(body.mobile || body.phone || "").trim();
+      const purpose = String(body.purpose || "").trim();
+      const code = normalizeDigits(body.code || "").trim();
+
+      if (!isValidMobile(mobile)) {
+        return Response.json(
+          { ok: false, error: "INVALID_MOBILE", message: "شماره موبایل معتبر نیست." },
+          { status: 400 }
+        );
+      }
+
+      if (!OTP_PURPOSES.includes(purpose)) {
+        return Response.json(
+          { ok: false, error: "INVALID_PURPOSE", message: "نوع درخواست نامعتبر است." },
+          { status: 400 }
+        );
+      }
+
+      if (!/^\d{6}$/.test(code)) {
+        return Response.json(
+          { ok: false, error: "INVALID_CODE", message: "کد باید دقیقاً ۶ رقم باشد." },
+          { status: 400 }
+        );
+      }
+
+      const genericInvalid = () =>
+        Response.json(
+          { ok: false, error: "INVALID_OR_EXPIRED_CODE", message: "کد وارد شده نامعتبر یا منقضی شده است." },
+          { status: 400 }
+        );
+
+      const otpRow = await env.DB
+        .prepare(
+          "SELECT id, code_hash, expires_at, consumed_at, attempt_count FROM otp_codes " +
+          "WHERE mobile = ? AND purpose = ? ORDER BY id DESC LIMIT 1"
+        )
+        .bind(mobile, purpose)
+        .first();
+
+      if (!otpRow) return genericInvalid();
+      if (otpRow.consumed_at) return genericInvalid();
+      if (new Date(otpRow.expires_at).getTime() < Date.now()) return genericInvalid();
+
+      if (otpRow.attempt_count >= OTP_MAX_VERIFY_ATTEMPTS) {
+        return Response.json(
+          {
+            ok: false,
+            error: "TOO_MANY_ATTEMPTS",
+            message: "تعداد تلاش بیش از حد مجاز است. یک کد جدید درخواست کنید.",
+          },
+          { status: 429 }
+        );
+      }
+
+      const isValid = await verifyPassword(code, otpRow.code_hash);
+
+      if (!isValid) {
+        await env.DB
+          .prepare("UPDATE otp_codes SET attempt_count = attempt_count + 1 WHERE id = ?")
+          .bind(otpRow.id)
+          .run();
+        return genericInvalid();
+      }
+
+      // کد صحیح است؛ بلافاصله one-time mark می‌شود تا دوباره مصرف نشود.
+      await env.DB
+        .prepare("UPDATE otp_codes SET consumed_at = ?, status = 'verified' WHERE id = ?")
+        .bind(nowIso(), otpRow.id)
+        .run();
+
+      // --- نهایی‌سازی مخصوص هر purpose ---
+
+      if (purpose === "register") {
+        const customer = await env.DB
+          .prepare("SELECT id, full_name, phone FROM customers WHERE phone = ? LIMIT 1")
+          .bind(mobile)
+          .first();
+
+        if (!customer) {
+          return Response.json(
+            { ok: false, error: "NOT_FOUND", message: "درخواست ثبت‌نام یافت نشد. دوباره تلاش کنید." },
+            { status: 404 }
+          );
+        }
+
+        await env.DB.prepare("UPDATE customers SET phone_verified = 1 WHERE id = ?").bind(customer.id).run();
+        const token = await createCustomerSession(customer.id);
+
+        return Response.json(
+          { ok: true, customer: { id: customer.id, full_name: customer.full_name, phone: customer.phone } },
+          { status: 201, headers: { "Set-Cookie": buildSessionCookie(request, token, SESSION_TTL_SECONDS) } }
+        );
+      }
+
+      if (purpose === "login") {
+        const customer = await env.DB
+          .prepare("SELECT id, full_name, phone FROM customers WHERE phone = ? LIMIT 1")
+          .bind(mobile)
+          .first();
+
+        if (!customer) return genericInvalid();
+
+        const token = await createCustomerSession(customer.id);
+
+        return Response.json(
+          { ok: true, customer: { id: customer.id, full_name: customer.full_name, phone: customer.phone } },
+          { headers: { "Set-Cookie": buildSessionCookie(request, token, SESSION_TTL_SECONDS) } }
+        );
+      }
+
+      if (purpose === "password_reset") {
+        const newPassword = String(body.new_password || "");
+
+        if (newPassword.length < 6) {
+          return Response.json(
+            { ok: false, error: "WEAK_PASSWORD", message: "رمز عبور جدید باید حداقل ۶ کاراکتر باشد." },
+            { status: 400 }
+          );
+        }
+
+        const customer = await env.DB
+          .prepare("SELECT id FROM customers WHERE phone = ? LIMIT 1")
+          .bind(mobile)
+          .first();
+
+        if (!customer) {
+          // طبق سیاست enumeration protection همان پیام موفقیت عمومی برگردانده می‌شود.
+          return Response.json({ ok: true, message: "در صورت معتبر بودن این شماره، رمز عبور بروزرسانی شد." });
+        }
+
+        const newHash = await hashPassword(newPassword);
+        await env.DB
+          .prepare("UPDATE customers SET password_hash = ?, updated_at = ? WHERE id = ?")
+          .bind(newHash, nowIso(), customer.id)
+          .run();
+
+        // ابطال sessionهای قبلی برای امنیت بیشتر بعد از بازیابی رمز عبور.
+        await env.DB.prepare("DELETE FROM customer_sessions WHERE customer_id = ?").bind(customer.id).run();
+
+        return Response.json({ ok: true, message: "رمز عبور با موفقیت بروزرسانی شد." });
+      }
+
+      if (purpose === "phone_change") {
+        const sessionCustomer = await getSessionCustomer(request);
+
+        if (!sessionCustomer) {
+          return Response.json(
+            { ok: false, error: "UNAUTHORIZED", message: "ابتدا وارد حساب شوید." },
+            { status: 401 }
+          );
+        }
+
+        const owner = await env.DB
+          .prepare("SELECT id FROM customers WHERE phone = ? AND id != ? LIMIT 1")
+          .bind(mobile, sessionCustomer.id)
+          .first();
+
+        if (owner) {
+          return Response.json(
+            { ok: false, error: "PHONE_EXISTS", message: "این شماره متعلق به حساب دیگری است." },
+            { status: 409 }
+          );
+        }
+
+        await env.DB
+          .prepare("UPDATE customers SET phone = ?, phone_verified = 1, updated_at = ? WHERE id = ?")
+          .bind(mobile, nowIso(), sessionCustomer.id)
+          .run();
+
+        return Response.json({ ok: true, message: "شماره موبایل با موفقیت تغییر کرد." });
+      }
+
+      return genericInvalid();
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "SERVER_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
   }
 
   // =========================

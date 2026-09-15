@@ -45,6 +45,8 @@
     <div class="auth-tabs">
       <button type="button" class="auth-tab-button is-active" data-tab="login">ورود</button>
       <button type="button" class="auth-tab-button" data-tab="register">ثبت‌نام</button>
+      <button type="button" class="auth-tab-button" data-tab="login-otp">ورود با کد یکبار مصرف</button>
+      <button type="button" class="auth-tab-button" data-tab="forgot">فراموشی رمز عبور</button>
     </div>
 
     <form id="login-form" class="auth-form is-active" novalidate>
@@ -65,24 +67,105 @@
     </form>
 
     <form id="register-form" class="auth-form" novalidate>
-      <div class="field-grid">
-        <label class="field field-full">
-          نام و نام خانوادگی
-          <input id="register-name" type="text" required>
-        </label>
-        <label class="field field-full">
-          شماره موبایل
-          <input id="register-mobile" type="tel" inputmode="numeric" placeholder="09xxxxxxxxx" maxlength="11" required>
-        </label>
-        <label class="field field-full">
-          رمز عبور (حداقل ۶ کاراکتر)
-          <input id="register-password" type="password" required>
-        </label>
+      <div id="register-step-info">
+        <div class="field-grid">
+          <label class="field field-full">
+            نام و نام خانوادگی
+            <input id="register-name" type="text" required>
+          </label>
+          <label class="field field-full">
+            شماره موبایل
+            <input id="register-mobile" type="tel" inputmode="numeric" placeholder="09xxxxxxxxx" maxlength="11" required>
+          </label>
+          <label class="field field-full">
+            رمز عبور (حداقل ۶ کاراکتر)
+            <input id="register-password" type="password" required>
+          </label>
+        </div>
+        <div class="form-submit-row">
+          <button type="button" id="register-request-otp" class="product-button">دریافت کد تأیید</button>
+        </div>
       </div>
-      <div class="form-submit-row">
-        <button type="submit" class="product-button">ایجاد حساب کاربری</button>
+
+      <div id="register-step-otp" style="display:none;">
+        <p style="font-size:13px;color:#666;margin:0 0 10px;">کد ۶ رقمی پیامک‌شده به <strong id="register-otp-mobile"></strong> را وارد کنید.</p>
+        <div class="field-grid">
+          <label class="field field-full">
+            کد تأیید
+            <input id="register-otp-code" type="tel" inputmode="numeric" maxlength="6">
+          </label>
+        </div>
+        <div class="form-submit-row">
+          <button type="submit" class="product-button">تأیید و ایجاد حساب</button>
+          <button type="button" id="register-resend-otp" class="secondary-button">ارسال مجدد کد</button>
+        </div>
       </div>
+
       <div id="register-message" class="form-message"></div>
+    </form>
+
+    <form id="login-otp-form" class="auth-form" novalidate>
+      <div id="login-otp-step-mobile">
+        <div class="field-grid">
+          <label class="field field-full">
+            شماره موبایل
+            <input id="login-otp-mobile" type="tel" inputmode="numeric" placeholder="09xxxxxxxxx" maxlength="11" required>
+          </label>
+        </div>
+        <div class="form-submit-row">
+          <button type="button" id="login-otp-request" class="product-button">دریافت کد ورود</button>
+        </div>
+      </div>
+
+      <div id="login-otp-step-code" style="display:none;">
+        <p style="font-size:13px;color:#666;margin:0 0 10px;">در صورتی که این شماره ثبت‌نام کرده باشد، کد ۶ رقمی برایش پیامک شده است.</p>
+        <div class="field-grid">
+          <label class="field field-full">
+            کد تأیید
+            <input id="login-otp-code" type="tel" inputmode="numeric" maxlength="6">
+          </label>
+        </div>
+        <div class="form-submit-row">
+          <button type="submit" class="product-button">ورود</button>
+          <button type="button" id="login-otp-resend" class="secondary-button">ارسال مجدد کد</button>
+        </div>
+      </div>
+
+      <div id="login-otp-message" class="form-message"></div>
+    </form>
+
+    <form id="forgot-form" class="auth-form" novalidate>
+      <div id="forgot-step-mobile">
+        <div class="field-grid">
+          <label class="field field-full">
+            شماره موبایل
+            <input id="forgot-mobile" type="tel" inputmode="numeric" placeholder="09xxxxxxxxx" maxlength="11" required>
+          </label>
+        </div>
+        <div class="form-submit-row">
+          <button type="button" id="forgot-request-otp" class="product-button">دریافت کد بازیابی</button>
+        </div>
+      </div>
+
+      <div id="forgot-step-reset" style="display:none;">
+        <p style="font-size:13px;color:#666;margin:0 0 10px;">در صورتی که این شماره ثبت‌نام کرده باشد، کد بازیابی برایش پیامک شده است.</p>
+        <div class="field-grid">
+          <label class="field field-full">
+            کد تأیید
+            <input id="forgot-otp-code" type="tel" inputmode="numeric" maxlength="6">
+          </label>
+          <label class="field field-full">
+            رمز عبور جدید (حداقل ۶ کاراکتر)
+            <input id="forgot-new-password" type="password">
+          </label>
+        </div>
+        <div class="form-submit-row">
+          <button type="submit" class="product-button">تغییر رمز عبور</button>
+          <button type="button" id="forgot-resend-otp" class="secondary-button">ارسال مجدد کد</button>
+        </div>
+      </div>
+
+      <div id="forgot-message" class="form-message"></div>
     </form>
 
   </div>
@@ -122,6 +205,8 @@ function switchTab(tab) {
   });
   document.getElementById("login-form").classList.toggle("is-active", tab === "login");
   document.getElementById("register-form").classList.toggle("is-active", tab === "register");
+  document.getElementById("login-otp-form").classList.toggle("is-active", tab === "login-otp");
+  document.getElementById("forgot-form").classList.toggle("is-active", tab === "forgot");
 }
 
 async function checkSession() {
@@ -162,28 +247,151 @@ async function submitLogin(event) {
   }
 }
 
-async function submitRegister(event) {
-  event.preventDefault();
+// =========================
+// OTP helpers مشترک (ثبت‌نام، ورود با کد، فراموشی رمز)
+// =========================
 
+async function requestOtp(mobile, purpose, extra) {
+  const response = await fetch(`${API_BASE}/customers/otp/request`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mobile, purpose, ...extra }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.ok) throw new Error(data.message || "ارسال کد ناموفق بود.");
+  return data;
+}
+
+async function verifyOtp(mobile, purpose, code, extra) {
+  const response = await fetch(`${API_BASE}/customers/otp/verify`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mobile, purpose, code, ...extra }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.ok) throw new Error(data.message || "کد وارد شده نامعتبر است.");
+  return data;
+}
+
+// دکمه «ارسال مجدد» را برای مدت cooldown غیرفعال می‌کند (هماهنگ با
+// OTP_RESEND_COOLDOWN_SECONDS در بک‌اند؛ اگر سرور زودتر اجازه دهد، تلاش بعدی
+// خودش خطای واضح برمی‌گرداند، این تایمر فقط برای UX است).
+function startResendCooldown(buttonEl, seconds) {
+  let remaining = seconds;
+  buttonEl.disabled = true;
+  const originalText = buttonEl.dataset.originalText || buttonEl.textContent;
+  buttonEl.dataset.originalText = originalText;
+
+  const tick = () => {
+    if (remaining <= 0) {
+      buttonEl.disabled = false;
+      buttonEl.textContent = originalText;
+      return;
+    }
+    buttonEl.textContent = `${originalText} (${remaining.toLocaleString("fa-IR")})`;
+    remaining -= 1;
+    setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+// --- ثبت‌نام (دو مرحله‌ای: اطلاعات → کد تأیید) ---
+
+async function handleRegisterRequestOtp() {
   const name = document.getElementById("register-name").value.trim();
   const mobile = window.normalizeDigits(document.getElementById("register-mobile").value).trim();
   const password = document.getElementById("register-password").value;
 
   try {
-    const response = await fetch(`${API_BASE}/customers/register`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ full_name: name, mobile, password }),
-    });
+    await requestOtp(mobile, "register", { full_name: name, password });
+    document.getElementById("register-otp-mobile").textContent = mobile;
+    document.getElementById("register-step-info").style.display = "none";
+    document.getElementById("register-step-otp").style.display = "block";
+    showMessage("register-message", "کد تأیید ارسال شد.", "success");
+    startResendCooldown(document.getElementById("register-resend-otp"), 90);
+  } catch (error) {
+    showMessage("register-message", error.message, "error");
+  }
+}
 
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.message || "ثبت‌نام ناموفق بود.");
+async function submitRegisterVerify(event) {
+  event.preventDefault();
 
+  const mobile = window.normalizeDigits(document.getElementById("register-mobile").value).trim();
+  const code = document.getElementById("register-otp-code").value.trim();
+
+  try {
+    await verifyOtp(mobile, "register", code);
     showMessage("register-message", "حساب کاربری با موفقیت ایجاد شد.", "success");
     checkSession();
   } catch (error) {
     showMessage("register-message", error.message, "error");
+  }
+}
+
+// --- ورود با کد یکبار مصرف ---
+
+async function handleLoginOtpRequest() {
+  const mobile = window.normalizeDigits(document.getElementById("login-otp-mobile").value).trim();
+
+  try {
+    await requestOtp(mobile, "login");
+    document.getElementById("login-otp-step-mobile").style.display = "none";
+    document.getElementById("login-otp-step-code").style.display = "block";
+    showMessage("login-otp-message", "در صورت معتبر بودن شماره، کد ارسال شد.", "success");
+    startResendCooldown(document.getElementById("login-otp-resend"), 90);
+  } catch (error) {
+    showMessage("login-otp-message", error.message, "error");
+  }
+}
+
+async function submitLoginOtpVerify(event) {
+  event.preventDefault();
+
+  const mobile = window.normalizeDigits(document.getElementById("login-otp-mobile").value).trim();
+  const code = document.getElementById("login-otp-code").value.trim();
+
+  try {
+    await verifyOtp(mobile, "login", code);
+    showMessage("login-otp-message", "با موفقیت وارد شدید.", "success");
+    checkSession();
+  } catch (error) {
+    showMessage("login-otp-message", error.message, "error");
+  }
+}
+
+// --- فراموشی رمز عبور ---
+
+async function handleForgotRequestOtp() {
+  const mobile = window.normalizeDigits(document.getElementById("forgot-mobile").value).trim();
+
+  try {
+    await requestOtp(mobile, "password_reset");
+    document.getElementById("forgot-step-mobile").style.display = "none";
+    document.getElementById("forgot-step-reset").style.display = "block";
+    showMessage("forgot-message", "در صورت معتبر بودن شماره، کد بازیابی ارسال شد.", "success");
+    startResendCooldown(document.getElementById("forgot-resend-otp"), 90);
+  } catch (error) {
+    showMessage("forgot-message", error.message, "error");
+  }
+}
+
+async function submitForgotReset(event) {
+  event.preventDefault();
+
+  const mobile = window.normalizeDigits(document.getElementById("forgot-mobile").value).trim();
+  const code = document.getElementById("forgot-otp-code").value.trim();
+  const newPassword = document.getElementById("forgot-new-password").value;
+
+  try {
+    await verifyOtp(mobile, "password_reset", code, { new_password: newPassword });
+    showMessage("forgot-message", "رمز عبور با موفقیت تغییر کرد. اکنون می‌توانید وارد شوید.", "success");
+  } catch (error) {
+    showMessage("forgot-message", error.message, "error");
   }
 }
 
@@ -201,7 +409,18 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("login-form").addEventListener("submit", submitLogin);
-  document.getElementById("register-form").addEventListener("submit", submitRegister);
+  document.getElementById("register-request-otp").addEventListener("click", handleRegisterRequestOtp);
+  document.getElementById("register-form").addEventListener("submit", submitRegisterVerify);
+  document.getElementById("register-resend-otp").addEventListener("click", handleRegisterRequestOtp);
+
+  document.getElementById("login-otp-request").addEventListener("click", handleLoginOtpRequest);
+  document.getElementById("login-otp-form").addEventListener("submit", submitLoginOtpVerify);
+  document.getElementById("login-otp-resend").addEventListener("click", handleLoginOtpRequest);
+
+  document.getElementById("forgot-request-otp").addEventListener("click", handleForgotRequestOtp);
+  document.getElementById("forgot-form").addEventListener("submit", submitForgotReset);
+  document.getElementById("forgot-resend-otp").addEventListener("click", handleForgotRequestOtp);
+
   document.getElementById("logout-button").addEventListener("click", logout);
 });
 </script>
