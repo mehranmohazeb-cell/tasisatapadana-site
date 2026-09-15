@@ -265,6 +265,7 @@ const ADMIN_NAV_ITEMS = [
   { key: "products", href: "/admin/products/", label: "محصولات" },
   { key: "orders", href: "/admin/orders/", label: "سفارش‌ها" },
   { key: "support", href: "/admin/support/", label: "پشتیبانی" },
+  { key: "sms", href: "/admin/sms/", label: "مدیریت پیامک" },
 ];
 
 function renderAdminNav(activeKey) {
@@ -276,6 +277,25 @@ function renderAdminNav(activeKey) {
       ${item.label}
       <span class="nav-badge" data-nav-badge="${item.key}" style="display:none;"></span>
     </a>
+  `).join("");
+}
+
+// زیرمنوی داخلی بخش «مدیریت پیامک» (بخش ۵ دستور پنل SMS)
+const SMS_SUB_NAV_ITEMS = [
+  { key: "sms-dashboard", href: "/admin/sms/", label: "داشبورد" },
+  { key: "sms-history", href: "/admin/sms/history/", label: "تاریخچه" },
+  { key: "sms-send", href: "/admin/sms/send/", label: "ارسال پیامک" },
+  { key: "sms-templates", href: "/admin/sms/templates/", label: "قالب‌ها" },
+  { key: "sms-consent", href: "/admin/sms/consent/", label: "رضایت پیامکی" },
+  { key: "sms-scheduled", href: "/admin/sms/scheduled/", label: "پیامک زمان‌بندی‌شده" },
+];
+
+function renderSmsSubNav(activeKey) {
+  const nav = document.getElementById("sms-sub-nav");
+  if (!nav) return;
+
+  nav.innerHTML = SMS_SUB_NAV_ITEMS.map((item) => `
+    <a href="${item.href}" class="${item.key === activeKey ? "active" : ""}">${item.label}</a>
   `).join("");
 }
 

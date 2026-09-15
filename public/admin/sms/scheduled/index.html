@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>پیامک زمان‌بندی‌شده | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="sms-sub-nav"></div>
+
+    <section class="admin-card">
+      <h2>پیامک‌های زمان‌بندی‌شده</h2>
+      <div id="cron-status-banner"></div>
+      <div class="stat-grid" id="scheduled-stats" style="margin-top:16px;">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+      <p id="scheduled-note" style="font-size:13px; color:#71817e; margin-top:14px;"></p>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="scheduled.js"></script>
+</body>
+</html>

@@ -40,45 +40,179 @@ const ALLOWED_TICKET_STATUSES = Object.keys(TICKET_STATUS_LABELS);
 // SMS.ir نمی‌زند و فقط با status='skipped_no_template' در sms_messages
 // ثبت می‌کند. این جلوی ارسال با template ID ساختگی را می‌گیرد.
 // =========================================================================
-const SMS_TEMPLATES = {
-  // --- احراز هویت مشتری (فعال و متصل) ---
-  AUTH_VERIFY: 222638, // تأیید شماره / ثبت‌نام / ورود OTP / تغییر شماره
-  PASSWORD_RESET: 916162, // بازیابی رمز عبور
-
-  // --- سفارش (بخش ۱۵) — هنوز template واقعی در SMS.ir ساخته نشده ---
-  ORDER_CREATED: null,
-  ORDER_CONFIRMED: null,
-  ORDER_PREPARING: null,
-  ORDER_SHIPPED: null,
-  ORDER_TRACKING: null,
-  ORDER_DELIVERED: null,
-  ORDER_CANCELLED: null,
-  ORDER_PROBLEM: null,
-
-  // --- پشتیبانی (بخش ۱۶) ---
-  SUPPORT_TICKET_CREATED: null,
-  SUPPORT_TICKET_REPLY: null,
-  SUPPORT_STATUS_CHANGED: null,
-  SUPPORT_CLOSED: null,
-
-  // --- خدمات فنی (بخش ۱۷) ---
-  SERVICE_REQUEST: null,
-  SERVICE_CONFIRMED: null,
-  SERVICE_APPOINTMENT: null,
-  SERVICE_REMINDER: null,
-  TECHNICIAN_DISPATCHED: null,
-  SERVICE_COMPLETED: null,
-  INVOICE_READY: null,
-
-  // --- بازاریابی و مناسبت‌ها (بخش ۲۱ و ۲۲) ---
-  MARKETING_GENERIC: null,
-  EVENT_BIRTHDAY: null,
-  EVENT_NOWRUZ: null,
-  EVENT_YALDA: null,
+// SMS Template Registry (مرکزی)
+// این تنها محل مجاز برای نگهداری Template IDهای SMS.ir در کل پروژه است.
+// هر ۲۴ Template زیر واقعی و تأییدشده در پنل SMS.ir هستند (هیچ ID ساختگی
+// اضافه نشده). templateId هرگز نباید در جای دیگری از پروژه hard-code شود.
+//
+// enabled=false در اینجا یعنی: پیش‌فرض کد. مدیر می‌تواند از پنل مدیریت این
+// مقدار (و حتی خود templateId) را per-event override کند — آن override در
+// جدول D1 «sms_template_settings» ذخیره می‌شود (نه در همین فایل)، تا تغییر
+// یک قالب نیازمند ویرایش کد/دیپلوی نباشد. تابع getEffectiveTemplate همیشه
+// این Registry پایه را با override موجود در D1 ترکیب می‌کند.
+// =========================================================================
+const SMS_CATEGORY_LABELS = {
+  AUTH: "احراز هویت",
+  ORDER: "سفارش‌ها",
+  SUPPORT: "پشتیبانی",
+  SERVICE: "خدمات فنی",
+  REMINDER: "یادآوری‌ها",
 };
 
-// انواع purpose مجاز برای OTP Engine (بخش ۱۰ تا ۱۳)
+const SMS_TEMPLATE_REGISTRY = {
+  // --- احراز هویت مشتری (فعال و متصل — OTP Engine) ---
+  AUTH_VERIFY: {
+    templateId: 222638, title: "تأیید شماره / ثبت‌نام", category: "AUTH",
+    variables: ["CODE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "کد تأیید شماره موبایل هنگام ثبت‌نام.",
+  },
+  AUTH_LOGIN_OTP: {
+    templateId: 483547, title: "ورود با کد یکبار مصرف", category: "AUTH",
+    variables: ["CODE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "کد ورود بدون رمز عبور (OTP Login).",
+  },
+  AUTH_PASSWORD_RESET: {
+    templateId: 916162, title: "بازیابی رمز عبور", category: "AUTH",
+    variables: ["CODE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "کد بازیابی رمز عبور فراموش‌شده.",
+  },
+  AUTH_PHONE_CHANGE: {
+    templateId: 208162, title: "تغییر شماره موبایل", category: "AUTH",
+    variables: ["CODE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "کد تأیید شماره موبایل جدید هنگام تغییر شماره حساب.",
+  },
+
+  // --- سفارش ---
+  ORDER_CREATED: {
+    templateId: 499473, title: "ثبت سفارش جدید", category: "ORDER",
+    variables: ["ORDER_ID", "AMOUNT"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "تأیید ثبت سفارش برای مشتری.",
+  },
+  ORDER_CONFIRMED: {
+    templateId: 918848, title: "تأیید سفارش", category: "ORDER",
+    variables: ["ORDER_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "سفارش توسط فروشگاه تأیید شد.",
+  },
+  ORDER_PREPARING: {
+    templateId: 845757, title: "آماده‌سازی سفارش", category: "ORDER",
+    variables: ["ORDER_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "سفارش در حال آماده‌سازی است.",
+  },
+  ORDER_SHIPPED: {
+    templateId: 757424, title: "ارسال سفارش (با کد رهگیری)", category: "ORDER",
+    variables: ["ORDER_ID", "CARRIER", "TRACKING_CODE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "سفارش ارسال شد و کد رهگیری پستی موجود است.",
+  },
+  ORDER_SHIPPED_NO_TRACKING: {
+    templateId: 785278, title: "ارسال سفارش (بدون کد رهگیری)", category: "ORDER",
+    variables: ["ORDER_ID", "CARRIER"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "سفارش ارسال شد ولی هنوز کد رهگیری ثبت نشده است.",
+  },
+  ORDER_DELIVERED: {
+    templateId: 163605, title: "تحویل سفارش", category: "ORDER",
+    variables: ["ORDER_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "سفارش با موفقیت تحویل داده شد.",
+  },
+  ORDER_CANCELLED: {
+    templateId: 127393, title: "لغو سفارش", category: "ORDER",
+    variables: ["ORDER_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "سفارش لغو شد.",
+  },
+  ORDER_PROBLEM: {
+    templateId: 339384, title: "مشکل در سفارش", category: "ORDER",
+    variables: ["ORDER_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "سفارش با مشکل مواجه شده و نیاز به پیگیری دارد.",
+  },
+
+  // --- پشتیبانی ---
+  SUPPORT_TICKET_CREATED: {
+    templateId: 564607, title: "ثبت تیکت پشتیبانی", category: "SUPPORT",
+    variables: ["TICKET_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "تیکت پشتیبانی با موفقیت ثبت شد.",
+  },
+  SUPPORT_TICKET_REPLY: {
+    templateId: 814120, title: "پاسخ به تیکت", category: "SUPPORT",
+    variables: ["TICKET_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "پاسخ جدیدی به تیکت پشتیبانی داده شد.",
+  },
+  SUPPORT_TICKET_STATUS: {
+    templateId: 164557, title: "تغییر وضعیت تیکت", category: "SUPPORT",
+    variables: ["TICKET_ID", "STATUS"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "وضعیت تیکت پشتیبانی تغییر کرد.",
+  },
+  SUPPORT_TICKET_CLOSED: {
+    templateId: 165150, title: "بسته‌شدن تیکت", category: "SUPPORT",
+    variables: ["TICKET_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "تیکت پشتیبانی بسته شد.",
+  },
+
+  // --- خدمات فنی — Registry آماده است؛ سیستم خدمات فنی هنوز در پروژه
+  // پیاده‌سازی نشده، پس هیچ Trigger واقعی به این Templateها وصل نیست. ---
+  SERVICE_REQUEST_CREATED: {
+    templateId: 896059, title: "ثبت درخواست خدمات", category: "SERVICE",
+    variables: ["REQUEST_ID", "SERVICE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "درخواست خدمات فنی ثبت شد.",
+  },
+  SERVICE_CONFIRMED: {
+    templateId: 695783, title: "تأیید درخواست خدمات", category: "SERVICE",
+    variables: ["REQUEST_ID", "SERVICE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "درخواست خدمات فنی تأیید شد.",
+  },
+  SERVICE_APPOINTMENT: {
+    templateId: 484246, title: "تعیین زمان مراجعه", category: "SERVICE",
+    variables: ["REQUEST_ID", "DATE", "TIME"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "زمان مراجعه تکنسین تعیین شد.",
+  },
+  SERVICE_REMINDER: {
+    templateId: 462311, title: "یادآوری نوبت خدمات", category: "SERVICE",
+    variables: ["REQUEST_ID", "DATE", "TIME"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "یادآوری نوبت مراجعه خدمات فنی.",
+  },
+  SERVICE_TECHNICIAN_DISPATCH: {
+    templateId: 497649, title: "اعزام تکنسین", category: "SERVICE",
+    variables: ["REQUEST_ID", "SERVICE"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "تکنسین برای انجام خدمات اعزام شد.",
+  },
+  SERVICE_COMPLETED: {
+    templateId: 308815, title: "پایان خدمات", category: "SERVICE",
+    variables: ["REQUEST_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "خدمات فنی با موفقیت انجام شد.",
+  },
+  SERVICE_INVOICE_READY: {
+    templateId: 918690, title: "آماده‌شدن فاکتور خدمات", category: "SERVICE",
+    variables: ["REQUEST_ID"], enabled: true, allowManualSend: true, allowCampaign: false,
+    description: "فاکتور خدمات فنی آماده شد.",
+  },
+
+  // --- یادآوری دوره‌ای ---
+  BOILER_ANNUAL_SERVICE: {
+    templateId: 745468, title: "یادآوری سرویس سالانه پکیج", category: "REMINDER",
+    variables: ["NAME"], enabled: true, allowManualSend: true, allowCampaign: true,
+    description: "یادآوری سالانه سرویس پکیج؛ NAME از نام مشتری در D1 پر می‌شود.",
+  },
+};
+
+// انواع purpose مجاز برای OTP Engine (بخش ۱۰ تا ۱۳) و eventType متناظر هرکدام
+// در Template Registry — این تنها محل نگاشت purpose → template است.
 const OTP_PURPOSES = ["register", "login", "password_reset", "phone_change"];
+
+const OTP_PURPOSE_EVENT_TYPES = {
+  register: "AUTH_VERIFY",
+  login: "AUTH_LOGIN_OTP",
+  password_reset: "AUTH_PASSWORD_RESET",
+  phone_change: "AUTH_PHONE_CHANGE",
+};
+
+// وضعیت سفارش → Event پیامکی متناظر (بخش ۱۹ دستور). "shipped" جدا مدیریت
+// می‌شود چون بسته به وجود کد رهگیری، یکی از دو Template متفاوت را می‌گیرد.
+// "pending" عمداً نگاشت ندارد (پیامک ثبت سفارش همان لحظه ایجاد سفارش با
+// ORDER_CREATED ارسال می‌شود، نه اینجا).
+const ORDER_STATUS_SMS_EVENT_MAP = {
+  confirmed: "ORDER_CONFIRMED",
+  preparing: "ORDER_PREPARING",
+  completed: "ORDER_DELIVERED",
+  cancelled: "ORDER_CANCELLED",
+};
 
 // این دو purpose نباید فاش کنند شماره موبایل در سیستم وجود دارد یا نه
 // (بخش ۷/۱۲ — enumeration protection برای login و forgot-password).
@@ -457,17 +591,55 @@ function generateOtpCode() {
 }
 
 // =========================================================================
-// Central SMS Service — بخش ۶
-// همه پیامک‌های سایت (OTP، سفارش، پشتیبانی، خدمات، ...) باید از همین تابع
-// عبور کنند: Business Event → sendSms → sendSmsIrVerify (provider) → نتیجه
-// در جدول sms_messages ثبت می‌شود. اگر eventType هنوز در SMS_TEMPLATES مقدار
-// null داشته باشد (template واقعی در SMS.ir ساخته نشده)، هیچ درخواستی به
-// SMS.ir زده نمی‌شود؛ فقط یک ردیف skipped_no_template در تاریخچه ثبت می‌شود.
+// Effective Template Resolver
+// Registry پایه (بالا) هرگز از کد حذف نمی‌شود؛ اما مدیر می‌تواند از پنل
+// مدیریت، templateId یا enabled هر Event را override کند. آن override در
+// جدول sms_template_settings ذخیره می‌شود. این تابع همیشه ترکیب «Registry
+// پایه + آخرین override» را برمی‌گرداند. اگر جدول override هنوز روی D1
+// اجرا نشده باشد (قبل از migration)، به‌صورت امن فقط از Registry پایه
+// استفاده می‌کند (خطا نمی‌دهد).
 // =========================================================================
-async function sendSms(env, { mobile, eventType, code, customerId = null, purpose = null }) {
-  const templateId = SMS_TEMPLATES[eventType];
+async function getEffectiveTemplate(env, eventType) {
+  const base = SMS_TEMPLATE_REGISTRY[eventType];
+  if (!base) return null;
 
-  if (!templateId) {
+  let templateId = base.templateId;
+  let enabled = base.enabled && base.templateId != null;
+
+  try {
+    const override = await env.DB
+      .prepare("SELECT template_id, enabled FROM sms_template_settings WHERE event_type = ?")
+      .bind(eventType)
+      .first();
+
+    if (override) {
+      if (override.template_id != null) templateId = override.template_id;
+      enabled = !!override.enabled && templateId != null;
+    }
+  } catch (dbError) {
+    // جدول override هنوز وجود ندارد (قبل از اجرای migration) — به Registry پایه fallback می‌کنیم.
+  }
+
+  return { ...base, eventType, templateId, enabled };
+}
+
+// =========================================================================
+// Central SMS Service — بخش ۶ و ۲۲
+// همه پیامک‌های سایت (OTP، سفارش، پشتیبانی، خدمات، ...) باید از همین تابع
+// عبور کنند: Business Event → sendSms → Template Registry → sendSmsIrVerify
+// (provider) → نتیجه در جدول sms_messages ثبت می‌شود. اگر template غیرفعال
+// باشد یا templateId نداشته باشد، هیچ درخواستی به SMS.ir زده نمی‌شود؛ فقط
+// یک ردیف skipped_no_template در تاریخچه ثبت می‌شود.
+//
+// variables: یک object ساده مثل { CODE: "123456" } یا
+// { ORDER_ID: "1023", AMOUNT: "250000" } — دقیقاً باید نام متغیرهای همان
+// eventType در Registry را پوشش دهد؛ مقدار خام OTP هرگز در sms_messages
+// ذخیره نمی‌شود (فقط status/template_id/error_code ثبت می‌شوند).
+// =========================================================================
+async function sendSms(env, { mobile, eventType, variables = {}, customerId = null, purpose = null }) {
+  const template = await getEffectiveTemplate(env, eventType);
+
+  if (!template || !template.enabled || !template.templateId) {
     try {
       await env.DB
         .prepare(
@@ -482,14 +654,17 @@ async function sendSms(env, { mobile, eventType, code, customerId = null, purpos
     return { ok: false, skipped: true, reason: "TEMPLATE_NOT_CONFIGURED" };
   }
 
+  const parameters = (template.variables || []).map((name) => ({
+    name,
+    value: String(variables[name] ?? ""),
+  }));
+
   let status = "failed";
   let errorCode = null;
   let providerMessageId = null;
 
   try {
-    const providerResult = await sendSmsIrVerify(env, mobile, templateId, [
-      { name: "CODE", value: code },
-    ]);
+    const providerResult = await sendSmsIrVerify(env, mobile, template.templateId, parameters);
     status = "sent";
     providerMessageId = providerResult?.data?.messageId
       ? String(providerResult.data.messageId)
@@ -511,7 +686,7 @@ async function sendSms(env, { mobile, eventType, code, customerId = null, purpos
         mobile,
         eventType,
         purpose,
-        templateId,
+        template.templateId,
         status,
         providerMessageId,
         errorCode,
@@ -728,9 +903,648 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     }
   }
 
+  // =========================================================================
+  // SMS Admin Panel API — بخش ۵ تا ۲۶ دستور «توسعه پنل مدیریت SMS»
+  // همه این endpointها فقط Admin (X-Admin-Token) هستند.
+  // =========================================================================
+
+  // --- داشبورد پیامک ---
+  // GET /api/store/admin/sms/summary
+  if (url.pathname === "/api/store/admin/sms/summary" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const todayRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM sms_messages WHERE date(created_at) = date('now')")
+        .first();
+      const monthRow = await env.DB
+        .prepare(
+          "SELECT COUNT(*) AS c FROM sms_messages WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
+        )
+        .first();
+
+      const statusRows = await env.DB
+        .prepare("SELECT status, COUNT(*) AS c FROM sms_messages GROUP BY status")
+        .all();
+
+      const statusCounts = { sent: 0, failed: 0, skipped_no_template: 0 };
+      for (const row of statusRows.results || []) {
+        statusCounts[row.status] = row.c;
+      }
+
+      const consentRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM customers WHERE sms_marketing_consent = 1")
+        .first();
+
+      const lastMessagesResult = await env.DB
+        .prepare(
+          "SELECT sm.id, sm.mobile, sm.event_type, sm.status, sm.template_id, sm.created_at, sm.sent_at, " +
+          "c.full_name AS customer_name " +
+          "FROM sms_messages sm LEFT JOIN customers c ON c.id = sm.customer_id " +
+          "ORDER BY sm.id DESC LIMIT 10"
+        )
+        .all();
+
+      const mostUsedRow = await env.DB
+        .prepare(
+          "SELECT event_type, COUNT(*) AS c FROM sms_messages GROUP BY event_type ORDER BY c DESC LIMIT 1"
+        )
+        .first();
+
+      const eventTypes = Object.keys(SMS_TEMPLATE_REGISTRY);
+      let activeTemplatesCount = 0;
+      for (const eventType of eventTypes) {
+        const effective = await getEffectiveTemplate(env, eventType);
+        if (effective?.enabled) activeTemplatesCount += 1;
+      }
+
+      const totalAttempts = (statusCounts.sent || 0) + (statusCounts.failed || 0);
+      const successRate = totalAttempts > 0 ? Math.round((statusCounts.sent / totalAttempts) * 1000) / 10 : null;
+
+      return Response.json({
+        ok: true,
+        today_count: todayRow?.c || 0,
+        month_count: monthRow?.c || 0,
+        sent_count: statusCounts.sent || 0,
+        failed_count: statusCounts.failed || 0,
+        skipped_count: statusCounts.skipped_no_template || 0,
+        // این معماری فعلاً ارسال synchronous دارد (صف/Queue واقعی وجود ندارد)،
+        // پس هیچ پیامی هیچ‌وقت در وضعیت واقعی «در انتظار» باقی نمی‌ماند.
+        pending_count: 0,
+        success_rate_percent: successRate,
+        active_templates_count: activeTemplatesCount,
+        total_templates_count: eventTypes.length,
+        customers_with_consent_count: consentRow?.c || 0,
+        most_used_template: mostUsedRow?.event_type || null,
+        last_messages: lastMessagesResult.results || [],
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- قالب‌ها ---
+  // GET /api/store/admin/sms/templates
+  if (url.pathname === "/api/store/admin/sms/templates" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const templates = [];
+
+      for (const [eventType, base] of Object.entries(SMS_TEMPLATE_REGISTRY)) {
+        const effective = await getEffectiveTemplate(env, eventType);
+
+        const statsRow = await env.DB
+          .prepare(
+            "SELECT COUNT(*) AS total, " +
+            "SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent, " +
+            "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, " +
+            "MAX(sent_at) AS last_sent_at " +
+            "FROM sms_messages WHERE event_type = ?"
+          )
+          .bind(eventType)
+          .first();
+
+        templates.push({
+          event_type: eventType,
+          title: base.title,
+          description: base.description,
+          category: base.category,
+          category_label: SMS_CATEGORY_LABELS[base.category] || base.category,
+          variables: base.variables,
+          provider: "sms.ir",
+          allow_manual_send: !!base.allowManualSend,
+          allow_campaign: !!base.allowCampaign,
+          template_id: effective.templateId,
+          default_template_id: base.templateId,
+          enabled: effective.enabled,
+          is_overridden: effective.templateId !== base.templateId || effective.enabled !== base.enabled,
+          stats: {
+            total: statsRow?.total || 0,
+            sent: statsRow?.sent || 0,
+            failed: statsRow?.failed || 0,
+            last_sent_at: statsRow?.last_sent_at || null,
+          },
+        });
+      }
+
+      return Response.json({ ok: true, templates });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // PUT /api/store/admin/sms/templates/:eventType
+  if (
+    url.pathname.startsWith("/api/store/admin/sms/templates/") &&
+    request.method === "PUT"
+  ) {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const eventType = decodeURIComponent(url.pathname.split("/").pop());
+
+    if (!SMS_TEMPLATE_REGISTRY[eventType]) {
+      return Response.json(
+        { ok: false, error: "UNKNOWN_EVENT_TYPE", message: "این نوع رویداد در Registry وجود ندارد." },
+        { status: 404 }
+      );
+    }
+
+    try {
+      const body = await request.json();
+      const rawTemplateId = body.template_id;
+      const enabled = body.enabled === false ? 0 : 1;
+
+      let templateId = null;
+      if (rawTemplateId !== null && rawTemplateId !== undefined && rawTemplateId !== "") {
+        templateId = Number(rawTemplateId);
+        if (!Number.isInteger(templateId) || templateId <= 0) {
+          return Response.json(
+            { ok: false, error: "INVALID_TEMPLATE_ID", message: "Template ID باید یک عدد صحیح مثبت باشد." },
+            { status: 400 }
+          );
+        }
+      }
+
+      await env.DB
+        .prepare(
+          "INSERT INTO sms_template_settings (event_type, template_id, enabled, updated_at) VALUES (?, ?, ?, ?) " +
+          "ON CONFLICT(event_type) DO UPDATE SET template_id = excluded.template_id, enabled = excluded.enabled, updated_at = excluded.updated_at"
+        )
+        .bind(eventType, templateId, enabled, nowIso())
+        .run();
+
+      const effective = await getEffectiveTemplate(env, eventType);
+
+      return Response.json({
+        ok: true,
+        message: "تنظیمات قالب بروزرسانی شد.",
+        event_type: eventType,
+        template_id: effective.templateId,
+        enabled: effective.enabled,
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "SERVER_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- تاریخچه پیامک ---
+  // GET /api/store/admin/sms/history
+  if (url.pathname === "/api/store/admin/sms/history" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const page = Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 20));
+      const mobile = (url.searchParams.get("mobile") || "").trim();
+      const eventType = (url.searchParams.get("event_type") || "").trim();
+      const category = (url.searchParams.get("category") || "").trim();
+      const templateId = (url.searchParams.get("template_id") || "").trim();
+      const status = (url.searchParams.get("status") || "").trim();
+      const dateFrom = (url.searchParams.get("date_from") || "").trim();
+      const dateTo = (url.searchParams.get("date_to") || "").trim();
+
+      const conditions = [];
+      const params = [];
+
+      if (mobile) {
+        conditions.push("sm.mobile LIKE ?");
+        params.push(`%${mobile}%`);
+      }
+      if (eventType) {
+        conditions.push("sm.event_type = ?");
+        params.push(eventType);
+      }
+      if (category) {
+        const eventTypesInCategory = Object.entries(SMS_TEMPLATE_REGISTRY)
+          .filter(([, def]) => def.category === category)
+          .map(([key]) => key);
+        if (eventTypesInCategory.length > 0) {
+          conditions.push(`sm.event_type IN (${eventTypesInCategory.map(() => "?").join(",")})`);
+          params.push(...eventTypesInCategory);
+        } else {
+          conditions.push("1 = 0"); // دسته نامعتبر → نتیجه خالی
+        }
+      }
+      if (templateId) {
+        conditions.push("sm.template_id = ?");
+        params.push(Number(templateId));
+      }
+      if (status) {
+        conditions.push("sm.status = ?");
+        params.push(status);
+      }
+      if (dateFrom) {
+        conditions.push("sm.created_at >= ?");
+        params.push(dateFrom);
+      }
+      if (dateTo) {
+        conditions.push("sm.created_at <= ?");
+        params.push(dateTo);
+      }
+
+      const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const countRow = await env.DB
+        .prepare(`SELECT COUNT(*) AS c FROM sms_messages sm ${whereClause}`)
+        .bind(...params)
+        .first();
+
+      const total = countRow?.c || 0;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const offset = (page - 1) * limit;
+
+      const result = await env.DB
+        .prepare(
+          "SELECT sm.id, sm.mobile, sm.event_type, sm.purpose, sm.template_id, sm.status, sm.provider, " +
+          "sm.provider_message_id, sm.error_code, sm.created_at, sm.sent_at, c.full_name AS customer_name " +
+          "FROM sms_messages sm LEFT JOIN customers c ON c.id = sm.customer_id " +
+          `${whereClause} ORDER BY sm.id DESC LIMIT ? OFFSET ?`
+        )
+        .bind(...params, limit, offset)
+        .all();
+
+      const messages = (result.results || []).map((row) => ({
+        ...row,
+        title: SMS_TEMPLATE_REGISTRY[row.event_type]?.title || row.event_type,
+        category: SMS_TEMPLATE_REGISTRY[row.event_type]?.category || null,
+      }));
+
+      return Response.json({ ok: true, messages, page, limit, total, total_pages: totalPages });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // GET /api/store/admin/sms/history/:id
+  if (
+    url.pathname.startsWith("/api/store/admin/sms/history/") &&
+    request.method === "GET"
+  ) {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const id = Number(url.pathname.split("/").pop());
+    if (!Number.isInteger(id) || id <= 0) {
+      return Response.json({ ok: false, error: "INVALID_ID" }, { status: 400 });
+    }
+
+    try {
+      const row = await env.DB
+        .prepare(
+          "SELECT sm.*, c.full_name AS customer_name FROM sms_messages sm " +
+          "LEFT JOIN customers c ON c.id = sm.customer_id WHERE sm.id = ? LIMIT 1"
+        )
+        .bind(id)
+        .first();
+
+      if (!row) {
+        return Response.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
+      }
+
+      const registryEntry = SMS_TEMPLATE_REGISTRY[row.event_type];
+
+      return Response.json({
+        ok: true,
+        message: {
+          ...row,
+          title: registryEntry?.title || row.event_type,
+          category: registryEntry?.category || null,
+          category_label: registryEntry ? SMS_CATEGORY_LABELS[registryEntry.category] : null,
+        },
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- ارسال دستی ---
+  // POST /api/store/admin/sms/send
+  if (url.pathname === "/api/store/admin/sms/send" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const mobile = normalizeDigits(body.mobile || "").trim();
+      const eventType = String(body.event_type || "").trim();
+      const variables = body.variables && typeof body.variables === "object" ? body.variables : {};
+
+      if (!isValidMobile(mobile)) {
+        return Response.json(
+          { ok: false, error: "INVALID_MOBILE", message: "شماره موبایل معتبر نیست." },
+          { status: 400 }
+        );
+      }
+
+      const base = SMS_TEMPLATE_REGISTRY[eventType];
+      if (!base) {
+        return Response.json(
+          { ok: false, error: "UNKNOWN_EVENT_TYPE", message: "قالب انتخاب‌شده معتبر نیست." },
+          { status: 400 }
+        );
+      }
+
+      if (!base.allowManualSend) {
+        return Response.json(
+          { ok: false, error: "MANUAL_SEND_NOT_ALLOWED", message: "ارسال دستی برای این قالب مجاز نیست." },
+          { status: 400 }
+        );
+      }
+
+      const effective = await getEffectiveTemplate(env, eventType);
+      if (!effective.enabled || !effective.templateId) {
+        return Response.json(
+          { ok: false, error: "TEMPLATE_DISABLED", message: "این قالب غیرفعال است یا Template ID ندارد." },
+          { status: 400 }
+        );
+      }
+
+      const missingVariables = (base.variables || []).filter(
+        (name) => !variables[name] || String(variables[name]).trim() === ""
+      );
+
+      if (missingVariables.length > 0) {
+        return Response.json(
+          {
+            ok: false,
+            error: "MISSING_VARIABLES",
+            message: `مقادیر این متغیرها را وارد کنید: ${missingVariables.join(", ")}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const customer = await env.DB
+        .prepare("SELECT id FROM customers WHERE phone = ? LIMIT 1")
+        .bind(normalizeDigits(mobile).trim())
+        .first();
+
+      await sendSms(env, {
+        mobile,
+        eventType,
+        variables,
+        customerId: customer?.id || null,
+        purpose: "manual_admin",
+      });
+
+      return Response.json({ ok: true, message: "پیامک با موفقیت ارسال شد." });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "SMS_SEND_FAILED", message: error.message },
+        { status: 502 }
+      );
+    }
+  }
+
+  // --- وضعیت اتصال SMS.ir ---
+  // GET /api/store/admin/sms/status
+  if (url.pathname === "/api/store/admin/sms/status" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const eventTypes = Object.keys(SMS_TEMPLATE_REGISTRY);
+      let activeTemplatesCount = 0;
+      for (const eventType of eventTypes) {
+        const effective = await getEffectiveTemplate(env, eventType);
+        if (effective?.enabled) activeTemplatesCount += 1;
+      }
+
+      const lastSent = await env.DB
+        .prepare("SELECT event_type, mobile, sent_at FROM sms_messages WHERE status = 'sent' ORDER BY id DESC LIMIT 1")
+        .first();
+
+      const lastError = await env.DB
+        .prepare(
+          "SELECT event_type, mobile, error_code, created_at FROM sms_messages WHERE status = 'failed' ORDER BY id DESC LIMIT 1"
+        )
+        .first();
+
+      return Response.json({
+        ok: true,
+        provider: "sms.ir",
+        // مقدار واقعی Secret هرگز خوانده یا نمایش داده نمی‌شود؛ فقط وجودش بررسی می‌شود.
+        secret_configured: !!env.SMS_IR_API_KEY,
+        active_templates_count: activeTemplatesCount,
+        total_templates_count: eventTypes.length,
+        last_sent: lastSent || null,
+        last_error: lastError || null,
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- پیامک‌های زمان‌بندی‌شده (وضعیت آمادگی، نه ارسال واقعی) ---
+  // GET /api/store/admin/sms/scheduled-status
+  if (url.pathname === "/api/store/admin/sms/scheduled-status" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const eligibleRow = await env.DB
+        .prepare(
+          "SELECT COUNT(*) AS c FROM customers WHERE next_service_at IS NOT NULL AND next_service_at <= datetime('now')"
+        )
+        .first();
+
+      const birthdayRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM customers WHERE birthday IS NOT NULL")
+        .first();
+
+      return Response.json({
+        ok: true,
+        // این پروژه فعلاً هیچ Cloudflare Cron Trigger واقعی ندارد (بدون تغییر wrangler.toml)؛
+        // این مقدار صادقانه false است، نه یک وضعیت ساختگی.
+        cron_configured: false,
+        eligible_boiler_service_count: eligibleRow?.c || 0,
+        customers_with_birthday_count: birthdayRow?.c || 0,
+        note:
+          "زیرساخت داده (next_service_at, birthday) آماده است، اما تا زمانی که یک Cloudflare Cron Trigger واقعی در wrangler.toml و یک scheduled handler در Worker اضافه نشود، هیچ پیامک زمان‌بندی‌شده‌ای به‌صورت خودکار ارسال نمی‌شود.",
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- پیش‌نمایش کمپین (فقط شمارش گیرندگان — ارسال گروهی واقعی هنوز ساخته نشده) ---
+  // POST /api/store/admin/sms/campaign/preview
+  if (url.pathname === "/api/store/admin/sms/campaign/preview" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const filter = String(body.filter || "consented");
+
+      let countRow;
+      if (filter === "verified_and_consented") {
+        countRow = await env.DB
+          .prepare("SELECT COUNT(*) AS c FROM customers WHERE sms_marketing_consent = 1 AND phone_verified = 1")
+          .first();
+      } else if (filter === "consented") {
+        countRow = await env.DB
+          .prepare("SELECT COUNT(*) AS c FROM customers WHERE sms_marketing_consent = 1")
+          .first();
+      } else {
+        return Response.json(
+          { ok: false, error: "INVALID_FILTER", message: "فیلتر گیرندگان نامعتبر است." },
+          { status: 400 }
+        );
+      }
+
+      return Response.json({
+        ok: true,
+        filter,
+        recipient_count: countRow?.c || 0,
+        // صادقانه: ارسال گروهی واقعی در این نسخه پیاده‌سازی نشده، فقط پیش‌نمایش تعداد گیرنده.
+        send_available: false,
+        note: "ارسال گروهی واقعی هنوز پیاده‌سازی نشده است؛ این فقط پیش‌نمایش تعداد گیرندگان بالقوه است.",
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- رضایت پیامک تبلیغاتی مشتریان ---
+  // GET /api/store/admin/customers
+  if (url.pathname === "/api/store/admin/customers" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const page = Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 20));
+      const q = (url.searchParams.get("q") || "").trim();
+      const consentFilter = url.searchParams.get("consent");
+
+      const conditions = [];
+      const params = [];
+
+      if (q) {
+        conditions.push("(full_name LIKE ? OR phone LIKE ?)");
+        params.push(`%${q}%`, `%${q}%`);
+      }
+      if (consentFilter === "1" || consentFilter === "0") {
+        conditions.push("sms_marketing_consent = ?");
+        params.push(Number(consentFilter));
+      }
+
+      const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const countRow = await env.DB
+        .prepare(`SELECT COUNT(*) AS c FROM customers ${whereClause}`)
+        .bind(...params)
+        .first();
+
+      const total = countRow?.c || 0;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const offset = (page - 1) * limit;
+
+      const result = await env.DB
+        .prepare(
+          "SELECT id, full_name, phone, phone_verified, sms_marketing_consent, birthday, created_at " +
+          `FROM customers ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
+        )
+        .bind(...params, limit, offset)
+        .all();
+
+      return Response.json({
+        ok: true,
+        customers: result.results || [],
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // PUT /api/store/admin/customers/:id/consent
+  if (
+    url.pathname.startsWith("/api/store/admin/customers/") &&
+    url.pathname.endsWith("/consent") &&
+    request.method === "PUT"
+  ) {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const idMatch = url.pathname.match(/^\/api\/store\/admin\/customers\/(\d+)\/consent$/);
+    if (!idMatch) {
+      return Response.json({ ok: false, error: "INVALID_ID" }, { status: 400 });
+    }
+
+    try {
+      const body = await request.json();
+      const consent = body.sms_marketing_consent ? 1 : 0;
+
+      const result = await env.DB
+        .prepare("UPDATE customers SET sms_marketing_consent = ?, updated_at = ? WHERE id = ?")
+        .bind(consent, nowIso(), Number(idMatch[1]))
+        .run();
+
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
+      }
+
+      return Response.json({ ok: true, message: "رضایت پیامکی بروزرسانی شد.", sms_marketing_consent: consent });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "SERVER_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
   // =========================
   // Products - Public List
   // =========================
+
 
   if (url.pathname === "/api/store/products" && request.method === "GET") {
     const adminRequest = isAdmin(request, env);
@@ -1047,7 +1861,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       }
 
       const existingOrder = await env.DB
-        .prepare("SELECT id, status, customer_phone, tracking_code FROM orders WHERE id = ? LIMIT 1")
+        .prepare(
+          "SELECT id, status, customer_phone, tracking_code, postal_carrier, postal_tracking_code " +
+          "FROM orders WHERE id = ? LIMIT 1"
+        )
         .bind(orderId)
         .first();
 
@@ -1100,6 +1917,45 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         }
 
         await queueSms(env, orderId, existingOrder.customer_phone, "status_changed", message);
+
+        // --- Central SMS Service (بخش ۱۹) — علاوه بر queueSms قدیمی که
+        // دست‌نخورده باقی مانده، اکنون Template واقعی برای این وضعیت‌ها
+        // وجود دارد، پس Event واقعی هم به سرویس مرکزی داده می‌شود.
+        try {
+          let smsEventType = ORDER_STATUS_SMS_EVENT_MAP[status];
+          let smsVariables = { ORDER_ID: existingOrder.tracking_code || String(orderId) };
+
+          if (status === "shipped") {
+            const effectiveTrackingCode = postalTrackingCode || existingOrder.postal_tracking_code || "";
+            const effectiveCarrier = postalCarrier || existingOrder.postal_carrier || "";
+
+            if (effectiveTrackingCode) {
+              smsEventType = "ORDER_SHIPPED";
+              smsVariables = { ...smsVariables, CARRIER: effectiveCarrier, TRACKING_CODE: effectiveTrackingCode };
+            } else {
+              smsEventType = "ORDER_SHIPPED_NO_TRACKING";
+              smsVariables = { ...smsVariables, CARRIER: effectiveCarrier };
+            }
+          }
+
+          if (smsEventType && existingOrder.customer_phone) {
+            const customerRow = await env.DB
+              .prepare("SELECT id FROM customers WHERE phone = ? LIMIT 1")
+              .bind(existingOrder.customer_phone)
+              .first();
+
+            await sendSms(env, {
+              mobile: existingOrder.customer_phone,
+              eventType: smsEventType,
+              variables: smsVariables,
+              customerId: customerRow?.id || null,
+              purpose: "order_status",
+            });
+          }
+        } catch (smsError) {
+          // ارسال پیامک سفارش هرگز نباید باعث شکست خود درخواست تغییر وضعیت سفارش شود.
+          console.error("Order status SMS (central service) failed:", smsError.message);
+        }
       }
 
       return Response.json({
@@ -1609,6 +2465,21 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         `سفارش شما با کد پیگیری ${trackingCode} ثبت شد. مبلغ: ${total.toLocaleString("fa-IR")} تومان.`
       );
 
+      // --- Central SMS Service (بخش ۱۹) — علاوه بر queueSms قدیمی که
+      // دست‌نخورده باقی مانده، Template واقعی ORDER_CREATED نیز فراخوانی می‌شود.
+      try {
+        await sendSms(env, {
+          mobile,
+          eventType: "ORDER_CREATED",
+          variables: { ORDER_ID: trackingCode, AMOUNT: String(total) },
+          customerId: customerId || null,
+          purpose: "order_created",
+        });
+      } catch (smsError) {
+        // ارسال پیامک هرگز نباید باعث شکست خود ثبت سفارش شود.
+        console.error("Order created SMS (central service) failed:", smsError.message);
+      }
+
       return Response.json(
         {
           ok: true,
@@ -2075,14 +2946,15 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
         .run();
 
       // --- ارسال از طریق Central SMS Service ---
+      // هر purpose اکنون Template اختصاصی و واقعی خودش را دارد (بخش ۴ دستور).
 
-      const eventType = purpose === "password_reset" ? "PASSWORD_RESET" : "AUTH_VERIFY";
+      const eventType = OTP_PURPOSE_EVENT_TYPES[purpose];
 
       try {
         await sendSms(env, {
           mobile,
           eventType,
-          code,
+          variables: { CODE: code },
           customerId: customer?.id || null,
           purpose,
         });
@@ -2574,6 +3446,19 @@ if (
         `درخواست پشتیبانی شما با کد پیگیری ${trackingCode} ثبت شد.`
       );
 
+      // --- Central SMS Service (بخش ۲۰) — علاوه بر queueTicketSms قدیمی. ---
+      try {
+        await sendSms(env, {
+          mobile,
+          eventType: "SUPPORT_TICKET_CREATED",
+          variables: { TICKET_ID: trackingCode },
+          customerId: customerId || null,
+          purpose: "support_ticket_created",
+        });
+      } catch (smsError) {
+        console.error("Ticket created SMS (central service) failed:", smsError.message);
+      }
+
       if (email) {
         await queueEmail(
           env,
@@ -2860,6 +3745,15 @@ if (
         );
       }
 
+      const existingTicket = await env.DB
+        .prepare("SELECT id, customer_id, mobile, tracking_code, status FROM tickets WHERE id = ? LIMIT 1")
+        .bind(ticketId)
+        .first();
+
+      if (!existingTicket) {
+        return Response.json({ ok: false, error: "TICKET_NOT_FOUND" }, { status: 404 });
+      }
+
       const result = await env.DB
         .prepare("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?")
         .bind(status, nowIso(), ticketId)
@@ -2867,6 +3761,29 @@ if (
 
       if (!result.meta?.changes) {
         return Response.json({ ok: false, error: "TICKET_NOT_FOUND" }, { status: 404 });
+      }
+
+      // --- Central SMS Service (بخش ۲۰) — این endpoint قبلاً هیچ اتصال SMS
+      // نداشت؛ چون هم Trigger واقعی (همین تغییر وضعیت) و هم Template واقعی
+      // (SUPPORT_TICKET_STATUS / SUPPORT_TICKET_CLOSED) موجودند، اضافه شد.
+      if (status !== existingTicket.status) {
+        try {
+          const smsEventType = status === "closed" ? "SUPPORT_TICKET_CLOSED" : "SUPPORT_TICKET_STATUS";
+          const smsVariables = { TICKET_ID: existingTicket.tracking_code };
+          if (smsEventType === "SUPPORT_TICKET_STATUS") {
+            smsVariables.STATUS = TICKET_STATUS_LABELS[status] || status;
+          }
+
+          await sendSms(env, {
+            mobile: existingTicket.mobile,
+            eventType: smsEventType,
+            variables: smsVariables,
+            customerId: existingTicket.customer_id || null,
+            purpose: "support_ticket_status",
+          });
+        } catch (smsError) {
+          console.error("Ticket status SMS (central service) failed:", smsError.message);
+        }
       }
 
       return Response.json({ ok: true, ticket_id: ticketId, status });
@@ -2910,7 +3827,7 @@ if (
       }
 
       const ticket = await env.DB
-        .prepare("SELECT id, mobile, email, tracking_code FROM tickets WHERE id = ? LIMIT 1")
+        .prepare("SELECT id, customer_id, mobile, email, tracking_code FROM tickets WHERE id = ? LIMIT 1")
         .bind(ticketId)
         .first();
 
@@ -2935,6 +3852,19 @@ if (
         "ticket_replied",
         `به درخواست پشتیبانی شما (${ticket.tracking_code}) پاسخ داده شد.`
       );
+
+      // --- Central SMS Service (بخش ۲۰) — علاوه بر queueTicketSms قدیمی. ---
+      try {
+        await sendSms(env, {
+          mobile: ticket.mobile,
+          eventType: "SUPPORT_TICKET_REPLY",
+          variables: { TICKET_ID: ticket.tracking_code },
+          customerId: ticket.customer_id || null,
+          purpose: "support_ticket_reply",
+        });
+      } catch (smsError) {
+        console.error("Ticket reply SMS (central service) failed:", smsError.message);
+      }
 
       if (ticket.email) {
         await queueEmail(

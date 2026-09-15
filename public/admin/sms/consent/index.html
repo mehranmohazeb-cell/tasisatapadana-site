@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>رضایت پیامکی | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="sms-sub-nav"></div>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>رضایت پیامک تبلیغاتی مشتریان</h2>
+        <button id="refresh-consent" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        این تنظیم فقط روی پیامک‌های تبلیغاتی/کمپینی اثر دارد. پیامک‌های ضروری
+        (کد تأیید، سفارش، پشتیبانی، خدمات) به این تنظیم وابسته نیستند.
+      </p>
+
+      <div class="filter-bar">
+        <input id="filter-search" type="text" placeholder="جست‌وجو بر اساس نام یا موبایل">
+        <select id="filter-consent">
+          <option value="">همه مشتریان</option>
+          <option value="1">دارای رضایت</option>
+          <option value="0">بدون رضایت</option>
+        </select>
+      </div>
+
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+
+      <div id="pagination-container"></div>
+    </section>
+
+    <section class="admin-card">
+      <h2>پیش‌نمایش کمپین</h2>
+      <p style="font-size:13px; color:#71817e;">
+        ارسال گروهی واقعی هنوز در این نسخه پیاده‌سازی نشده است؛ فقط می‌توانید
+        تعداد گیرندگان بالقوه را پیش‌نمایش کنید.
+      </p>
+      <div class="filter-bar">
+        <select id="campaign-filter">
+          <option value="consented">همه مشتریان دارای رضایت</option>
+          <option value="verified_and_consented">مشتریان تأییدشده و دارای رضایت</option>
+        </select>
+        <button id="campaign-preview-button" class="secondary-button" type="button">پیش‌نمایش تعداد گیرنده</button>
+      </div>
+      <div id="campaign-preview-result"></div>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="consent.js"></script>
+</body>
+</html>

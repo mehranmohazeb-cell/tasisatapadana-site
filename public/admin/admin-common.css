@@ -125,6 +125,34 @@ a {
 }
 
 /* =========================
+   SMS sub-nav (زیرمنوی داخلی بخش مدیریت پیامک)
+   ========================= */
+
+#sms-sub-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+#sms-sub-nav a {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #d8e0de;
+  background: #fff;
+  color: #355653;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#sms-sub-nav a.active {
+  background: #173b3b;
+  color: #fff;
+  border-color: #173b3b;
+}
+
+/* =========================
    Alerts bar (dashboard warnings)
    ========================= */
 

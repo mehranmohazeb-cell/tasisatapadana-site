@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تاریخچه پیامک | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="sms-sub-nav"></div>
+
+    <section class="admin-card">
+
+      <div class="section-heading">
+        <h2>تاریخچه پیامک‌ها</h2>
+        <button id="refresh-history" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+
+      <div class="filter-bar">
+        <input id="filter-mobile" type="text" placeholder="شماره موبایل">
+        <select id="filter-category">
+          <option value="">همه دسته‌ها</option>
+          <option value="AUTH">احراز هویت</option>
+          <option value="ORDER">سفارش‌ها</option>
+          <option value="SUPPORT">پشتیبانی</option>
+          <option value="SERVICE">خدمات فنی</option>
+          <option value="REMINDER">یادآوری‌ها</option>
+        </select>
+        <select id="filter-status">
+          <option value="">همه وضعیت‌ها</option>
+          <option value="sent">ارسال شده</option>
+          <option value="failed">ناموفق</option>
+          <option value="skipped_no_template">بدون قالب</option>
+        </select>
+      </div>
+      <div class="filter-bar">
+        <label style="flex:1; font-size:12px; color:#355653;">از تاریخ
+          <input id="filter-date-from" type="date" style="width:100%; border:1px solid #cbd6d3; border-radius:8px; padding:8px; margin-top:4px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:#355653;">تا تاریخ
+          <input id="filter-date-to" type="date" style="width:100%; border:1px solid #cbd6d3; border-radius:8px; padding:8px; margin-top:4px;">
+        </label>
+        <button id="apply-filters" class="secondary-button" type="button" style="align-self:flex-end;">اعمال فیلتر</button>
+      </div>
+
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+
+      <div id="pagination-container"></div>
+
+    </section>
+
+  </main>
+
+  <div id="modal-root"></div>
+
+  <script src="../../admin-common.js"></script>
+  <script src="history.js"></script>
+</body>
+</html>
