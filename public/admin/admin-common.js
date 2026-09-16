@@ -136,7 +136,18 @@ function formatPrice(value) {
 function formatDate(value) {
   if (!value) return "-";
   try {
-    return new Date(value).toLocaleString("fa-IR");
+    let normalized = String(value).trim();
+
+    // مقادیری که از CURRENT_TIMESTAMP خود D1/SQLite می‌آیند به‌صورت
+    // "YYYY-MM-DD HH:MM:SS" (بدون Z و بدون آفست) هستند، اما همیشه UTC هستند.
+    // بدون این علامت‌گذاری صریح، مرورگر آنها را اشتباهاً local تفسیر می‌کند
+    // (دقیقاً همان چیزی که باعث می‌شد ساعت تاریخچه با ساعت ایران هماهنگ نباشد).
+    // این فقط لایه نمایش را اصلاح می‌کند؛ چیزی در D1 یا Worker تغییر نکرده.
+    if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+      normalized = normalized.replace(" ", "T") + "Z";
+    }
+
+    return new Date(normalized).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" });
   } catch {
     return String(value);
   }

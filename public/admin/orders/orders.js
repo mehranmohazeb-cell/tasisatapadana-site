@@ -100,14 +100,29 @@ async function changeOrderStatus(orderId, newStatus) {
     return;
   }
 
+  // مقادیر فعلی فیلدهای «شرکت پستی/کد مرسوله» را همراه همین درخواست
+  // می‌فرستیم — حتی اگر هنوز جداگانه با «ثبت اطلاعات ارسال» ذخیره نشده باشند.
+  // این تضمین می‌کند اگر مدیر قبل از تغییر وضعیت، کد رهگیری را تایپ کرده
+  // باشد، همان لحظه در D1 ذخیره شود و پیامک ارسال سفارش کد رهگیری درست را
+  // ببیند (نه این‌که به‌خاطر دو درخواست جدا از هم، کد رهگیری هنوز ذخیره
+  // نشده باشد و پیامک بدون کد رهگیری برود).
+  const postalCarrier = document.getElementById(`postal-carrier-${Number(orderId)}`)?.value.trim() || "";
+  const postalTrackingCode = document.getElementById(`postal-code-${Number(orderId)}`)?.value.trim() || "";
+
   try {
     await fetchAdmin(`/orders/${Number(orderId)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
+      body: JSON.stringify({
+        status: newStatus,
+        postal_carrier: postalCarrier,
+        postal_tracking_code: postalTrackingCode,
+      }),
     });
 
     order.status = newStatus;
+    if (postalCarrier) order.postal_carrier = postalCarrier;
+    if (postalTrackingCode) order.postal_tracking_code = postalTrackingCode;
     renderOrders();
     showToast("وضعیت سفارش با موفقیت تغییر کرد.", "success");
   } catch (error) {
