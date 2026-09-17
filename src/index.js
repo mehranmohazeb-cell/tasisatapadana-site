@@ -4351,8 +4351,36 @@ function renderProductDetailSsrHtml(viewModel, images, specs) {
 }
 
 async function handleProductPageSsr(request, env, slug) {
-  const shellRequest = new Request(new URL("/store/product.html", request.url), request);
-  const shellResponse = await env.ASSETS.fetch(shellRequest);
+  // یک درخواست تازه و مستقل فقط برای /store/product.html می‌سازیم — نه با
+  // کپی‌کردن request ورودی. علت واقعی خالی‌بودن Body: وقتی request ورودی
+  // (که برای مسیر /store/product/:slug است) به‌عنوان پایه Request جدید
+  // استفاده می‌شد، هدرهای آن (مثل هدرهای conditional cache که برای مسیر
+  // اصلی معتبر بودند، نه برای خود فایل استاتیک) با Static Assets binding
+  // به شکلی ترکیب می‌شدند که پاسخ 200 با Body خالی برمی‌گشت. یک Request
+  // ساده و تازه این مشکل را ندارد.
+  const shellUrl = new URL("/store/product.html", request.url).toString();
+
+  async function fetchShellOnce() {
+    const response = await env.ASSETS.fetch(new Request(shellUrl, { method: "GET" }));
+    if (!response || !response.ok) return null;
+    const text = await response.text();
+    if (!text) return null;
+    return { response, text };
+  }
+
+  let shell = await fetchShellOnce();
+  if (!shell) {
+    // تلاش دوم؛ اگر باز هم Body خالی/ناموفق بود، دیگر 200 با Body صفر
+    // برنمی‌گردانیم — یک خطای کنترل‌شده و صریح می‌دهیم.
+    shell = await fetchShellOnce();
+  }
+
+  if (!shell) {
+    return new Response("صفحه محصول موقتاً در دسترس نیست. لطفاً دوباره تلاش کنید.", {
+      status: 502,
+      headers: { "content-type": "text/plain; charset=UTF-8" },
+    });
+  }
 
   let productRow;
   try {
@@ -4365,13 +4393,14 @@ async function handleProductPageSsr(request, env, slug) {
       .bind(slug)
       .first();
   } catch (error) {
-    return shellResponse; // در صورت خطای DB، فقط shell خام (رفتار قبلی JS) برگردانده می‌شود.
+    // در صورت خطای DB، فقط shell خام (رفتار قبلی JS) برگردانده می‌شود.
+    return new Response(shell.text, { headers: { "content-type": "text/html; charset=UTF-8" } });
   }
 
   if (!productRow) {
-    return new Response(await shellResponse.text(), {
+    return new Response(shell.text, {
       status: 404,
-      headers: shellResponse.headers,
+      headers: { "content-type": "text/html; charset=UTF-8" },
     });
   }
 
@@ -4382,7 +4411,7 @@ async function handleProductPageSsr(request, env, slug) {
   const metaDescription = stripHtmlToText(viewModel.description, 155) ||
     `${viewModel.name} — خرید آنلاین از فروشگاه تأسیسات آپادانا`;
 
-  let html = await shellResponse.text();
+  let html = shell.text;
 
   html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtmlForSsr(viewModel.name)} | تأسیسات آپادانا</title>`);
   html = html.replace(
@@ -4400,7 +4429,7 @@ async function handleProductPageSsr(request, env, slug) {
   );
 
   return new Response(html, {
-    headers: { ...Object.fromEntries(shellResponse.headers), "content-type": "text/html; charset=UTF-8" },
+    headers: { "content-type": "text/html; charset=UTF-8" },
   });
 }
 
