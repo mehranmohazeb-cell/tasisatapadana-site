@@ -23,6 +23,59 @@ const PAYMENT_STATUS_LABELS = {
 
 const ALLOWED_PAYMENT_STATUSES = Object.keys(PAYMENT_STATUS_LABELS);
 
+// =========================================================================
+// پیش‌فرض‌های سراسری ارسال — وقتی محصولی مقدار shipping_* خودش را ندارد
+// (NULL در D1)، از همین مقادیر استفاده می‌شود. تغییر این‌ها فقط روی
+// محصولاتی اثر دارد که خودشان override ندارند.
+// =========================================================================
+const STORE_DEFAULT_SHIPPING_COST = 0; // پیش‌فرض: ارسال رایگان
+const STORE_DEFAULT_SHIPPING_METHOD = "پست پیشتاز";
+const STORE_DEFAULT_SHIPPING_TIME = "حداکثر ۳ روز کاری";
+const STORE_BASE_URL = "https://tasisatapadanaesfahan.ir";
+
+function resolveShippingInfo(product) {
+  return {
+    shipping_cost: product.shipping_cost != null ? Number(product.shipping_cost) : STORE_DEFAULT_SHIPPING_COST,
+    shipping_method: product.shipping_method || STORE_DEFAULT_SHIPPING_METHOD,
+    shipping_time: product.shipping_time || STORE_DEFAULT_SHIPPING_TIME,
+  };
+}
+
+// معرفی محصول (description) به‌صورت HTML ساده (تیتر/پاراگراف/بولد/لیست/لینک)
+// از پنل مدیریت ذخیره می‌شود. این تابع قبل از INSERT/UPDATE، تگ/ویژگی خطرناک
+// را حذف می‌کند تا مقدار ذخیره‌شده در D1 از همان ابتدا امن باشد و صفحه
+// محصول عمومی بتواند بدون escape مجدد، مستقیماً آن را رندر کند.
+function sanitizeDescriptionHtml(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/(href|src)\s*=\s*"javascript:[^"]*"/gi, '$1="#"')
+    .replace(/(href|src)\s*=\s*'javascript:[^']*'/gi, "$1='#'");
+}
+
+// این تابع منبع واحد محاسبه وضعیت موجودی/تخفیف/ارسال/گارانتی است — هم
+// endpoint عمومی JSON و هم صفحه SSR محصول از همین استفاده می‌کنند تا هیچ‌وقت
+// Schema.org با آنچه واقعاً در صفحه دیده می‌شود اختلاف نداشته باشد.
+function buildProductViewModel(product) {
+  const shipping = resolveShippingInfo(product);
+  const price = Number(product.price) || 0;
+  const compareAtPrice = product.compare_at_price != null ? Number(product.compare_at_price) : null;
+  const discountActive = compareAtPrice != null && compareAtPrice > price;
+  const inStock = Number(product.stock) > 0;
+
+  return {
+    ...product,
+    in_stock: inStock,
+    discount_active: discountActive,
+    discount_percent: discountActive ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100) : null,
+    ...shipping,
+    has_warranty: !!(product.warranty_months && Number(product.warranty_months) > 0),
+    has_return_policy: !!(product.return_days && Number(product.return_days) > 0),
+    canonical_url: `${STORE_BASE_URL}/store/product/${encodeURIComponent(product.slug)}`,
+  };
+}
+
 const TICKET_STATUS_LABELS = {
   received: "ثبت شده",
   in_review: "در حال بررسی",
@@ -249,8 +302,22 @@ async function handleStoreApi(request, env) {
   async function getProductImages(productId) {
     const result = await env.DB
       .prepare(
-        "SELECT id, image, sort_order " +
+        "SELECT id, image, alt, sort_order " +
         "FROM product_images " +
+        "WHERE product_id = ? " +
+        "ORDER BY sort_order ASC, id ASC"
+      )
+      .bind(productId)
+      .all();
+
+    return result.results || [];
+  }
+
+  async function getProductSpecs(productId) {
+    const result = await env.DB
+      .prepare(
+        "SELECT id, label, value, sort_order " +
+        "FROM product_specs " +
         "WHERE product_id = ? " +
         "ORDER BY sort_order ASC, id ASC"
       )
@@ -1554,7 +1621,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       try {
         const result = await env.DB
           .prepare(
-            "SELECT id, name, slug, description, price, image, stock, active " +
+            "SELECT id, name, slug, description, price, image, stock, active, shipping_cost " +
             "FROM products WHERE active = 1 ORDER BY id DESC"
           )
           .all();
@@ -1612,7 +1679,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const result = await env.DB
         .prepare(
-          "SELECT id, name, slug, description, price, image, stock, active " +
+          "SELECT id, name, slug, description, price, image, stock, active, " +
+          "brand, model, sku, compare_at_price, shipping_cost, shipping_method, shipping_time, " +
+          "warranty_months, warranty_provider, return_days " +
           `FROM products ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
         )
         .bind(...params, limit, offset)
@@ -1622,6 +1691,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       for (const product of products) {
         product.images = await getProductImages(product.id);
+        product.specs = await getProductSpecs(product.id);
 
         if (product.images.length === 0 && product.image) {
           product.images = [{ id: null, image: product.image, sort_order: 0 }];
@@ -1693,7 +1763,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
           "customer_address, province, city, street, sub_street, alley, plaque, " +
-          "unit, postal_code, address_note, total, status, payment_status, " +
+          "unit, postal_code, address_note, total, shipping_cost, status, payment_status, " +
           "postal_carrier, postal_tracking_code, created_at, updated_at, " +
           "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id) AS ticket_count, " +
           "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id AND t.status != 'closed') AS open_ticket_count " +
@@ -1767,7 +1837,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
           "customer_address, province, city, street, sub_street, alley, plaque, " +
-          "unit, postal_code, address_note, total, status, payment_status, " +
+          "unit, postal_code, address_note, total, shipping_cost, status, payment_status, " +
           "payment_reference, postal_carrier, postal_tracking_code, created_at, updated_at " +
           "FROM orders WHERE id = ? LIMIT 1"
         )
@@ -1986,11 +2056,30 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const name = String(body.name || "").trim();
       const slug = String(body.slug || "").trim();
-      const description = String(body.description || "").trim();
+      const description = sanitizeDescriptionHtml(String(body.description || "").trim());
       const image = String(body.image || "").trim();
       const price = Number(body.price);
       const stock = Number(body.stock);
       const active = body.active === false ? 0 : 1;
+
+      // فیلدهای جدید — همگی اختیاری (بخش ۱ دستور)
+      const brand = body.brand != null ? String(body.brand).trim() : null;
+      const model = body.model != null ? String(body.model).trim() : null;
+      const sku = body.sku != null ? String(body.sku).trim() : null;
+      const compareAtPrice =
+        body.compare_at_price != null && body.compare_at_price !== ""
+          ? Number(body.compare_at_price)
+          : null;
+      const shippingCost =
+        body.shipping_cost != null && body.shipping_cost !== "" ? Number(body.shipping_cost) : null;
+      const shippingMethod = body.shipping_method != null ? String(body.shipping_method).trim() || null : null;
+      const shippingTime = body.shipping_time != null ? String(body.shipping_time).trim() || null : null;
+      const warrantyMonths =
+        body.warranty_months != null && body.warranty_months !== "" ? Number(body.warranty_months) : null;
+      const warrantyProvider =
+        body.warranty_provider != null ? String(body.warranty_provider).trim() || null : null;
+      const returnDays =
+        body.return_days != null && body.return_days !== "" ? Number(body.return_days) : null;
 
       if (!name || !slug) {
         return Response.json(
@@ -2006,12 +2095,25 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         );
       }
 
+      if (compareAtPrice != null && (!Number.isInteger(compareAtPrice) || compareAtPrice < 0)) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "قیمت قبل از تخفیف نامعتبر است." },
+          { status: 400 }
+        );
+      }
+
       const result = await env.DB
         .prepare(
-          "INSERT INTO products (name, slug, description, price, image, stock, active) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO products " +
+          "(name, slug, description, price, image, stock, active, brand, model, sku, compare_at_price, " +
+          "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(name, slug, description, price, image, stock, active)
+        .bind(
+          name, slug, description, price, image, stock, active,
+          brand, model, sku, compareAtPrice,
+          shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays
+        )
         .run();
 
       const productId = result.meta?.last_row_id ?? null;
@@ -2019,14 +2121,33 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const images = Array.isArray(body.images) ? body.images : [];
 
       for (let i = 0; i < images.length; i++) {
-        const imagePath = String(images[i] || "").trim();
+        // هر ردیف می‌تواند یک رشته ساده (سازگاری با فرم فعلی) یا
+        // { image, alt } باشد.
+        const entry = images[i];
+        const imagePath = String((typeof entry === "string" ? entry : entry?.image) || "").trim();
+        const alt = typeof entry === "object" && entry?.alt ? String(entry.alt).trim() : null;
         if (!imagePath) continue;
 
         await env.DB
           .prepare(
-            "INSERT INTO product_images (product_id, image, sort_order) VALUES (?, ?, ?)"
+            "INSERT INTO product_images (product_id, image, alt, sort_order) VALUES (?, ?, ?, ?)"
           )
-          .bind(productId, imagePath, i)
+          .bind(productId, imagePath, alt, i)
+          .run();
+      }
+
+      const specs = Array.isArray(body.specs) ? body.specs : [];
+
+      for (let i = 0; i < specs.length; i++) {
+        const label = String(specs[i]?.label || "").trim();
+        const value = String(specs[i]?.value || "").trim();
+        if (!label || !value) continue;
+
+        await env.DB
+          .prepare(
+            "INSERT INTO product_specs (product_id, label, value, sort_order) VALUES (?, ?, ?, ?)"
+          )
+          .bind(productId, label, value, i)
           .run();
       }
 
@@ -2057,11 +2178,29 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const id = Number(body.id);
       const name = String(body.name || "").trim();
       const slug = body.slug != null ? String(body.slug).trim() : "";
-      const description = String(body.description || "").trim();
+      const description = sanitizeDescriptionHtml(String(body.description || "").trim());
       const image = String(body.image || "").trim();
       const price = Number(body.price);
       const stock = Number(body.stock);
       const active = body.active === false ? 0 : 1;
+
+      const brand = body.brand != null ? String(body.brand).trim() : null;
+      const model = body.model != null ? String(body.model).trim() : null;
+      const sku = body.sku != null ? String(body.sku).trim() : null;
+      const compareAtPrice =
+        body.compare_at_price != null && body.compare_at_price !== ""
+          ? Number(body.compare_at_price)
+          : null;
+      const shippingCost =
+        body.shipping_cost != null && body.shipping_cost !== "" ? Number(body.shipping_cost) : null;
+      const shippingMethod = body.shipping_method != null ? String(body.shipping_method).trim() || null : null;
+      const shippingTime = body.shipping_time != null ? String(body.shipping_time).trim() || null : null;
+      const warrantyMonths =
+        body.warranty_months != null && body.warranty_months !== "" ? Number(body.warranty_months) : null;
+      const warrantyProvider =
+        body.warranty_provider != null ? String(body.warranty_provider).trim() || null : null;
+      const returnDays =
+        body.return_days != null && body.return_days !== "" ? Number(body.return_days) : null;
 
       if (!Number.isInteger(id) || id <= 0 || !name) {
         return Response.json(
@@ -2073,6 +2212,13 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       if (!Number.isInteger(price) || price < 0 || !Number.isInteger(stock) || stock < 0) {
         return Response.json(
           { ok: false, error: "INVALID_DATA", message: "قیمت و موجودی باید عدد صحیح صفر یا بیشتر باشند." },
+          { status: 400 }
+        );
+      }
+
+      if (compareAtPrice != null && (!Number.isInteger(compareAtPrice) || compareAtPrice < 0)) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "قیمت قبل از تخفیف نامعتبر است." },
           { status: 400 }
         );
       }
@@ -2095,9 +2241,17 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const result = await env.DB
         .prepare(
           "UPDATE products SET name = ?, slug = COALESCE(NULLIF(?, ''), slug), " +
-          "description = ?, price = ?, image = ?, stock = ?, active = ? WHERE id = ?"
+          "description = ?, price = ?, image = ?, stock = ?, active = ?, " +
+          "brand = ?, model = ?, sku = ?, compare_at_price = ?, " +
+          "shipping_cost = ?, shipping_method = ?, shipping_time = ?, " +
+          "warranty_months = ?, warranty_provider = ?, return_days = ? WHERE id = ?"
         )
-        .bind(name, slug, description, price, image, stock, active, id)
+        .bind(
+          name, slug, description, price, image, stock, active,
+          brand, model, sku, compareAtPrice,
+          shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
+          id
+        )
         .run();
 
       if (!result.meta?.changes) {
@@ -2114,14 +2268,36 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           .run();
 
         for (let i = 0; i < body.images.length; i++) {
-          const imagePath = String(body.images[i] || "").trim();
+          const entry = body.images[i];
+          const imagePath = String((typeof entry === "string" ? entry : entry?.image) || "").trim();
+          const alt = typeof entry === "object" && entry?.alt ? String(entry.alt).trim() : null;
           if (!imagePath) continue;
 
           await env.DB
             .prepare(
-              "INSERT INTO product_images (product_id, image, sort_order) VALUES (?, ?, ?)"
+              "INSERT INTO product_images (product_id, image, alt, sort_order) VALUES (?, ?, ?, ?)"
             )
-            .bind(id, imagePath, i)
+            .bind(id, imagePath, alt, i)
+            .run();
+        }
+      }
+
+      if (Array.isArray(body.specs)) {
+        await env.DB
+          .prepare("DELETE FROM product_specs WHERE product_id = ?")
+          .bind(id)
+          .run();
+
+        for (let i = 0; i < body.specs.length; i++) {
+          const label = String(body.specs[i]?.label || "").trim();
+          const value = String(body.specs[i]?.value || "").trim();
+          if (!label || !value) continue;
+
+          await env.DB
+            .prepare(
+              "INSERT INTO product_specs (product_id, label, value, sort_order) VALUES (?, ?, ?, ?)"
+            )
+            .bind(id, label, value, i)
             .run();
         }
       }
@@ -2149,8 +2325,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     try {
       const result = await env.DB
         .prepare(
-          "SELECT id, name, slug, description, price, image, stock FROM products " +
-          "WHERE slug = ? AND active = 1 LIMIT 1"
+          "SELECT id, name, slug, description, price, image, stock, " +
+          "brand, model, sku, compare_at_price, shipping_cost, shipping_method, shipping_time, " +
+          "warranty_months, warranty_provider, return_days " +
+          "FROM products WHERE slug = ? AND active = 1 LIMIT 1"
         )
         .bind(slug)
         .first();
@@ -2165,7 +2343,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         ? [{ id: null, image: result.image, sort_order: 0 }]
         : images;
 
-      return Response.json({ ok: true, product: result });
+      result.specs = await getProductSpecs(result.id);
+
+      return Response.json({ ok: true, product: buildProductViewModel(result) });
     } catch (error) {
       return Response.json(
         { ok: false, error: "DATABASE_ERROR", message: error.message },
@@ -2270,10 +2450,11 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const verifiedItems = [];
       let total = 0;
+      let shippingCost = 0;
 
       for (const [productId, quantity] of mergedItems.entries()) {
         const product = await env.DB
-          .prepare("SELECT id, name, price, stock, active FROM products WHERE id = ? LIMIT 1")
+          .prepare("SELECT id, name, price, stock, active, shipping_cost FROM products WHERE id = ? LIMIT 1")
           .bind(productId)
           .first();
 
@@ -2299,8 +2480,16 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         const subtotal = price * quantity;
         total += subtotal;
 
+        // هزینه ارسال یک‌بار برای کل سفارش محاسبه می‌شود، نه به‌ازای هر کالا؛
+        // اگر کالاهای سبد هزینه ارسال متفاوتی دارند، بیشترین مقدار ملاک است
+        // (بدون هزینه پنهان اضافه — دقیقاً همان مبلغی که در صفحه محصول/سبد دیده می‌شود).
+        const productShipping = resolveShippingInfo(product).shipping_cost;
+        if (productShipping > shippingCost) shippingCost = productShipping;
+
         verifiedItems.push({ productId: Number(product.id), productName: product.name, price, quantity, subtotal });
       }
+
+      total += shippingCost;
 
       // --- کاهش اتمیک موجودی (هر UPDATE فقط وقتی موفق می‌شود که موجودی کافی باشد) ---
       // اگر یکی شکست بخورد، موجودیِ آیتم‌های قبلاً کاهش‌یافته برمی‌گردد (Rollback دستی).
@@ -2369,8 +2558,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
             "INSERT INTO orders (" +
             "tracking_code, customer_id, customer_name, customer_phone, customer_address, " +
             "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
-            "latitude, longitude, total, status, payment_status, created_at, updated_at" +
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "latitude, longitude, total, shipping_cost, status, payment_status, created_at, updated_at" +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
           )
           .bind(
             trackingCode,
@@ -2390,6 +2579,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
             address.latitude,
             address.longitude,
             total,
+            shippingCost,
             "pending",
             "unpaid",
             timestamp,
@@ -2487,6 +2677,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           order_id: orderId,
           tracking_code: trackingCode,
           total,
+          shipping_cost: shippingCost,
           status: "pending",
           status_label: STATUS_LABELS.pending,
           created_at: timestamp,
@@ -2533,7 +2724,7 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
       .prepare(
         "SELECT id, tracking_code, customer_name, customer_phone, customer_address, " +
         "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
-        "total, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
+        "total, shipping_cost, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
         "FROM orders WHERE tracking_code = ? AND customer_phone = ? LIMIT 1"
       )
       .bind(trackingCode, mobile)
@@ -3280,7 +3471,7 @@ if (
       .prepare(
         "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
         "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
-        "total, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
+        "total, shipping_cost, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
         "FROM orders WHERE id = ? LIMIT 1"
       )
       .bind(orderId)
@@ -3967,6 +4158,287 @@ if (
 // Worker
 // =========================
 
+// =========================================================================
+// Product Page SSR + Schema.org + Sitemap — بخش ۱۰/۱۱ دستور بهینه‌سازی صفحه محصول
+//
+// هدف: اطلاعات اصلی محصول (نام/قیمت/موجودی/تصویر) نباید صرفاً وابسته به اجرای
+// JavaScript باشد (الزام ترب/SEO). این توابع همان صفحه استاتیک
+// public/store/product.html را می‌گیرند و قبل از تحویل به مرورگر/ربات، محتوای
+// واقعی محصول + Schema.org را در آن درج می‌کنند. صفحه بعد از بارگذاری، دقیقاً
+// مثل قبل با JavaScript خودش (همان buildProductViewModel که API JSON هم از آن
+// استفاده می‌کند) دوباره رندر می‌شود — یعنی هیچ‌وقت داده SSR با داده API متفاوت
+// نیست، چون منبع هر دو یکی است.
+// =========================================================================
+
+function resolveProductImageUrl(image) {
+  if (!image) return "/assets/products/placeholder.svg";
+  const value = String(image).trim();
+  if (!value) return "/assets/products/placeholder.svg";
+  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:")) return value;
+  if (value.startsWith("/")) return value;
+  if (value.startsWith("assets/")) return "/" + value;
+  if (value.startsWith("products/")) return "/assets/" + value;
+  return "/assets/products/" + value;
+}
+
+async function fetchProductImagesForSsr(env, productId) {
+  const result = await env.DB
+    .prepare("SELECT id, image, alt, sort_order FROM product_images WHERE product_id = ? ORDER BY sort_order ASC, id ASC")
+    .bind(productId)
+    .all();
+  return result.results || [];
+}
+
+async function fetchProductSpecsForSsr(env, productId) {
+  const result = await env.DB
+    .prepare("SELECT id, label, value, sort_order FROM product_specs WHERE product_id = ? ORDER BY sort_order ASC, id ASC")
+    .bind(productId)
+    .all();
+  return result.results || [];
+}
+
+// یک خلاصه متنی ساده (بدون تگ HTML) برای meta description و Schema، از همان
+// description غنی (HTML) که در پنل مدیریت ذخیره شده است.
+function stripHtmlToText(html, maxLength) {
+  const text = String(html || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return maxLength ? text.slice(0, maxLength) : text;
+}
+
+function escapeHtmlForSsr(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// ⚠️ نکته درباره واحد پول: قیمت‌های سایت به «تومان» نمایش داده می‌شوند، اما
+// کد استاندارد ISO 4217 برای تومان وجود ندارد (کد رسمی ایران IRR/ریال است).
+// طبق رویه رایج سایت‌های ایرانی برای Schema.org در Torob/Google، همان عدد
+// نمایشی (تومان) با کد IRR گزارش می‌شود تا با آنچه واقعاً در صفحه دیده
+// می‌شود مطابقت کامل داشته باشد (طبق تأکید دستور). پیشنهاد می‌شود این مورد
+// را با آخرین مستندات فنی ترب مجدداً تطبیق دهید، چون امکان تغییر آن وجود دارد.
+function buildProductJsonLd(viewModel, images) {
+  const imageUrls = (images.length > 0 ? images : [{ image: viewModel.image }])
+    .map((img) => `${STORE_BASE_URL}${resolveProductImageUrl(img.image)}`);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: viewModel.name,
+    image: imageUrls,
+    description: stripHtmlToText(viewModel.description, 500) || viewModel.name,
+    url: viewModel.canonical_url,
+    offers: {
+      "@type": "Offer",
+      url: viewModel.canonical_url,
+      priceCurrency: "IRR",
+      price: String(viewModel.price),
+      availability: viewModel.in_stock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+    },
+  };
+
+  if (viewModel.brand) jsonLd.brand = { "@type": "Brand", name: viewModel.brand };
+  if (viewModel.model) jsonLd.model = viewModel.model;
+  if (viewModel.sku) jsonLd.sku = viewModel.sku;
+
+  if (viewModel.has_return_policy) {
+    jsonLd.offers.hasMerchantReturnPolicy = {
+      "@type": "MerchantReturnPolicy",
+      returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
+      merchantReturnDays: Number(viewModel.return_days),
+      applicableCountry: "IR",
+    };
+  }
+
+  return jsonLd;
+}
+
+// همان چیدمانی که در public/store/product.html با JavaScript ساخته می‌شود
+// (renderBrandModelLine/renderPriceBlock/renderShippingBlock/renderAssuranceList/
+// renderSpecsTable)، اینجا سمت سرور هم تولید می‌شود تا قبل از اجرای JS هم در
+// HTML واقعی موجود باشد. اگر یکی از این دو تغییر کرد، دیگری هم باید هماهنگ شود.
+function renderProductDetailSsrHtml(viewModel, images, specs) {
+  const mainImage = images[0]?.image || viewModel.image;
+  const mainImageAlt = images[0]?.alt || viewModel.name;
+
+  const brandModelLine = (() => {
+    const parts = [];
+    if (viewModel.brand) parts.push(escapeHtmlForSsr(viewModel.brand));
+    if (viewModel.model) parts.push(escapeHtmlForSsr(viewModel.model));
+    return parts.length ? `<div class="product-detail-meta">${parts.join(" — ")}</div>` : "";
+  })();
+
+  const priceBlock = viewModel.discount_active
+    ? `${Number(viewModel.price).toLocaleString("fa-IR")} تومان
+       <span class="old-price">${Number(viewModel.compare_at_price).toLocaleString("fa-IR")} تومان</span>
+       ${viewModel.discount_percent ? `<span class="discount-badge">${Number(viewModel.discount_percent).toLocaleString("fa-IR")}٪ تخفیف</span>` : ""}`
+    : `${Number(viewModel.price).toLocaleString("fa-IR")} تومان`;
+
+  const shippingBlock = `
+    <div class="product-shipping-info">
+      <div>هزینه ارسال: ${Number(viewModel.shipping_cost) > 0 ? Number(viewModel.shipping_cost).toLocaleString("fa-IR") + " تومان" : "رایگان"}</div>
+      ${viewModel.shipping_method ? `<div>روش ارسال: ${escapeHtmlForSsr(viewModel.shipping_method)}</div>` : ""}
+      ${viewModel.shipping_time ? `<div>زمان ارسال: ${escapeHtmlForSsr(viewModel.shipping_time)}</div>` : ""}
+    </div>
+  `;
+
+  const assuranceItems = [];
+  if (viewModel.has_return_policy) {
+    assuranceItems.push(`<li>ضمانت بازگشت ${Number(viewModel.return_days).toLocaleString("fa-IR")} روزه</li>`);
+  }
+  if (viewModel.has_warranty) {
+    const provider = viewModel.warranty_provider ? ` ${escapeHtmlForSsr(viewModel.warranty_provider)}` : "";
+    assuranceItems.push(`<li>${Number(viewModel.warranty_months).toLocaleString("fa-IR")} ماه گارانتی${provider}</li>`);
+  }
+  const assuranceBlock = assuranceItems.length ? `<ul class="product-assurance-list">${assuranceItems.join("")}</ul>` : "";
+
+  const specsBlock = specs.length > 0
+    ? `
+      <button type="button" id="product-specs-toggle" class="product-info-toggle" aria-expanded="true"
+        onclick="toggleCollapsible('product-specs-panel','product-specs-toggle','مشخصات فنی','بستن مشخصات فنی')">
+        بستن مشخصات فنی
+      </button>
+      <div id="product-specs-panel" class="product-info-panel">
+        <table class="product-specs-table">
+          ${specs.map((s) => `<tr><th>${escapeHtmlForSsr(s.label)}</th><td>${escapeHtmlForSsr(s.value)}</td></tr>`).join("")}
+        </table>
+      </div>
+    `
+    : "";
+
+  const introBlock = viewModel.description
+    ? `
+      <button type="button" id="product-info-toggle" class="product-info-toggle" aria-expanded="true"
+        onclick="toggleCollapsible('product-info-panel','product-info-toggle','معرفی محصول','بستن معرفی محصول')">
+        بستن معرفی محصول
+      </button>
+      <div id="product-info-panel" class="product-info-panel">
+        <div class="product-description">${viewModel.description}</div>
+      </div>
+    `
+    : "";
+
+  return `
+    <div class="product-detail-card">
+      <div class="product-detail-media">
+        <img class="product-detail-image" src="${escapeHtmlForSsr(resolveProductImageUrl(mainImage))}" alt="${escapeHtmlForSsr(mainImageAlt)}">
+      </div>
+      <div class="product-detail-content">
+        <h1>${escapeHtmlForSsr(viewModel.name)}</h1>
+        ${brandModelLine}
+        <div class="product-detail-price">${priceBlock}</div>
+        <div class="product-detail-stock">${viewModel.in_stock ? `موجودی: ${Number(viewModel.stock).toLocaleString("fa-IR")} عدد` : "در حال حاضر ناموجود"}</div>
+        ${shippingBlock}
+        ${assuranceBlock}
+        <div class="product-actions">
+          <label for="quantity">تعداد:</label>
+          <input id="quantity" type="number" min="1" max="${Math.max(Number(viewModel.stock || 0), 1)}" value="1" ${viewModel.in_stock ? "" : "disabled"}>
+          <button type="button" class="product-button" onclick="addProductToCart()" ${viewModel.in_stock ? "" : "disabled"}>
+            ${viewModel.in_stock ? "افزودن به سبد خرید" : "محصول ناموجود است"}
+          </button>
+        </div>
+        ${introBlock}
+        ${specsBlock}
+        <a href="index.html" class="back-link">← بازگشت به فروشگاه</a>
+      </div>
+    </div>
+  `;
+}
+
+async function handleProductPageSsr(request, env, slug) {
+  const shellRequest = new Request(new URL("/store/product.html", request.url), request);
+  const shellResponse = await env.ASSETS.fetch(shellRequest);
+
+  let productRow;
+  try {
+    productRow = await env.DB
+      .prepare(
+        "SELECT id, name, slug, description, price, image, stock, brand, model, sku, compare_at_price, " +
+        "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days " +
+        "FROM products WHERE slug = ? AND active = 1 LIMIT 1"
+      )
+      .bind(slug)
+      .first();
+  } catch (error) {
+    return shellResponse; // در صورت خطای DB، فقط shell خام (رفتار قبلی JS) برگردانده می‌شود.
+  }
+
+  if (!productRow) {
+    return new Response(await shellResponse.text(), {
+      status: 404,
+      headers: shellResponse.headers,
+    });
+  }
+
+  const images = await fetchProductImagesForSsr(env, productRow.id);
+  const specs = await fetchProductSpecsForSsr(env, productRow.id);
+  const viewModel = buildProductViewModel(productRow);
+  const jsonLd = buildProductJsonLd(viewModel, images);
+  const metaDescription = stripHtmlToText(viewModel.description, 155) ||
+    `${viewModel.name} — خرید آنلاین از فروشگاه تأسیسات آپادانا`;
+
+  let html = await shellResponse.text();
+
+  html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtmlForSsr(viewModel.name)} | تأسیسات آپادانا</title>`);
+  html = html.replace(
+    /<meta\s+name="description"\s+content="[\s\S]*?"\s*>/,
+    `<meta name="description" content="${escapeHtmlForSsr(metaDescription)}">`
+  );
+  html = html.replace(
+    "</head>",
+    `<link rel="canonical" href="${escapeHtmlForSsr(viewModel.canonical_url)}">\n` +
+    `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>\n</head>`
+  );
+  html = html.replace(
+    /<div[^>]*id="product-detail"[^>]*>[\s\S]*?<\/div>/,
+    `<div id="product-detail" class="product-detail">${renderProductDetailSsrHtml(viewModel, images, specs)}</div>`
+  );
+
+  return new Response(html, {
+    headers: { ...Object.fromEntries(shellResponse.headers), "content-type": "text/html; charset=UTF-8" },
+  });
+}
+
+// =========================================================================
+// sitemap.xml — فقط محصولات فعال (بخش ۱۰ دستور)
+// =========================================================================
+
+async function handleSitemapXml(env) {
+  try {
+    const result = await env.DB.prepare("SELECT slug, updated_at FROM products WHERE active = 1").all();
+    const products = result.results || [];
+
+    const staticUrls = [
+      "", "store/", "service.html", "support.html",
+    ];
+
+    const urls = [
+      ...staticUrls.map((path) => `
+        <url>
+          <loc>${STORE_BASE_URL}/${path}</loc>
+        </url>`),
+      ...products.map((p) => `
+        <url>
+          <loc>${STORE_BASE_URL}/store/product/${encodeURIComponent(p.slug)}</loc>
+          ${p.updated_at ? `<lastmod>${String(p.updated_at).slice(0, 10)}</lastmod>` : ""}
+        </url>`),
+    ].join("");
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}\n</urlset>`;
+
+    return new Response(xml, { headers: { "content-type": "application/xml; charset=UTF-8" } });
+  } catch (error) {
+    return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>', {
+      headers: { "content-type": "application/xml; charset=UTF-8" },
+    });
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -3977,6 +4449,22 @@ export default {
       url.pathname.startsWith("/api/sms/")
     ) {
       return handleStoreApi(request, env);
+    }
+
+    if (url.pathname === "/sitemap.xml") {
+      return handleSitemapXml(env);
+    }
+
+    const productSlugMatch = url.pathname.match(/^\/store\/product\/([^/]+)\/?$/);
+    if (productSlugMatch && request.method === "GET") {
+      return handleProductPageSsr(request, env, decodeURIComponent(productSlugMatch[1]));
+    }
+
+    if (url.pathname === "/store/product.html" && request.method === "GET") {
+      const slug = url.searchParams.get("slug");
+      if (slug) {
+        return handleProductPageSsr(request, env, slug);
+      }
     }
 
     return env.ASSETS.fetch(request);

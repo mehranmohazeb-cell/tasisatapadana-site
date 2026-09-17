@@ -214,6 +214,12 @@ async function showOrderDetails(orderId) {
           <h4 style="margin:16px 0 8px; color:#173b3b;">کالاها</h4>
           ${itemsRows}
 
+          ${
+            Number(order.shipping_cost) > 0
+              ? `<div class="detail-row"><span>هزینه ارسال</span><span>${formatPrice(order.shipping_cost)} تومان</span></div>`
+              : ""
+          }
+
           <div class="detail-row" style="border-bottom:none; margin-top:10px; font-weight:800;">
             <span>مبلغ کل</span><span>${formatPrice(order.total)} تومان</span>
           </div>

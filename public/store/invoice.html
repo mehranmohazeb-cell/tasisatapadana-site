@@ -1400,14 +1400,20 @@
       // مبلغ کل
       // =========================
 
-      const total =
-        Number(order.total || 0);
-
+      const shippingCost = Number(order.shipping_cost || 0);
+      const total = Number(order.total || 0);
+      const itemsSubtotal = total - shippingCost;
 
       document.getElementById("subtotalValue")
         .textContent =
-        formatMoney(total);
+        formatMoney(itemsSubtotal);
 
+      if (shippingCost > 0) {
+        const shippingRow = document.createElement("div");
+        shippingRow.className = "total-row";
+        shippingRow.innerHTML = `<span>هزینه ارسال</span><strong>${formatMoney(shippingCost)}</strong>`;
+        document.getElementById("subtotalValue").parentElement.after(shippingRow);
+      }
 
       document.getElementById("totalValue")
         .textContent =

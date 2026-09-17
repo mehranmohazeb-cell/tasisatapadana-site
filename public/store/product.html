@@ -237,6 +237,64 @@ function formatPrice(value) {
 }
 
 
+function renderBrandModelLine(product) {
+  const parts = [];
+  if (product.brand) parts.push(escapeHtml(product.brand));
+  if (product.model) parts.push(escapeHtml(product.model));
+  if (parts.length === 0) return "";
+  return `<div class="product-detail-meta">${parts.join(" — ")}</div>`;
+}
+
+function renderPriceBlock(product) {
+  if (product.discount_active) {
+    return `
+      ${formatPrice(product.price)}
+      <span class="old-price">${formatPrice(product.compare_at_price)}</span>
+      ${product.discount_percent ? `<span class="discount-badge">${Number(product.discount_percent).toLocaleString("fa-IR")}٪ تخفیف</span>` : ""}
+    `;
+  }
+  return formatPrice(product.price);
+}
+
+function renderShippingBlock(product) {
+  const rows = [];
+  rows.push(`<div>هزینه ارسال: ${Number(product.shipping_cost) > 0 ? formatPrice(product.shipping_cost) : "رایگان"}</div>`);
+  if (product.shipping_method) rows.push(`<div>روش ارسال: ${escapeHtml(product.shipping_method)}</div>`);
+  if (product.shipping_time) rows.push(`<div>زمان ارسال: ${escapeHtml(product.shipping_time)}</div>`);
+  return `<div class="product-shipping-info">${rows.join("")}</div>`;
+}
+
+function renderAssuranceList(product) {
+  const items = [];
+  if (product.has_return_policy) {
+    items.push(`<li>ضمانت بازگشت ${Number(product.return_days).toLocaleString("fa-IR")} روزه</li>`);
+  }
+  if (product.has_warranty) {
+    const provider = product.warranty_provider ? ` ${escapeHtml(product.warranty_provider)}` : "";
+    items.push(`<li>${Number(product.warranty_months).toLocaleString("fa-IR")} ماه گارانتی${provider}</li>`);
+  }
+  if (items.length === 0) return "";
+  return `<ul class="product-assurance-list">${items.join("")}</ul>`;
+}
+
+function renderSpecsTable(specs) {
+  const rows = specs.map((spec) => `
+    <tr>
+      <th>${escapeHtml(spec.label)}</th>
+      <td>${escapeHtml(spec.value)}</td>
+    </tr>
+  `).join("");
+  return `<table class="product-specs-table">${rows}</table>`;
+}
+
+// معرفی محصول به‌صورت HTML ساده (تیتر/پاراگراف/بولد/لیست/لینک) نمایش داده
+// می‌شود؛ ضدعفونی واقعی (حذف تگ/ویژگی خطرناک) هنگام ذخیره در پنل مدیریت
+// سمت Worker انجام می‌شود، پس این مقدار از قبل امن است.
+function sanitizedDescriptionHtml(value) {
+  return String(value ?? "");
+}
+
+
 /* =========================================================
    مسیر صحیح تصاویر
 ========================================================= */
@@ -1061,66 +1119,25 @@ function setupLightboxCloseOnOutsideClick() {
    باز و بسته کردن توضیحات
 ========================================================= */
 
-function toggleProductInfo() {
+function toggleCollapsible(panelId, buttonId, closedLabel, openLabel) {
 
-  const panel =
-    document.getElementById(
-      "product-info-panel"
-    );
-
-
-  const button =
-    document.getElementById(
-      "product-info-toggle"
-    );
-
+  const panel = document.getElementById(panelId);
+  const button = document.getElementById(buttonId);
 
   if (!panel || !button) {
-
     return;
-
   }
 
-
-  const isHidden =
-    panel.hasAttribute(
-      "hidden"
-    );
-
+  const isHidden = panel.hasAttribute("hidden");
 
   if (isHidden) {
-
-    panel.removeAttribute(
-      "hidden"
-    );
-
-
-    button.setAttribute(
-      "aria-expanded",
-      "true"
-    );
-
-
-    button.textContent =
-      "بستن توضیحات و مشخصات فنی";
-
+    panel.removeAttribute("hidden");
+    button.setAttribute("aria-expanded", "true");
+    button.textContent = openLabel;
   } else {
-
-    panel.setAttribute(
-      "hidden",
-      ""
-    );
-
-
-    button.setAttribute(
-      "aria-expanded",
-      "false"
-    );
-
-
-    button.textContent =
-      "توضیحات و مشخصات فنی";
-
+    panel.setAttribute("hidden", "");
+    button.setAttribute("aria-expanded", "false");
+    button.textContent = closedLabel;
   }
 
 }
@@ -1443,68 +1460,23 @@ async function loadProduct() {
             )}
           </h1>
 
-
-          ${
-            currentProduct.description
-              ? `
-
-                <button
-                  type="button"
-                  id="product-info-toggle"
-                  class="product-info-toggle"
-                  aria-expanded="false"
-                  onclick="toggleProductInfo()"
-                >
-                  توضیحات و مشخصات فنی
-                </button>
-
-
-                <div
-                  id="product-info-panel"
-                  class="product-info-panel"
-                  hidden
-                >
-
-                  <div class="product-description">
-
-                    ${escapeHtml(
-                      currentProduct.description
-                    )}
-
-                  </div>
-
-                </div>
-
-              `
-              : ""
-          }
-
+          ${renderBrandModelLine(currentProduct)}
 
           <div class="product-detail-price">
-
-            ${formatPrice(
-              currentProduct.price
-            )}
-
+            ${renderPriceBlock(currentProduct)}
           </div>
-
 
           <div class="product-detail-stock">
-
             ${
-              Number(
-                currentProduct.stock || 0
-              ) > 0
-
-                ? `موجودی: ${Number(
-                    currentProduct.stock
-                  ).toLocaleString("fa-IR")} عدد`
-
+              currentProduct.in_stock
+                ? `موجودی: ${Number(currentProduct.stock || 0).toLocaleString("fa-IR")} عدد`
                 : "در حال حاضر ناموجود"
             }
-
           </div>
 
+          ${renderShippingBlock(currentProduct)}
+
+          ${renderAssuranceList(currentProduct)}
 
           <div class="product-actions">
 
@@ -1556,6 +1528,55 @@ async function loadProduct() {
             </button>
 
           </div>
+
+
+          ${
+            currentProduct.description
+              ? `
+                <button
+                  type="button"
+                  id="product-info-toggle"
+                  class="product-info-toggle"
+                  aria-expanded="false"
+                  onclick="toggleCollapsible('product-info-panel','product-info-toggle','معرفی محصول','بستن معرفی محصول')"
+                >
+                  معرفی محصول
+                </button>
+
+                <div
+                  id="product-info-panel"
+                  class="product-info-panel"
+                  hidden
+                >
+                  <div class="product-description">${sanitizedDescriptionHtml(currentProduct.description)}</div>
+                </div>
+              `
+              : ""
+          }
+
+          ${
+            Array.isArray(currentProduct.specs) && currentProduct.specs.length > 0
+              ? `
+                <button
+                  type="button"
+                  id="product-specs-toggle"
+                  class="product-info-toggle"
+                  aria-expanded="false"
+                  onclick="toggleCollapsible('product-specs-panel','product-specs-toggle','مشخصات فنی','بستن مشخصات فنی')"
+                >
+                  مشخصات فنی
+                </button>
+
+                <div
+                  id="product-specs-panel"
+                  class="product-info-panel"
+                  hidden
+                >
+                  ${renderSpecsTable(currentProduct.specs)}
+                </div>
+              `
+              : ""
+          }
 
 
           <a

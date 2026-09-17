@@ -63,7 +63,7 @@ if (!image) {
       <article class="product-card">
 
         <a
-          href="product.html?slug=${encodeURIComponent(product.slug)}"
+          href="product/${encodeURIComponent(product.slug)}"
           class="product-link"
         >
 

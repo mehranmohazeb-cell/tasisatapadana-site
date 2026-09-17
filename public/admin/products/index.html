@@ -48,14 +48,49 @@
             <small>مثلاً: test-product</small>
           </div>
 
+          <div class="form-group">
+            <label for="product-brand">برند</label>
+            <input id="product-brand" type="text" placeholder="مثلاً: بوتان">
+          </div>
+
+          <div class="form-group">
+            <label for="product-model">مدل</label>
+            <input id="product-model" type="text" placeholder="مثلاً: B20S">
+          </div>
+
+          <div class="form-group">
+            <label for="product-sku">SKU</label>
+            <input id="product-sku" type="text" placeholder="کد انبار (اختیاری)">
+          </div>
+
           <div class="form-group full">
-            <label for="product-description">توضیحات</label>
-            <textarea id="product-description" rows="5"></textarea>
+            <label for="product-description-editor">معرفی محصول</label>
+            <div class="rte-toolbar">
+              <button type="button" data-rte-cmd="bold" title="بولد"><b>B</b></button>
+              <button type="button" data-rte-cmd="insertUnorderedList" title="لیست">• لیست</button>
+              <button type="button" data-rte-cmd="formatBlock" data-rte-value="h3" title="تیتر">تیتر</button>
+              <button type="button" data-rte-cmd="formatBlock" data-rte-value="p" title="پاراگراف">پاراگراف</button>
+              <button type="button" id="rte-link-button" title="لینک">لینک</button>
+            </div>
+            <div id="product-description-editor" class="rte-editor" contenteditable="true"></div>
+            <small>متن را انتخاب کنید و از دکمه‌های بالا برای قالب‌بندی استفاده کنید.</small>
+          </div>
+
+          <div class="form-group full">
+            <label>مشخصات فنی</label>
+            <div id="specs-list"></div>
+            <button type="button" id="add-spec-row" class="secondary-button">+ افزودن ردیف مشخصات</button>
           </div>
 
           <div class="form-group">
             <label for="product-price">قیمت (تومان)</label>
             <input id="product-price" type="number" min="0" required>
+          </div>
+
+          <div class="form-group">
+            <label for="product-compare-price">قیمت قبل از تخفیف (اختیاری)</label>
+            <input id="product-compare-price" type="number" min="0" placeholder="در صورت وجود تخفیف">
+            <small>اگر بزرگ‌تر از قیمت اصلی باشد، به‌صورت خط‌خورده و درصد تخفیف نمایش داده می‌شود.</small>
           </div>
 
           <div class="form-group">
@@ -83,6 +118,36 @@
 
             <small>فقط نام فایل تصویر را وارد کنید؛ مسیر پوشه به‌صورت خودکار اضافه می‌شود.</small>
 
+          </div>
+
+          <div class="form-group">
+            <label for="product-shipping-cost">هزینه ارسال (تومان)</label>
+            <input id="product-shipping-cost" type="number" min="0" placeholder="پیش‌فرض فروشگاه: رایگان">
+          </div>
+
+          <div class="form-group">
+            <label for="product-shipping-method">روش ارسال</label>
+            <input id="product-shipping-method" type="text" placeholder="پیش‌فرض فروشگاه: پست پیشتاز">
+          </div>
+
+          <div class="form-group">
+            <label for="product-shipping-time">زمان ارسال</label>
+            <input id="product-shipping-time" type="text" placeholder="پیش‌فرض فروشگاه: حداکثر ۳ روز کاری">
+          </div>
+
+          <div class="form-group">
+            <label for="product-warranty-months">مدت گارانتی (ماه)</label>
+            <input id="product-warranty-months" type="number" min="0" placeholder="خالی = بدون گارانتی">
+          </div>
+
+          <div class="form-group">
+            <label for="product-warranty-provider">نام شرکت گارانتی</label>
+            <input id="product-warranty-provider" type="text" placeholder="مثلاً: انتخاب سرویس">
+          </div>
+
+          <div class="form-group">
+            <label for="product-return-days">مهلت بازگشت کالا (روز)</label>
+            <input id="product-return-days" type="number" min="0" placeholder="خالی = بدون بازگشت">
           </div>
 
           <div class="form-group checkbox-group">
