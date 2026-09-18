@@ -982,11 +982,22 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
   const SITE_STATUS_VALUES = ["open", "paused"];
 
-  // منبع واحد خواندن وضعیت — Fail-Safe: اگر خواندن از D1 با خطا مواجه شود
-  // (یا جدول/رکورد هنوز وجود نداشته باشد)، store_status را «paused» فرض
-  // می‌کند تا در حالت نامعلوم هرگز سفارش جدید ساخته نشود (بخش ۲۲ دستور).
-  // این تابع فقط برای تصمیم‌گیری روی مسیرهای حساس (Order Creation) استفاده
-  // می‌شود، نه برای تصمیم‌گیری درباره در دسترس بودن کل سایت.
+  // منبع واحد خواندن وضعیت.
+  //
+  // Fail-Safe واقعی (بخش ۲ اصلاحیه): این تابع هرگز throw نمی‌کند و همیشه یک
+  // شیء با کلید صریح "determined" برمی‌گرداند:
+  //   - determined: true  → وضعیت واقعاً از D1 خوانده شد؛ store_status/
+  //     services_status معتبر و قابل‌اعتماد هستند.
+  //   - determined: false → خواندن از D1 به هر دلیلی (جدول وجود ندارد،
+  //     رکورد id=1 وجود ندارد، خطای اتصال D1، هر خطای دیگر) ممکن نشد.
+  //     در این حالت store_status/services_status را هم به "paused" ست
+  //     می‌کنیم، اما مسیرهای حساس (Checkout) باید صریحاً روی "determined"
+  //     چک کنند، نه فقط روی مقدار status — یعنی:
+  //     "عدم توانایی در تشخیص وضعیت = عدم اجازه ایجاد سفارش"
+  //     حتی اگر به هر دلیل مقدار status هم دستکاری/تغییر کند.
+  //
+  // خطای واقعی همیشه با console.error ثبت می‌شود تا در Cloudflare Logs
+  // قابل بررسی باشد (چرا جدول/رکورد در دسترس نبوده).
   async function getSiteStatus(env) {
     try {
       const row = await env.DB
@@ -997,7 +1008,13 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .first();
 
       if (!row) {
-        return { store_status: "paused", services_status: "paused", failSafe: true };
+        console.error("[site-status] رکورد id=1 در site_settings یافت نشد — Fail-Safe: paused.");
+        return {
+          store_status: "paused",
+          services_status: "paused",
+          determined: false,
+          reason: "NO_ROW",
+        };
       }
 
       return {
@@ -1005,12 +1022,28 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         services_status: row.services_status === "open" ? "open" : "paused",
         store_updated_at: row.store_updated_at || null,
         services_updated_at: row.services_updated_at || null,
-        failSafe: false,
+        determined: true,
+        reason: null,
       };
     } catch (error) {
-      // جدول هنوز Migration نشده یا D1 در دسترس نیست — Fail-Safe: paused فرض کن.
-      return { store_status: "paused", services_status: "paused", failSafe: true };
+      // جدول هنوز Migration نشده یا D1 در دسترس نیست — Fail-Safe: paused.
+      console.error("[site-status] خطا در خواندن وضعیت از D1 — Fail-Safe: paused.", error.message);
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return {
+        store_status: "paused",
+        services_status: "paused",
+        determined: false,
+        reason: isMissingTable ? "TABLE_MISSING" : "READ_ERROR",
+        rawError: error.message,
+      };
     }
+  }
+
+  // بررسی مجاز بودن ایجاد سفارش — تنها و تنها زمانی true است که وضعیت واقعاً
+  // از D1 خوانده شده باشد (determined=true) و آن وضعیت دقیقاً "open" باشد.
+  // هر حالت دیگری (جدول نیست، رکورد نیست، خطای D1، مقدار غیرمنتظره) → false.
+  function isOrderCreationAllowed(siteStatus) {
+    return siteStatus.determined === true && siteStatus.store_status === "open";
   }
 
   // =========================
@@ -1018,19 +1051,27 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   // برای نمایش بنر/پیام در فروشگاه عمومی (در صورت نیاز Frontend) استفاده
   // می‌شود. این endpoint فقط اطلاع‌رسانی است؛ منبع حقیقتِ Order Creation
   // همیشه بررسی مستقیم در همان مسیر Checkout است، نه این endpoint.
+  // Cache-Control: no-store — این وضعیت هرگز نباید از Cache قدیمی (مرورگر/
+  // CDN) خوانده شود.
   // =========================
 
   if (url.pathname === "/api/store/site-status" && request.method === "GET") {
     const status = await getSiteStatus(env);
-    return Response.json({
-      ok: true,
-      store_status: status.store_status,
-      services_status: status.services_status,
-    });
+    return Response.json(
+      {
+        ok: true,
+        store_status: status.store_status,
+        services_status: status.services_status,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   }
 
   // =========================
   // GET /api/store/admin/site-status — فقط Admin
+  // status_unknown=true یعنی: وضعیت واقعی از D1 قابل خواندن نیست (مثلاً
+  // Migration هنوز اجرا نشده). در این حالت UI باید صراحتاً «خطا/نامشخص»
+  // نشان دهد، نه یک وضعیت جعلی باز/بسته.
   // =========================
 
   if (url.pathname === "/api/store/admin/site-status" && request.method === "GET") {
@@ -1039,13 +1080,22 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     }
 
     const status = await getSiteStatus(env);
-    return Response.json({
-      ok: true,
-      store_status: status.store_status,
-      services_status: status.services_status,
-      store_updated_at: status.store_updated_at || null,
-      services_updated_at: status.services_updated_at || null,
-    });
+    return Response.json(
+      {
+        ok: true,
+        store_status: status.store_status,
+        services_status: status.services_status,
+        store_updated_at: status.store_updated_at || null,
+        services_updated_at: status.services_updated_at || null,
+        status_unknown: !status.determined,
+        status_unknown_reason: status.determined
+          ? null
+          : status.reason === "TABLE_MISSING"
+          ? "جدول site_settings هنوز ایجاد نشده است. ابتدا Migration دیتابیس (database/site-status.sql) را روی D1 اجرا کنید."
+          : "خواندن وضعیت از پایگاه‌داده ممکن نشد.",
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   }
 
   // =========================
@@ -1082,6 +1132,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       // اگر رکورد id=1 هنوز وجود ندارد (مثلاً Migration به‌تازگی اجرا شده)،
       // اول آن را با مقادیر پیش‌فرض می‌سازیم تا UPDATE هرگز بی‌اثر نماند.
+      // اگر خود جدول site_settings اصلاً وجود نداشته باشد، همین INSERT با
+      // خطای "no such table" شکست می‌خورد و در catch زیر با پیام فارسی
+      // مشخص (نه متن خام D1) به مدیر گزارش می‌شود.
       await env.DB
         .prepare(
           "INSERT INTO site_settings (id, store_status, services_status) " +
@@ -1098,6 +1151,19 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const status = await getSiteStatus(env);
 
+      if (!status.determined) {
+        // UPDATE ظاهراً بدون خطا اجرا شد ولی خواندن مجدد ناموفق بود —
+        // این حالت نباید به‌عنوان موفقیت گزارش شود.
+        return Response.json(
+          {
+            ok: false,
+            error: "SITE_STATUS_VERIFY_FAILED",
+            message: "تغییر ثبت شد اما تأیید وضعیت جدید از پایگاه‌داده ممکن نشد. لطفاً صفحه را رفرش کنید.",
+          },
+          { status: 500 }
+        );
+      }
+
       return Response.json({
         ok: true,
         store_status: status.store_status,
@@ -1106,8 +1172,16 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         services_updated_at: status.services_updated_at || null,
       });
     } catch (error) {
+      console.error("[site-status] خطا در تغییر وضعیت:", error.message);
+      const isMissingTable = /no such table/i.test(error.message || "");
       return Response.json(
-        { ok: false, error: "SITE_STATUS_UPDATE_ERROR", message: error.message },
+        {
+          ok: false,
+          error: isMissingTable ? "SITE_SETTINGS_TABLE_MISSING" : "SITE_STATUS_UPDATE_ERROR",
+          message: isMissingTable
+            ? "جدول site_settings هنوز ایجاد نشده است. ابتدا Migration دیتابیس (database/site-status.sql) را روی D1 اجرا کنید."
+            : "خطا در تغییر وضعیت. لطفاً دوباره تلاش کنید.",
+        },
         { status: 500 }
       );
     }
@@ -2510,7 +2584,12 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       // شدن فروشگاه وارد Checkout شده باشد نیز همینجا رد می‌شود، چون این
       // بررسی روی خودِ درخواست ثبت نهایی انجام می‌شود، نه روی بارگذاری صفحه.
       const siteStatus = await getSiteStatus(env);
-      if (siteStatus.store_status !== "open") {
+      if (!isOrderCreationAllowed(siteStatus)) {
+        // «عدم توانایی در تشخیص وضعیت = عدم اجازه ایجاد سفارش» — چه فروشگاه
+        // واقعاً Paused باشد و چه وضعیت اصلاً از D1 قابل خواندن نباشد (جدول
+        // site_settings وجود ندارد، رکورد id=1 نیست، خطای D1)، در هر دو
+        // حالت مسیر ایجاد سفارش همینجا و قبل از هر side effect دیگری بسته
+        // می‌شود؛ هیچ INSERT سفارش، کاهش موجودی یا درخواست پرداختی رخ نمی‌دهد.
         return Response.json(
           {
             ok: false,

@@ -302,6 +302,12 @@ a {
   border: 1px solid #f0c4c4;
 }
 
+.site-status-chip.unknown {
+  background: #fdf6e8;
+  color: #8a6415;
+  border: 1px solid #f0dfb0;
+}
+
 .site-status-note {
   margin-top: 10px;
   font-size: 12px;

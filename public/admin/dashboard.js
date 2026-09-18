@@ -80,15 +80,31 @@ async function loadDashboard() {
 // وضعیت عملیاتی سایت (توقف موقت فروشگاه/خدمات)
 // =========================
 
-function renderSiteStatusControl(kind, status) {
+function renderSiteStatusControl(kind, status, unknown, unknownReason) {
   // kind: "store" | "services"
   const chip = document.getElementById(`${kind}-status-chip`);
   const button = document.getElementById(`${kind}-status-toggle`);
   if (!chip || !button) return;
 
+  if (unknown) {
+    // وضعیت واقعی از D1 قابل خواندن نیست (مثلاً Migration اجرا نشده).
+    // این حالت را با وضعیت واقعیِ «متوقف» عمداً اشتباه نمی‌گیریم؛ چون
+    // نمایش «متوقف» به مدیر القا می‌کند که سیستم به‌درستی کنترل را در
+    // دست دارد، در حالی که در واقع فقط قابل خواندن نیست (هرچند سفارش
+    // جدید در Backend، طبق Fail-Safe، در همین حالت هم مسدود می‌ماند).
+    chip.textContent = "⚠ نامشخص";
+    chip.className = "site-status-chip unknown";
+    chip.title = unknownReason || "";
+    button.textContent = "—";
+    button.disabled = true;
+    delete button.dataset.nextStatus;
+    return;
+  }
+
   const isOpen = status === "open";
   chip.textContent = isOpen ? "● فعال" : "● متوقف";
   chip.className = `site-status-chip ${isOpen ? "open" : "paused"}`;
+  chip.title = "";
   button.textContent = isOpen
     ? (kind === "store" ? "توقف موقت فروشگاه" : "توقف موقت خدمات")
     : (kind === "store" ? "فعال‌سازی فروشگاه" : "فعال‌سازی خدمات");
@@ -99,8 +115,11 @@ function renderSiteStatusControl(kind, status) {
 async function loadSiteStatus() {
   try {
     const data = await fetchAdmin("/admin/site-status");
-    renderSiteStatusControl("store", data.store_status);
-    renderSiteStatusControl("services", data.services_status);
+    renderSiteStatusControl("store", data.store_status, data.status_unknown, data.status_unknown_reason);
+    renderSiteStatusControl("services", data.services_status, data.status_unknown, data.status_unknown_reason);
+    if (data.status_unknown) {
+      showToast(data.status_unknown_reason || "وضعیت سایت قابل خواندن نیست.", "error");
+    }
   } catch (error) {
     showToast(error.message, "error");
   }
@@ -108,7 +127,7 @@ async function loadSiteStatus() {
 
 async function toggleSiteStatus(kind) {
   const button = document.getElementById(`${kind}-status-toggle`);
-  if (!button) return;
+  if (!button || !button.dataset.nextStatus) return;
 
   const nextStatus = button.dataset.nextStatus;
   const label = kind === "store" ? "فروشگاه" : "خدمات";
