@@ -971,6 +971,149 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   }
 
   // =========================================================================
+  // وضعیت عملیاتی سراسری سایت — توقف/فعال‌سازی موقت فروشگاه و خدمات
+  // (جدول site_settings — یک رکورد تک، id=1). مستقل از وضعیت محصول
+  // (active/inactive) و مستقل از یکدیگر (store_status / services_status).
+  //
+  // توجه مهم: در نسخه فعلی پروژه هیچ API واقعی برای «ثبت درخواست خدمت»
+  // وجود ندارد؛ services_status فقط زیرساخت است و فعلاً هیچ مسیر Backend
+  // به آن متکی نیست (به فایل database/site-status.sql مراجعه شود).
+  // =========================================================================
+
+  const SITE_STATUS_VALUES = ["open", "paused"];
+
+  // منبع واحد خواندن وضعیت — Fail-Safe: اگر خواندن از D1 با خطا مواجه شود
+  // (یا جدول/رکورد هنوز وجود نداشته باشد)، store_status را «paused» فرض
+  // می‌کند تا در حالت نامعلوم هرگز سفارش جدید ساخته نشود (بخش ۲۲ دستور).
+  // این تابع فقط برای تصمیم‌گیری روی مسیرهای حساس (Order Creation) استفاده
+  // می‌شود، نه برای تصمیم‌گیری درباره در دسترس بودن کل سایت.
+  async function getSiteStatus(env) {
+    try {
+      const row = await env.DB
+        .prepare(
+          "SELECT store_status, services_status, store_updated_at, services_updated_at " +
+          "FROM site_settings WHERE id = 1 LIMIT 1"
+        )
+        .first();
+
+      if (!row) {
+        return { store_status: "paused", services_status: "paused", failSafe: true };
+      }
+
+      return {
+        store_status: row.store_status === "open" ? "open" : "paused",
+        services_status: row.services_status === "open" ? "open" : "paused",
+        store_updated_at: row.store_updated_at || null,
+        services_updated_at: row.services_updated_at || null,
+        failSafe: false,
+      };
+    } catch (error) {
+      // جدول هنوز Migration نشده یا D1 در دسترس نیست — Fail-Safe: paused فرض کن.
+      return { store_status: "paused", services_status: "paused", failSafe: true };
+    }
+  }
+
+  // =========================
+  // GET /api/store/site-status — عمومی، بدون Authentication
+  // برای نمایش بنر/پیام در فروشگاه عمومی (در صورت نیاز Frontend) استفاده
+  // می‌شود. این endpoint فقط اطلاع‌رسانی است؛ منبع حقیقتِ Order Creation
+  // همیشه بررسی مستقیم در همان مسیر Checkout است، نه این endpoint.
+  // =========================
+
+  if (url.pathname === "/api/store/site-status" && request.method === "GET") {
+    const status = await getSiteStatus(env);
+    return Response.json({
+      ok: true,
+      store_status: status.store_status,
+      services_status: status.services_status,
+    });
+  }
+
+  // =========================
+  // GET /api/store/admin/site-status — فقط Admin
+  // =========================
+
+  if (url.pathname === "/api/store/admin/site-status" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const status = await getSiteStatus(env);
+    return Response.json({
+      ok: true,
+      store_status: status.store_status,
+      services_status: status.services_status,
+      store_updated_at: status.store_updated_at || null,
+      services_updated_at: status.services_updated_at || null,
+    });
+  }
+
+  // =========================
+  // POST /api/store/admin/site-status/store — فقط Admin
+  // POST /api/store/admin/site-status/services — فقط Admin
+  // بدنه: { "status": "open" | "paused" }
+  // این دو مسیر کاملاً مستقل‌اند و هیچ‌کدام دیگری را تغییر نمی‌دهد.
+  // =========================
+
+  if (
+    (url.pathname === "/api/store/admin/site-status/store" ||
+      url.pathname === "/api/store/admin/site-status/services") &&
+    request.method === "POST"
+  ) {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const newStatus = String(body.status || "").trim();
+
+      if (!SITE_STATUS_VALUES.includes(newStatus)) {
+        return Response.json(
+          { ok: false, error: "INVALID_STATUS", message: "وضعیت باید open یا paused باشد." },
+          { status: 400 }
+        );
+      }
+
+      const isStore = url.pathname.endsWith("/store");
+      const column = isStore ? "store_status" : "services_status";
+      const updatedAtColumn = isStore ? "store_updated_at" : "services_updated_at";
+      const timestamp = nowIso();
+
+      // اگر رکورد id=1 هنوز وجود ندارد (مثلاً Migration به‌تازگی اجرا شده)،
+      // اول آن را با مقادیر پیش‌فرض می‌سازیم تا UPDATE هرگز بی‌اثر نماند.
+      await env.DB
+        .prepare(
+          "INSERT INTO site_settings (id, store_status, services_status) " +
+          "VALUES (1, 'open', 'open') ON CONFLICT(id) DO NOTHING"
+        )
+        .run();
+
+      await env.DB
+        .prepare(
+          `UPDATE site_settings SET ${column} = ?, ${updatedAtColumn} = ? WHERE id = 1`
+        )
+        .bind(newStatus, timestamp)
+        .run();
+
+      const status = await getSiteStatus(env);
+
+      return Response.json({
+        ok: true,
+        store_status: status.store_status,
+        services_status: status.services_status,
+        store_updated_at: status.store_updated_at || null,
+        services_updated_at: status.services_updated_at || null,
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "SITE_STATUS_UPDATE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // =========================================================================
   // SMS Admin Panel API — بخش ۵ تا ۲۶ دستور «توسعه پنل مدیریت SMS»
   // همه این endpointها فقط Admin (X-Admin-Token) هستند.
   // =========================================================================
@@ -2361,6 +2504,23 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
   if (url.pathname === "/api/store/checkout" && request.method === "POST") {
     try {
+      // --- گیت وضعیت عملیاتی فروشگاه (بخش ۹/۱۰ دستور توقف موقت) ---
+      // Backend همیشه منبع حقیقت است؛ این بررسی قبل از هرگونه خواندن سبد،
+      // کاهش موجودی یا INSERT سفارش انجام می‌شود. کاربری که پیش از Pause
+      // شدن فروشگاه وارد Checkout شده باشد نیز همینجا رد می‌شود، چون این
+      // بررسی روی خودِ درخواست ثبت نهایی انجام می‌شود، نه روی بارگذاری صفحه.
+      const siteStatus = await getSiteStatus(env);
+      if (siteStatus.store_status !== "open") {
+        return Response.json(
+          {
+            ok: false,
+            error: "STORE_PAUSED",
+            message: "ثبت سفارش جدید فروشگاه موقتاً متوقف شده است. لطفاً بعداً مجدداً مراجعه کنید.",
+          },
+          { status: 409 }
+        );
+      }
+
       const body = await request.json();
       const customer = body.customer || {};
       const items = Array.isArray(body.items) ? body.items : [];

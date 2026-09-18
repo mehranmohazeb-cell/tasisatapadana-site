@@ -258,6 +258,57 @@ a {
 }
 
 /* =========================
+   Site Status (توقف موقت فروشگاه/خدمات)
+   ========================= */
+
+.site-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.site-status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #dce4e2;
+  border-radius: 11px;
+  background: #fbfcfc;
+  padding: 12px 16px;
+}
+
+.site-status-label {
+  font-weight: 700;
+  color: #123b3b;
+}
+
+.site-status-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.site-status-chip.open {
+  background: #eaf5ee;
+  color: #2f6b4f;
+  border: 1px solid #cbe6d5;
+}
+
+.site-status-chip.paused {
+  background: #fdf1f1;
+  color: #a23b3b;
+  border: 1px solid #f0c4c4;
+}
+
+.site-status-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #647773;
+}
+
+/* =========================
    Buttons
    ========================= */
 

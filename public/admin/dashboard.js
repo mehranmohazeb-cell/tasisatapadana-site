@@ -76,12 +76,83 @@ async function loadDashboard() {
   }
 }
 
+// =========================
+// وضعیت عملیاتی سایت (توقف موقت فروشگاه/خدمات)
+// =========================
+
+function renderSiteStatusControl(kind, status) {
+  // kind: "store" | "services"
+  const chip = document.getElementById(`${kind}-status-chip`);
+  const button = document.getElementById(`${kind}-status-toggle`);
+  if (!chip || !button) return;
+
+  const isOpen = status === "open";
+  chip.textContent = isOpen ? "● فعال" : "● متوقف";
+  chip.className = `site-status-chip ${isOpen ? "open" : "paused"}`;
+  button.textContent = isOpen
+    ? (kind === "store" ? "توقف موقت فروشگاه" : "توقف موقت خدمات")
+    : (kind === "store" ? "فعال‌سازی فروشگاه" : "فعال‌سازی خدمات");
+  button.disabled = false;
+  button.dataset.nextStatus = isOpen ? "paused" : "open";
+}
+
+async function loadSiteStatus() {
+  try {
+    const data = await fetchAdmin("/admin/site-status");
+    renderSiteStatusControl("store", data.store_status);
+    renderSiteStatusControl("services", data.services_status);
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+async function toggleSiteStatus(kind) {
+  const button = document.getElementById(`${kind}-status-toggle`);
+  if (!button) return;
+
+  const nextStatus = button.dataset.nextStatus;
+  const label = kind === "store" ? "فروشگاه" : "خدمات";
+  const confirmMessage = nextStatus === "paused"
+    ? `آیا مطمئن هستید؟ با توقف ${label}، ثبت ${kind === "store" ? "سفارش‌های" : "درخواست‌های"} جدید متوقف خواهد شد.`
+    : `آیا مطمئن هستید که می‌خواهید ${label} را دوباره فعال کنید؟`;
+
+  if (!confirm(confirmMessage)) return;
+
+  button.disabled = true;
+
+  try {
+    const data = await fetchAdmin(`/admin/site-status/${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+
+    renderSiteStatusControl("store", data.store_status);
+    renderSiteStatusControl("services", data.services_status);
+    showToast("وضعیت با موفقیت تغییر کرد.", "success");
+  } catch (error) {
+    showToast(error.message, "error");
+    button.disabled = false;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initAdminPage("dashboard");
   loadDashboard();
+  loadSiteStatus();
 
   const refreshButton = document.getElementById("refresh-summary");
   if (refreshButton) {
     refreshButton.addEventListener("click", loadDashboard);
+  }
+
+  const storeToggle = document.getElementById("store-status-toggle");
+  if (storeToggle) {
+    storeToggle.addEventListener("click", () => toggleSiteStatus("store"));
+  }
+
+  const servicesToggle = document.getElementById("services-status-toggle");
+  if (servicesToggle) {
+    servicesToggle.addEventListener("click", () => toggleSiteStatus("services"));
   }
 });
