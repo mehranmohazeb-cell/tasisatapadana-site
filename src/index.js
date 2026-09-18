@@ -4413,6 +4413,12 @@ async function handleProductPageSsr(request, env, slug) {
 
   let html = shell.text;
 
+  // <base> باید در همان ابتدای <head> باشد، قبل از هر تگی که URL نسبی دارد
+  // (مثل <link rel="stylesheet" href="store.css">) — چون مرورگر تگ‌ها را
+  // به‌ترتیب پردازش می‌کند و اگر <base> بعد از آن تگ‌ها بیاید، آن‌ها قبلاً
+  // با base اشتباه (URL خودِ صفحه) resolve و fetch شده‌اند.
+  html = html.replace("<head>", `<head>\n<base href="/store/">`);
+
   html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtmlForSsr(viewModel.name)} | تأسیسات آپادانا</title>`);
   html = html.replace(
     /<meta\s+name="description"\s+content="[\s\S]*?"\s*>/,
