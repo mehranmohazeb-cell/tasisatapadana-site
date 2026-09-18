@@ -1357,15 +1357,13 @@ async function loadProduct() {
     );
 
 
-  const params = new URLSearchParams(window.location.search);
-  let slug = params.get('slug');
+  const slug =
+    new URLSearchParams(
+      window.location.search
+    ).get("slug");
+
 
   if (!slug) {
-    const match = window.location.pathname.match(/^\/store\/product\/([^\/?#]+)\/?$/);
-    if (match) slug = decodeURIComponent(match[1]);
-  }
-
-if (!slug) {
 
     container.innerHTML = `
 
