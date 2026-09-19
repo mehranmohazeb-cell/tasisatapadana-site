@@ -414,7 +414,7 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-alt);
+  background: #FFFFFF;
   border: 1px solid var(--border);
   border-radius: 18px;
   overflow: hidden;
