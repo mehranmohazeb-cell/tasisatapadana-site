@@ -339,7 +339,7 @@ input {
   width: 100%;
   aspect-ratio: 1 / 1;
   object-fit: contain;
-  background: var(--bg-alt);
+  background: transparent;
   padding: 12px;
 }
 
