@@ -62,7 +62,8 @@
         فروشگاه
       </a>
 
-      <a href="cart.html">
+      <a href="cart.html" class="nav-cart-link">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.44C4.52 14.37 5 16 6 16h12v-2H6.42c-.14 0-.25-.11-.25-.25l.03-.12L7.1 12h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 18c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg>
         سبد خرید
         <span id="cart-count">0</span>
       </a>
@@ -71,7 +72,8 @@
         پیگیری سفارش
       </a>
 
-      <a href="account.html">
+      <a href="account.html" class="nav-account-link">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
         حساب کاربری
       </a>
 
@@ -1359,6 +1361,84 @@ function addProductToCart() {
    دریافت محصول و ساخت صفحه
 ========================================================= */
 
+/* =========================================================
+   تعداد بازدیدکنندگان فعال این محصول («در حال مشاهده»)
+   - شناسه بازدیدکننده در localStorage ذخیره می‌شود تا چند تب از
+     همان مرورگر یک نفر حساب شوند، نه چند نفر.
+   - هر ۴۵ ثانیه یک درخواست heartbeat سبک ارسال می‌شود؛ در صورت خطا
+     یا نبود این قابلیت روی سرور، فقط این بخش مخفی می‌شود و بقیه
+     صفحه محصول کاملاً سالم می‌ماند.
+========================================================= */
+
+const VIEWER_HEARTBEAT_MS = 45000;
+let viewerIntervalId = null;
+
+function getViewerVisitorId() {
+  try {
+    const storageKey = "tasisat_apadana_visitor_id";
+    let id = localStorage.getItem(storageKey);
+    if (!id) {
+      id = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      localStorage.setItem(storageKey, id);
+    }
+    return id;
+  } catch {
+    return `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+async function sendViewerHeartbeat(slug) {
+  const el = document.getElementById("product-viewers");
+
+  try {
+    const response = await fetch("/api/store/viewers/heartbeat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, visitorId: getViewerVisitorId() })
+    });
+
+    if (!response.ok) throw new Error("viewer heartbeat failed");
+
+    const data = await response.json();
+
+    if (!data || !data.available || !Number.isFinite(data.count) || data.count <= 0) {
+      if (el) el.hidden = true;
+      return;
+    }
+
+    if (el) {
+      el.hidden = false;
+      el.textContent = data.count === 1
+        ? "👁 ۱ نفر در حال مشاهده این محصول است"
+        : `👁 ${Number(data.count).toLocaleString("fa-IR")} نفر در حال مشاهده این محصول هستند`;
+    }
+  } catch {
+    // شکست این درخواست کاملاً بی‌خطر است؛ فقط بخش نمایش را مخفی می‌کنیم.
+    if (el) el.hidden = true;
+  }
+}
+
+function startViewerTracking(slug) {
+  if (viewerIntervalId) {
+    clearInterval(viewerIntervalId);
+    viewerIntervalId = null;
+  }
+
+  if (!slug) return;
+
+  sendViewerHeartbeat(slug);
+  viewerIntervalId = setInterval(() => sendViewerHeartbeat(slug), VIEWER_HEARTBEAT_MS);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && currentProduct && currentProduct.slug) {
+    sendViewerHeartbeat(currentProduct.slug);
+  }
+});
+
+
 async function loadProduct() {
 
   const container =
@@ -1485,6 +1565,8 @@ if (!slug) {
                 : "در حال حاضر ناموجود"
             }
           </div>
+
+          <div id="product-viewers" class="product-viewers" hidden></div>
 
           ${renderShippingBlock(currentProduct)}
 
@@ -1615,6 +1697,8 @@ if (!slug) {
     setupLightboxCloseOnOutsideClick();
 
     updateLightboxNavigation();
+
+    startViewerTracking(currentProduct.slug);
 
 
   } catch (error) {

@@ -23,6 +23,7 @@ async function loadProducts() {
     }
 
     renderProducts(products);
+    setupProductSearch();
 
   } catch (error) {
     console.error(error);
@@ -30,6 +31,59 @@ async function loadProducts() {
     grid.innerHTML =
       `<p class="loading">دریافت محصولات با مشکل مواجه شد.</p>`;
   }
+}
+
+/* =========================================================
+   جستجوی محصول (کاملاً سمت کلاینت، روی داده‌های همین صفحه)
+   ========================================================= */
+
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[يى]/g, "ی")
+    .replace(/ك/g, "ک")
+    .replace(/[إأآا]/g, "ا")
+    .replace(/\u200c/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function filterProducts(query) {
+  const normalizedQuery = normalizeSearchText(query);
+
+  if (!normalizedQuery) {
+    return products;
+  }
+
+  return products.filter((product) => {
+    const haystack = normalizeSearchText(
+      [product.name, product.brand, product.description].filter(Boolean).join(" ")
+    );
+    return haystack.includes(normalizedQuery);
+  });
+}
+
+function setupProductSearch() {
+  const input = document.getElementById("product-search");
+  const emptyMessage = document.getElementById("product-search-empty");
+
+  if (!input) return;
+
+  input.addEventListener("input", () => {
+    const filtered = filterProducts(input.value);
+
+    if (filtered.length === 0) {
+      document.getElementById("products-grid").innerHTML = "";
+      if (emptyMessage) {
+        emptyMessage.textContent = "محصولی با این عبارت پیدا نشد.";
+        emptyMessage.hidden = false;
+      }
+      return;
+    }
+
+    if (emptyMessage) emptyMessage.hidden = true;
+    renderProducts(filtered);
+  });
 }
 
 function renderProducts(items) {

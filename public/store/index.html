@@ -19,9 +19,9 @@
       <nav class="store-nav">
         <a href="../index.html">سایت اصلی</a>
         <a href="index.html">فروشگاه</a>
-        <a href="cart.html">سبد خرید <span id="cart-count">0</span></a>
+        <a href="cart.html" class="nav-cart-link"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.44C4.52 14.37 5 16 6 16h12v-2H6.42c-.14 0-.25-.11-.25-.25l.03-.12L7.1 12h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 18c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg>سبد خرید <span id="cart-count">0</span></a>
         <a href="track-order.html">پیگیری سفارش</a>
-        <a href="account.html">حساب کاربری</a>
+        <a href="account.html" class="nav-account-link"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>حساب کاربری</a>
         <a href="../support.html">پشتیبانی</a>
       </nav>
     </div>
@@ -45,6 +45,17 @@
         <h2>محصولات</h2>
         <p>محصول موردنظر را انتخاب کنید تا جزئیات و تصاویر آن را ببینید.</p>
       </div>
+      <div class="store-search">
+        <label for="product-search" class="visually-hidden">جستجوی محصول</label>
+        <input
+          type="search"
+          id="product-search"
+          class="store-search-input"
+          placeholder="جستجو در نام، برند یا توضیحات محصول..."
+          autocomplete="off"
+        >
+      </div>
+      <p id="product-search-empty" class="loading" hidden></p>
       <div id="products-grid" class="products-grid">
         <p class="loading">در حال بارگذاری محصولات...</p>
       </div>

@@ -1838,7 +1838,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       try {
         const result = await env.DB
           .prepare(
-            "SELECT id, name, slug, description, price, image, stock, active, shipping_cost " +
+            "SELECT id, name, slug, description, price, image, stock, active, shipping_cost, brand " +
             "FROM products WHERE active = 1 ORDER BY id DESC"
           )
           .all();
@@ -2568,6 +2568,47 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         { ok: false, error: "DATABASE_ERROR", message: error.message },
         { status: 500 }
       );
+    }
+  }
+
+  // =========================
+  // شمارش «در حال مشاهده این محصول» — فقط KV موقت، بدون تماس با D1
+  // یک درخواست ترکیبی: هم heartbeat بازدیدکننده را تازه می‌کند و هم
+  // شمار فعلی همان محصول را برمی‌گرداند، تا صفحه محصول به‌جای دو
+  // درخواست جداگانه فقط یک درخواست هر ۴۵ ثانیه بزند.
+  // POST /api/store/viewers/heartbeat  { slug, visitorId }
+  // =========================
+
+  if (url.pathname === "/api/store/viewers/heartbeat" && request.method === "POST") {
+    // اگر KV متصل نباشد (مثلاً هنوز namespace ساخته نشده)، بدون خطا و
+    // بدون تأثیر روی بقیه سایت، فقط شمارش را غیرفعال اعلام می‌کنیم.
+    if (!env.VIEWERS_KV) {
+      return Response.json({ ok: true, available: false, count: 0 });
+    }
+
+    try {
+      const body = await request.json().catch(() => ({}));
+      const slug = String(body.slug || "").trim().slice(0, 200);
+      const visitorId = String(body.visitorId || "").trim().slice(0, 100);
+
+      if (!slug || !visitorId) {
+        return Response.json({ ok: true, available: false, count: 0 });
+      }
+
+      const key = `viewers:${slug}:${visitorId}`;
+
+      // TTL حدود ۵ دقیقه: تا وقتی مرورگر هر ۴۵ ثانیه heartbeat بزند
+      // کلید زنده می‌ماند؛ با بسته‌شدن تب/خروج کاربر، خودش بعد از حدود
+      // ۵ دقیقه بدون هیچ عملیات پاک‌سازی دستی منقضی و حذف می‌شود.
+      await env.VIEWERS_KV.put(key, "1", { expirationTtl: 300 });
+
+      const list = await env.VIEWERS_KV.list({ prefix: `viewers:${slug}:` });
+      const count = Array.isArray(list.keys) ? list.keys.length : 0;
+
+      return Response.json({ ok: true, available: true, count });
+    } catch (error) {
+      // خطای KV هرگز نباید صفحه محصول یا بقیه سایت را مختل کند.
+      return Response.json({ ok: true, available: false, count: 0 });
     }
   }
 
