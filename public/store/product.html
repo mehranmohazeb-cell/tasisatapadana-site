@@ -277,6 +277,16 @@ function renderAssuranceList(product) {
   return `<ul class="product-assurance-list">${items.join("")}</ul>`;
 }
 
+function renderPolicyLinks() {
+  return `
+    <div class="product-policy-links">
+      <a href="/legal.html#shopping-return">شرایط خرید و مرجوعی</a>
+      <span class="policy-sep" aria-hidden="true">·</span>
+      <a href="/legal.html#shipping">شرایط ارسال</a>
+    </div>
+  `;
+}
+
 function renderSpecsTable(specs) {
   const rows = specs.map((spec) => `
     <tr>
@@ -1479,6 +1489,8 @@ if (!slug) {
           ${renderShippingBlock(currentProduct)}
 
           ${renderAssuranceList(currentProduct)}
+
+          ${renderPolicyLinks()}
 
           <div class="product-actions">
 

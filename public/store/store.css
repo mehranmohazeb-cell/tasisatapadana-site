@@ -187,6 +187,39 @@ input {
 }
 
 
+.store-policy-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin-top: 18px;
+  background: #f4f8f9;
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: 10px;
+  font-size: .92rem;
+}
+
+.store-policy-links a {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 4px 2px;
+}
+
+.store-policy-links .policy-sep {
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .store-policy-links {
+    gap: 8px;
+    font-size: .95rem;
+  }
+}
+
+
 /* =========================================================
    Product Listing
    ========================================================= */
@@ -606,6 +639,35 @@ input {
   content: "✓ ";
   color: #2f6b4f;
   font-weight: 800;
+}
+
+/* ---------- لینک‌های قوانین خرید و ارسال ---------- */
+
+.product-policy-links {
+  max-width: 420px;
+  margin: 0 auto 20px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-alt);
+  font-size: 14px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.product-policy-links a {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 4px 2px;
+}
+
+.product-policy-links .policy-sep {
+  color: var(--ink-soft);
 }
 
 /* ---------- جدول مشخصات فنی ---------- */
