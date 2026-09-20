@@ -86,29 +86,62 @@ function setupProductSearch() {
   });
 }
 
+/* =========================================================
+   مسیر صحیح تصویر محصول — دقیقاً همان منطق صفحه جزئیات محصول
+   (product.html → getProductImageUrl) تا نتیجه هر دو مسیر یکسان
+   و سازگار با ساختار فعلی تصاویر باشد.
+   ========================================================= */
+
+function getProductImageUrl(image) {
+  if (!image) {
+    return "/assets/products/placeholder.svg";
+  }
+
+  const value = String(image).trim();
+
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:")
+  ) {
+    return value;
+  }
+
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  if (value.startsWith("assets/")) {
+    return "/" + value;
+  }
+
+  if (value.startsWith("products/")) {
+    return "/assets/" + value;
+  }
+
+  return "/assets/products/" + value;
+}
+
+// انتخاب تصویر اصلی محصول از فیلد تکی «image» یا (در صورت نبود) از اولین
+// آیتم آرایه «images» — همان اولویتی که renderProducts همیشه استفاده
+// می‌کرده، فقط این‌بار در یک تابع مشترک تا addToCart هم از همان نتیجه
+// استفاده کند.
+function getPrimaryProductImage(product) {
+  let raw = product.image || "";
+
+  if (!raw && Array.isArray(product.images) && product.images.length > 0) {
+    raw = product.images[0].image || "";
+  }
+
+  return getProductImageUrl(raw);
+}
+
 function renderProducts(items) {
   const grid = document.getElementById("products-grid");
 
   grid.innerHTML = items.map(product => {
 
-    let image = product.image || "";
-
-if (!image && Array.isArray(product.images) && product.images.length > 0) {
-  image = product.images[0].image || "";
-}
-
-if (
-  image &&
-  !image.startsWith("/") &&
-  !image.startsWith("http://") &&
-  !image.startsWith("https://")
-) {
-  image = "/assets/products/" + image;
-}
-
-if (!image) {
-  image = "/assets/products/placeholder.svg";
-}
+    const image = getPrimaryProductImage(product);
 
     const title = escapeHtml(product.name || "محصول");
     const price = formatPrice(product.price);
@@ -217,7 +250,12 @@ function addToCart(id) {
       id: product.id,
       name: product.name,
       price: product.price,
-      image: product.image || "",
+      // قبلاً اینجا مقدار خام product.image ذخیره می‌شد (بدون عبور از همان
+      // منطق resolve که renderProducts استفاده می‌کند)؛ همین باعث می‌شد
+      // مسیر نسبی تصویر در سبد خرید نادرست/شکسته باشد. با
+      // getPrimaryProductImage همیشه همان مسیر واقعی و صحیحی که در کارت
+      // فروشگاه دیده می‌شود، در سبد هم ذخیره می‌شود.
+      image: getPrimaryProductImage(product),
       quantity: 1
     });
   }

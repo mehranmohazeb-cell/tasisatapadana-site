@@ -101,6 +101,45 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+/* =========================================================
+   مسیر صحیح تصویر محصول — دقیقاً همان منطق صفحه جزئیات محصول و
+   فروشگاه (getProductImageUrl در product.html و store.js). این تابع
+   اینجا هم لازم است چون آیتم‌های قدیمی سبد خرید ممکن است قبل از رفع
+   باگ، با یک مسیر خام/نسبی یا بدون تصویر ذخیره شده باشند؛ با عبور از
+   همین تابع در لحظه نمایش، بدون نیاز به تغییر localStorage، تصویر
+   صحیح (یا placeholder امن) نشان داده می‌شود.
+   ========================================================= */
+
+function getProductImageUrl(image) {
+  if (!image) {
+    return "/assets/products/placeholder.svg";
+  }
+
+  const value = String(image).trim();
+
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:")
+  ) {
+    return value;
+  }
+
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  if (value.startsWith("assets/")) {
+    return "/" + value;
+  }
+
+  if (value.startsWith("products/")) {
+    return "/assets/" + value;
+  }
+
+  return "/assets/products/" + value;
+}
+
 function changeQuantity(index, change) {
   const cart = getCart();
 
@@ -157,7 +196,7 @@ function renderCart() {
       <article class="cart-item">
 
         <img
-          src="${escapeHtml(item.image || "../assets/products/placeholder.svg")}"
+          src="${escapeHtml(getProductImageUrl(item.image))}"
           alt="${escapeHtml(item.name)}"
           class="cart-item-image"
         >
