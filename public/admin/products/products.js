@@ -2,12 +2,55 @@
 // مدیریت محصولات — /admin/products/
 // =========================
 
+function getCategoryNameById(id) {
+  const category = categoriesForSelect.find((item) => Number(item.id) === Number(id));
+  return category ? category.name : "";
+}
+
 let editingProductId = null;
 let productImages = []; // [{ image, alt }]
 let productSpecs = []; // [{ label, value }]
 let currentPage = 1;
 const PAGE_LIMIT = 20;
 let lastPagination = { page: 1, total_pages: 1, total: 0 };
+let categoriesForSelect = [];
+
+// =========================
+// دسته‌بندی — بارگذاری برای select فرم محصول
+// =========================
+
+async function loadCategoriesForSelect() {
+  const select = document.getElementById("product-category");
+  if (!select) return;
+  try {
+    const data = await fetchAdmin("/admin/categories");
+    categoriesForSelect = data.categories || [];
+
+    const byParent = new Map();
+    for (const category of categoriesForSelect) {
+      const key = category.parent_id == null ? "root" : String(category.parent_id);
+      if (!byParent.has(key)) byParent.set(key, []);
+      byParent.get(key).push(category);
+    }
+
+    function flatten(parentKey, depth) {
+      let out = [];
+      for (const category of byParent.get(parentKey) || []) {
+        out.push({ id: category.id, label: `${"— ".repeat(depth)}${category.name}` });
+        out = out.concat(flatten(String(category.id), depth + 1));
+      }
+      return out;
+    }
+
+    const options = flatten("root", 0);
+    select.innerHTML =
+      `<option value="">— بدون دسته —</option>` +
+      options.map((opt) => `<option value="${opt.id}">${escapeHtml(opt.label)}</option>`).join("");
+  } catch {
+    // نبود دسته‌بندی (مثلاً Migration هنوز اجرا نشده) نباید فرم محصول را مختل کند.
+    select.innerHTML = `<option value="">— بدون دسته —</option>`;
+  }
+}
 
 // =========================
 // بارگذاری لیست
@@ -68,6 +111,7 @@ function renderProducts(products) {
         <div class="product-admin-info">
           <strong>${escapeHtml(product.name)}</strong>
           ${product.brand || product.model ? `<span>${escapeHtml([product.brand, product.model].filter(Boolean).join(" — "))}</span>` : ""}
+          ${product.category_id ? `<span>دسته: ${escapeHtml(getCategoryNameById(product.category_id))}</span>` : ""}
           <span>قیمت: ${formatPrice(product.price)} تومان ${hasDiscount ? `<s style="color:#999;">${formatPrice(product.compare_at_price)}</s>` : ""}</span>
           <span>موجودی: ${formatPrice(product.stock)}</span>
           <span class="badge ${isActive ? "gray" : "red"}">${isActive ? "فعال" : "غیرفعال"}</span>
@@ -103,6 +147,9 @@ function clearForm() {
 
   renderImageList();
   renderSpecsList();
+
+  const relationsSection = document.getElementById("relations-section");
+  if (relationsSection) relationsSection.style.display = "none";
 }
 
 function editProduct(id) {
@@ -117,6 +164,7 @@ function editProduct(id) {
   document.getElementById("product-brand").value = product.brand || "";
   document.getElementById("product-model").value = product.model || "";
   document.getElementById("product-sku").value = product.sku || "";
+  document.getElementById("product-category").value = product.category_id != null ? String(product.category_id) : "";
   document.getElementById("product-description-editor").innerHTML = product.description || "";
   document.getElementById("product-price").value = product.price || 0;
   document.getElementById("product-compare-price").value = product.compare_at_price ?? "";
@@ -139,6 +187,13 @@ function editProduct(id) {
 
   renderImageList();
   renderSpecsList();
+
+  const relationsSection = document.getElementById("relations-section");
+  if (relationsSection) {
+    relationsSection.style.display = "block";
+    loadProductRelations(editingProductId);
+  }
+
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -256,6 +311,7 @@ async function saveProduct(event) {
   const brand = document.getElementById("product-brand")?.value.trim();
   const model = document.getElementById("product-model")?.value.trim();
   const sku = document.getElementById("product-sku")?.value.trim();
+  const categoryIdRaw = document.getElementById("product-category")?.value;
   const description = document.getElementById("product-description-editor")?.innerHTML.trim();
   const price = Number(document.getElementById("product-price")?.value);
   const comparePriceRaw = document.getElementById("product-compare-price")?.value;
@@ -275,6 +331,7 @@ async function saveProduct(event) {
 
   const payload = {
     name, slug, brand, model, sku, description, price, stock, active,
+    category_id: categoryIdRaw ? Number(categoryIdRaw) : null,
     compare_at_price: comparePriceRaw ? Number(comparePriceRaw) : null,
     shipping_cost: shippingCostRaw ? Number(shippingCostRaw) : null,
     shipping_method: shippingMethod || null,
@@ -309,12 +366,165 @@ async function saveProduct(event) {
 }
 
 // =========================
+// روابط محصول (مرتبط/مشابه/مکمل) — فقط هنگام ویرایش یک محصول موجود
+// =========================
+
+const RELATION_TYPES = [
+  { key: "related", label: "محصولات مرتبط" },
+  { key: "similar", label: "محصولات مشابه" },
+  { key: "complementary", label: "محصولات مکمل / همراه" },
+];
+
+let relationsSearchTimers = {};
+
+async function loadProductRelations(productId) {
+  const groupsContainer = document.getElementById("relations-groups");
+  const coPurchasedContainer = document.getElementById("co-purchased-list");
+  if (!groupsContainer) return;
+
+  groupsContainer.innerHTML = '<p class="loading">در حال بارگذاری روابط...</p>';
+
+  try {
+    const data = await fetchAdmin(`/admin/product-relations?product_id=${productId}`);
+    renderRelationsGroups(productId, data.relations || {});
+    renderCoPurchased(data.co_purchased || []);
+  } catch (error) {
+    groupsContainer.innerHTML = `<p class="loading">${escapeHtml(error.message)}</p>`;
+    if (coPurchasedContainer) coPurchasedContainer.innerHTML = "";
+  }
+}
+
+function renderRelationsGroups(productId, relations) {
+  const container = document.getElementById("relations-groups");
+  if (!container) return;
+
+  container.innerHTML = RELATION_TYPES.map((type) => {
+    const items = relations[type.key] || [];
+    return `
+      <div class="relation-group" data-relation-type="${type.key}">
+        <h4>${escapeHtml(type.label)}</h4>
+        <div class="relation-chips" id="relation-chips-${type.key}">
+          ${items.length === 0
+            ? '<span style="font-size:12px; color:#8a9995;">هنوز افزوده نشده</span>'
+            : items.map((item) => `
+                <span class="relation-chip">
+                  ${escapeHtml(item.name)}
+                  <button type="button" data-remove-relation="${item.id}" data-relation-type="${type.key}" title="حذف">×</button>
+                </span>
+              `).join("")}
+        </div>
+        <div class="relation-search">
+          <input type="text" placeholder="جست‌وجوی محصول برای افزودن..." data-relation-search="${type.key}">
+          <div class="relation-search-results" id="relation-search-results-${type.key}" style="display:none;"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-remove-relation]").forEach((button) => {
+    button.addEventListener("click", () => {
+      removeProductRelation(productId, Number(button.dataset.removeRelation), button.dataset.relationType);
+    });
+  });
+
+  container.querySelectorAll("[data-relation-search]").forEach((input) => {
+    const relationType = input.dataset.relationSearch;
+
+    input.addEventListener("input", () => {
+      clearTimeout(relationsSearchTimers[relationType]);
+      const query = input.value.trim();
+      const resultsBox = document.getElementById(`relation-search-results-${relationType}`);
+
+      if (!query) {
+        resultsBox.style.display = "none";
+        resultsBox.innerHTML = "";
+        return;
+      }
+
+      relationsSearchTimers[relationType] = setTimeout(async () => {
+        try {
+          const data = await fetchAdmin(`/admin/products/search?q=${encodeURIComponent(query)}&exclude_id=${productId}`);
+          const results = data.products || [];
+
+          if (results.length === 0) {
+            resultsBox.innerHTML = '<button type="button" disabled>محصولی پیدا نشد</button>';
+          } else {
+            resultsBox.innerHTML = results.map((product) => `
+              <button type="button" data-add-relation="${product.id}" data-relation-type="${relationType}">
+                ${escapeHtml(product.name)} ${product.active ? "" : "(غیرفعال)"}
+              </button>
+            `).join("");
+          }
+          resultsBox.style.display = "block";
+
+          resultsBox.querySelectorAll("[data-add-relation]").forEach((button) => {
+            button.addEventListener("click", async () => {
+              await addProductRelation(productId, Number(button.dataset.addRelation), button.dataset.relationType);
+              input.value = "";
+              resultsBox.style.display = "none";
+              resultsBox.innerHTML = "";
+            });
+          });
+        } catch (error) {
+          resultsBox.innerHTML = `<button type="button" disabled>${escapeHtml(error.message)}</button>`;
+          resultsBox.style.display = "block";
+        }
+      }, 300);
+    });
+  });
+}
+
+async function addProductRelation(productId, relatedProductId, relationType) {
+  try {
+    await fetchAdmin("/admin/product-relations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product_id: productId, related_product_id: relatedProductId, relation_type: relationType }),
+    });
+    showToast("رابطه با موفقیت افزوده شد.", "success");
+    await loadProductRelations(productId);
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+async function removeProductRelation(productId, relatedProductId, relationType) {
+  try {
+    await fetchAdmin(
+      `/admin/product-relations?product_id=${productId}&related_product_id=${relatedProductId}&relation_type=${relationType}`,
+      { method: "DELETE" }
+    );
+    await loadProductRelations(productId);
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+function renderCoPurchased(list) {
+  const container = document.getElementById("co-purchased-list");
+  if (!container) return;
+
+  if (!list || list.length === 0) {
+    container.innerHTML = '<p class="loading">هنوز داده کافی از سفارش‌های واقعی برای این محصول وجود ندارد.</p>';
+    return;
+  }
+
+  container.innerHTML = list.map((item) => `
+    <div class="co-purchased-row">
+      <span>${escapeHtml(item.name)}</span>
+      <span>${Number(item.times_together).toLocaleString("fa-IR")} بار همراه خریداری شده</span>
+    </div>
+  `).join("");
+}
+
+// =========================
 // شروع
 // =========================
 
 document.addEventListener("DOMContentLoaded", () => {
   initAdminPage("products");
   setupRichTextToolbar();
+  loadCategoriesForSelect();
 
   document.getElementById("refresh-products")?.addEventListener("click", () => loadProducts(currentPage));
   document.getElementById("cancel-edit")?.addEventListener("click", clearForm);

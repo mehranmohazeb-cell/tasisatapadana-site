@@ -1,0 +1,43 @@
+/* =========================
+   مدیریت دسته‌بندی — استایل‌های اختصاصی (فقط افزودنی، بدون تغییر در
+   admin-common.css یا سایر صفحات پنل)
+   ========================= */
+
+.category-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dbe3e1;
+  border-radius: 9px;
+  background: #fbfcfc;
+  margin-bottom: 8px;
+}
+
+.category-row .category-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #123b3b;
+  overflow-wrap: anywhere;
+}
+
+.category-row .category-meta {
+  font-size: 12px;
+  color: #647773;
+  font-weight: 400;
+}
+
+.category-row .category-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.category-row .category-actions button {
+  padding: 6px 10px;
+  font-size: 12px;
+}

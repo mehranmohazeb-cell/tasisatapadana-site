@@ -327,6 +327,124 @@ async function handleStoreApi(request, env) {
     return result.results || [];
   }
 
+  // =========================================================================
+  // Helpers — دسته‌بندی، روابط محصول، «همراه این محصول خریده‌اند»، پرچم‌های
+  // نمایش عمومی. همه به‌صورت additive و مستقل از منطق فعلی محصول/سبد/سفارش.
+  // =========================================================================
+
+  async function getCategoriesFlat() {
+    const result = await env.DB
+      .prepare(
+        "SELECT id, name, slug, parent_id, sort_order, active, created_at, updated_at " +
+        "FROM categories ORDER BY parent_id IS NOT NULL, parent_id, sort_order, id"
+      )
+      .all();
+    return result.results || [];
+  }
+
+  async function getProductRelationsGrouped(productId) {
+    const result = await env.DB
+      .prepare(
+        "SELECT pr.related_product_id AS id, pr.relation_type, pr.sort_order, " +
+        "p.name, p.slug, p.price, p.image, p.stock, p.active " +
+        "FROM product_relations pr " +
+        "JOIN products p ON p.id = pr.related_product_id " +
+        "WHERE pr.product_id = ? " +
+        "ORDER BY pr.relation_type, pr.sort_order, pr.id"
+      )
+      .bind(productId)
+      .all();
+
+    const rows = result.results || [];
+    const grouped = { related: [], similar: [], complementary: [] };
+    for (const row of rows) {
+      if (!grouped[row.relation_type]) grouped[row.relation_type] = [];
+      grouped[row.relation_type].push(row);
+    }
+    return grouped;
+  }
+
+  // بعد از ثبت موفق هر سفارش با بیش از یک قلم، شمارنده «همراه خریداری شده»
+  // بین هر جفت محصول داخل همان سفارش، در هر دو جهت، یک واحد اضافه می‌شود.
+  // این تابع هرگز نباید ثبت سفارش را متوقف کند — خطای آن فقط لاگ می‌شود.
+  async function updateCoPurchases(env, productIds, timestamp) {
+    try {
+      const uniqueIds = [...new Set(productIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+      if (uniqueIds.length < 2) return;
+
+      for (let i = 0; i < uniqueIds.length; i++) {
+        for (let j = 0; j < uniqueIds.length; j++) {
+          if (i === j) continue;
+          const a = uniqueIds[i];
+          const b = uniqueIds[j];
+          await env.DB
+            .prepare(
+              "INSERT INTO product_co_purchases (product_id, co_product_id, times_together, last_purchased_at) " +
+              "VALUES (?, ?, 1, ?) " +
+              "ON CONFLICT(product_id, co_product_id) DO UPDATE SET " +
+              "times_together = times_together + 1, last_purchased_at = excluded.last_purchased_at"
+            )
+            .bind(a, b, timestamp)
+            .run();
+        }
+      }
+    } catch (error) {
+      console.error("[co-purchases] به‌روزرسانی شکست خورد (سفارش دست‌نخورده باقی ماند):", error.message);
+    }
+  }
+
+  async function getCoPurchasedProducts(productId, limit = 6) {
+    const result = await env.DB
+      .prepare(
+        "SELECT p.id, p.name, p.slug, p.price, p.image, p.stock, cp.times_together " +
+        "FROM product_co_purchases cp " +
+        "JOIN products p ON p.id = cp.co_product_id " +
+        "WHERE cp.product_id = ? AND p.active = 1 AND p.stock > 0 " +
+        "ORDER BY cp.times_together DESC LIMIT ?"
+      )
+      .bind(productId, limit)
+      .all();
+    return result.results || [];
+  }
+
+  // پرچم‌های نمایش عمومی — Fail-Safe: هر خطا یا نبود جدول/ستون یعنی همه چیز
+  // خاموش (false)، دقیقاً همان اصل «عدم قطعیت = عدم نمایش» که برای
+  // site-status هم استفاده شده بود.
+  async function getFeatureFlags(env) {
+    try {
+      const row = await env.DB
+        .prepare(
+          "SELECT show_categories_public, show_related_products, " +
+          "show_similar_products, show_cart_suggestions FROM site_settings WHERE id = 1 LIMIT 1"
+        )
+        .first();
+
+      if (!row) {
+        return {
+          show_categories_public: false,
+          show_related_products: false,
+          show_similar_products: false,
+          show_cart_suggestions: false,
+        };
+      }
+
+      return {
+        show_categories_public: Number(row.show_categories_public) === 1,
+        show_related_products: Number(row.show_related_products) === 1,
+        show_similar_products: Number(row.show_similar_products) === 1,
+        show_cart_suggestions: Number(row.show_cart_suggestions) === 1,
+      };
+    } catch (error) {
+      console.error("[feature-flags] خواندن ممکن نشد — Fail-Safe: همه خاموش.", error.message);
+      return {
+        show_categories_public: false,
+        show_related_products: false,
+        show_similar_products: false,
+        show_cart_suggestions: false,
+      };
+    }
+  }
+
   function nowIso() {
     return new Date().toISOString();
   }
@@ -1838,7 +1956,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       try {
         const result = await env.DB
           .prepare(
-            "SELECT id, name, slug, description, price, image, stock, active, shipping_cost, brand " +
+            "SELECT id, name, slug, description, price, image, stock, active, shipping_cost, brand, category_id " +
             "FROM products WHERE active = 1 ORDER BY id DESC"
           )
           .all();
@@ -1898,7 +2016,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "SELECT id, name, slug, description, price, image, stock, active, " +
           "brand, model, sku, compare_at_price, shipping_cost, shipping_method, shipping_time, " +
-          "warranty_months, warranty_provider, return_days " +
+          "warranty_months, warranty_provider, return_days, category_id " +
           `FROM products ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
         )
         .bind(...params, limit, offset)
@@ -2298,6 +2416,31 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const returnDays =
         body.return_days != null && body.return_days !== "" ? Number(body.return_days) : null;
 
+      // دسته‌بندی — کاملاً اختیاری (بخش دسته‌بندی محصولات). NULL یعنی
+      // «بدون دسته»، دقیقاً همان رفتار محصولات فعلی قبل از این قابلیت.
+      const categoryId =
+        body.category_id != null && body.category_id !== "" ? Number(body.category_id) : null;
+
+      if (categoryId != null && (!Number.isInteger(categoryId) || categoryId <= 0)) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "دسته انتخاب‌شده نامعتبر است." },
+          { status: 400 }
+        );
+      }
+
+      if (categoryId != null) {
+        const categoryRow = await env.DB
+          .prepare("SELECT id FROM categories WHERE id = ? LIMIT 1")
+          .bind(categoryId)
+          .first();
+        if (!categoryRow) {
+          return Response.json(
+            { ok: false, error: "CATEGORY_NOT_FOUND", message: "دسته انتخاب‌شده پیدا نشد." },
+            { status: 400 }
+          );
+        }
+      }
+
       if (!name || !slug) {
         return Response.json(
           { ok: false, error: "INVALID_DATA", message: "نام محصول و شناسه محصول الزامی است." },
@@ -2323,13 +2466,15 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "INSERT INTO products " +
           "(name, slug, description, price, image, stock, active, brand, model, sku, compare_at_price, " +
-          "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days, " +
+          "category_id) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           name, slug, description, price, image, stock, active,
           brand, model, sku, compareAtPrice,
-          shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays
+          shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
+          categoryId
         )
         .run();
 
@@ -2419,6 +2564,29 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const returnDays =
         body.return_days != null && body.return_days !== "" ? Number(body.return_days) : null;
 
+      const categoryId =
+        body.category_id != null && body.category_id !== "" ? Number(body.category_id) : null;
+
+      if (categoryId != null && (!Number.isInteger(categoryId) || categoryId <= 0)) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "دسته انتخاب‌شده نامعتبر است." },
+          { status: 400 }
+        );
+      }
+
+      if (categoryId != null) {
+        const categoryRow = await env.DB
+          .prepare("SELECT id FROM categories WHERE id = ? LIMIT 1")
+          .bind(categoryId)
+          .first();
+        if (!categoryRow) {
+          return Response.json(
+            { ok: false, error: "CATEGORY_NOT_FOUND", message: "دسته انتخاب‌شده پیدا نشد." },
+            { status: 400 }
+          );
+        }
+      }
+
       if (!Number.isInteger(id) || id <= 0 || !name) {
         return Response.json(
           { ok: false, error: "INVALID_DATA", message: "شناسه و نام محصول الزامی است." },
@@ -2461,12 +2629,13 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "description = ?, price = ?, image = ?, stock = ?, active = ?, " +
           "brand = ?, model = ?, sku = ?, compare_at_price = ?, " +
           "shipping_cost = ?, shipping_method = ?, shipping_time = ?, " +
-          "warranty_months = ?, warranty_provider = ?, return_days = ? WHERE id = ?"
+          "warranty_months = ?, warranty_provider = ?, return_days = ?, category_id = ? WHERE id = ?"
         )
         .bind(
           name, slug, description, price, image, stock, active,
           brand, model, sku, compareAtPrice,
           shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
+          categoryId,
           id
         )
         .run();
@@ -2528,6 +2697,536 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     }
   }
 
+  // =========================================================================
+  // دسته‌بندی محصولات — مدیریت (فقط Admin). زیرساخت آماده و قابل توسعه؛
+  // نمایش عمومی آن با پرچم show_categories_public کنترل می‌شود (فعلاً خاموش).
+  // =========================================================================
+
+  // GET /api/store/admin/categories — لیست کامل (تخت) + تعداد محصول هر دسته
+  if (url.pathname === "/api/store/admin/categories" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const categories = await getCategoriesFlat();
+
+      const countsResult = await env.DB
+        .prepare("SELECT category_id, COUNT(*) AS c FROM products WHERE category_id IS NOT NULL GROUP BY category_id")
+        .all();
+      const countsByCategory = new Map((countsResult.results || []).map((row) => [Number(row.category_id), row.c]));
+
+      for (const category of categories) {
+        category.product_count = countsByCategory.get(Number(category.id)) || 0;
+      }
+
+      return Response.json({ ok: true, categories });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "CATEGORIES_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول دسته‌بندی هنوز ایجاد نشده است. ابتدا Migration دیتابیس (database/categories-and-relations.sql) را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // POST /api/store/admin/categories — ایجاد دسته/زیردسته جدید
+  if (url.pathname === "/api/store/admin/categories" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const name = String(body.name || "").trim();
+      let slug = String(body.slug || "").trim();
+      const parentId = body.parent_id != null && body.parent_id !== "" ? Number(body.parent_id) : null;
+      const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+      const active = body.active === false ? 0 : 1;
+
+      if (!name) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "نام دسته الزامی است." }, { status: 400 });
+      }
+
+      if (!slug) {
+        slug = name
+          .trim()
+          .replace(/\s+/g, "-");
+      }
+
+      if (parentId != null) {
+        const parentRow = await env.DB.prepare("SELECT id FROM categories WHERE id = ? LIMIT 1").bind(parentId).first();
+        if (!parentRow) {
+          return Response.json({ ok: false, error: "PARENT_NOT_FOUND", message: "دسته والد پیدا نشد." }, { status: 400 });
+        }
+      }
+
+      const slugOwner = await env.DB.prepare("SELECT id FROM categories WHERE slug = ? LIMIT 1").bind(slug).first();
+      if (slugOwner) {
+        return Response.json(
+          { ok: false, error: "SLUG_TAKEN", message: "این شناسه (Slug) قبلاً برای دسته دیگری استفاده شده است." },
+          { status: 400 }
+        );
+      }
+
+      const timestamp = nowIso();
+      const result = await env.DB
+        .prepare(
+          "INSERT INTO categories (name, slug, parent_id, sort_order, active, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(name, slug, parentId, sortOrder, active, timestamp, timestamp)
+        .run();
+
+      return Response.json(
+        { ok: true, message: "دسته با موفقیت ایجاد شد.", category_id: result.meta?.last_row_id ?? null },
+        { status: 201 }
+      );
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "CATEGORIES_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول دسته‌بندی هنوز ایجاد نشده است. ابتدا Migration دیتابیس (database/categories-and-relations.sql) را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // PUT /api/store/admin/categories — ویرایش نام/Slug/والد/ترتیب/فعال‌بودن
+  if (url.pathname === "/api/store/admin/categories" && request.method === "PUT") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const id = Number(body.id);
+      const name = String(body.name || "").trim();
+      const slug = String(body.slug || "").trim();
+      const parentId = body.parent_id != null && body.parent_id !== "" ? Number(body.parent_id) : null;
+      const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+      const active = body.active === false ? 0 : 1;
+
+      if (!Number.isInteger(id) || id <= 0 || !name || !slug) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "شناسه، نام و Slug دسته الزامی است." },
+          { status: 400 }
+        );
+      }
+
+      if (parentId != null) {
+        if (parentId === id) {
+          return Response.json(
+            { ok: false, error: "INVALID_PARENT", message: "یک دسته نمی‌تواند والد خودش باشد." },
+            { status: 400 }
+          );
+        }
+        const parentRow = await env.DB.prepare("SELECT id, parent_id FROM categories WHERE id = ? LIMIT 1").bind(parentId).first();
+        if (!parentRow) {
+          return Response.json({ ok: false, error: "PARENT_NOT_FOUND", message: "دسته والد پیدا نشد." }, { status: 400 });
+        }
+        // جلوگیری از حلقه ساده (والد جدید، خودش فرزند این دسته نباشد)
+        if (Number(parentRow.parent_id) === id) {
+          return Response.json(
+            { ok: false, error: "CIRCULAR_PARENT", message: "این تغییر باعث حلقه در ساختار دسته‌ها می‌شود." },
+            { status: 400 }
+          );
+        }
+      }
+
+      const slugOwner = await env.DB
+        .prepare("SELECT id FROM categories WHERE slug = ? AND id != ? LIMIT 1")
+        .bind(slug, id)
+        .first();
+      if (slugOwner) {
+        return Response.json(
+          { ok: false, error: "SLUG_TAKEN", message: "این شناسه (Slug) قبلاً برای دسته دیگری استفاده شده است." },
+          { status: 400 }
+        );
+      }
+
+      const result = await env.DB
+        .prepare(
+          "UPDATE categories SET name = ?, slug = ?, parent_id = ?, sort_order = ?, active = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(name, slug, parentId, sortOrder, active, nowIso(), id)
+        .run();
+
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "CATEGORY_NOT_FOUND", message: "دسته موردنظر پیدا نشد." }, { status: 404 });
+      }
+
+      return Response.json({ ok: true, message: "دسته با موفقیت ویرایش شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // DELETE /api/store/admin/categories?id=..&reassign_to=.. — حذف امن:
+  // اگر دسته دارای محصول یا زیردسته باشد و reassign_to داده نشده باشد، حذف
+  // انجام نمی‌شود (پیام واضح با تعداد وابسته‌ها). با دادن reassign_to، همه
+  // محصولات و زیردسته‌ها قبل از حذف به دسته مقصد منتقل می‌شوند — بدون حذف یا
+  // ورود مجدد هیچ محصولی.
+  if (url.pathname === "/api/store/admin/categories" && request.method === "DELETE") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const id = Number(url.searchParams.get("id"));
+      const reassignToRaw = url.searchParams.get("reassign_to");
+      const reassignTo = reassignToRaw != null && reassignToRaw !== "" ? Number(reassignToRaw) : null;
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه دسته نامعتبر است." }, { status: 400 });
+      }
+
+      if (reassignTo != null && reassignTo === id) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "دسته مقصد نمی‌تواند همان دسته حذف‌شونده باشد." },
+          { status: 400 }
+        );
+      }
+
+      if (reassignTo != null) {
+        const targetRow = await env.DB.prepare("SELECT id FROM categories WHERE id = ? LIMIT 1").bind(reassignTo).first();
+        if (!targetRow) {
+          return Response.json({ ok: false, error: "TARGET_NOT_FOUND", message: "دسته مقصد پیدا نشد." }, { status: 400 });
+        }
+      }
+
+      const productCountRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM products WHERE category_id = ?")
+        .bind(id)
+        .first();
+      const childCountRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM categories WHERE parent_id = ?")
+        .bind(id)
+        .first();
+
+      const productCount = productCountRow?.c || 0;
+      const childCount = childCountRow?.c || 0;
+
+      if ((productCount > 0 || childCount > 0) && reassignTo == null) {
+        return Response.json(
+          {
+            ok: false,
+            error: "CATEGORY_HAS_DEPENDENTS",
+            message: `این دسته ${productCount} محصول و ${childCount} زیردسته دارد. برای حذف، یک دسته مقصد برای انتقال آنها انتخاب کنید.`,
+            product_count: productCount,
+            child_count: childCount,
+          },
+          { status: 409 }
+        );
+      }
+
+      if (reassignTo != null) {
+        if (productCount > 0) {
+          await env.DB.prepare("UPDATE products SET category_id = ? WHERE category_id = ?").bind(reassignTo, id).run();
+        }
+        if (childCount > 0) {
+          await env.DB.prepare("UPDATE categories SET parent_id = ?, updated_at = ? WHERE parent_id = ?").bind(reassignTo, nowIso(), id).run();
+        }
+      }
+
+      await env.DB.prepare("DELETE FROM categories WHERE id = ?").bind(id).run();
+
+      return Response.json({ ok: true, message: "دسته با موفقیت حذف شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // روابط محصولات — مرتبط / مشابه / مکمل (فقط Admin برای مدیریت؛ نمایش
+  // عمومی آن در endpoint محصول تکی، پشت پرچم‌های show_related_products و
+  // show_similar_products کنترل می‌شود).
+  // =========================================================================
+
+  // GET /api/store/admin/product-relations?product_id=ID
+  if (url.pathname === "/api/store/admin/product-relations" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const productId = Number(url.searchParams.get("product_id"));
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه محصول نامعتبر است." }, { status: 400 });
+      }
+
+      const relations = await getProductRelationsGrouped(productId);
+      const coPurchased = await getCoPurchasedProducts(productId, 10);
+
+      return Response.json({ ok: true, relations, co_purchased: coPurchased });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "RELATIONS_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول روابط محصول هنوز ایجاد نشده است. ابتدا Migration دیتابیس (database/categories-and-relations.sql) را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // POST /api/store/admin/product-relations — { product_id, related_product_id, relation_type, sort_order? }
+  if (url.pathname === "/api/store/admin/product-relations" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const productId = Number(body.product_id);
+      const relatedProductId = Number(body.related_product_id);
+      const relationType = String(body.relation_type || "").trim();
+      const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+
+      const ALLOWED_RELATION_TYPES = ["related", "similar", "complementary"];
+
+      if (!Number.isInteger(productId) || productId <= 0 || !Number.isInteger(relatedProductId) || relatedProductId <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه محصولات نامعتبر است." }, { status: 400 });
+      }
+      if (productId === relatedProductId) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "یک محصول نمی‌تواند با خودش رابطه داشته باشد." }, { status: 400 });
+      }
+      if (!ALLOWED_RELATION_TYPES.includes(relationType)) {
+        return Response.json({ ok: false, error: "INVALID_RELATION_TYPE", message: "نوع رابطه نامعتبر است." }, { status: 400 });
+      }
+
+      const bothExist = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM products WHERE id IN (?, ?)")
+        .bind(productId, relatedProductId)
+        .first();
+      if ((bothExist?.c || 0) !== 2) {
+        return Response.json({ ok: false, error: "PRODUCT_NOT_FOUND", message: "یکی از محصولات پیدا نشد." }, { status: 404 });
+      }
+
+      await env.DB
+        .prepare(
+          "INSERT INTO product_relations (product_id, related_product_id, relation_type, sort_order) " +
+          "VALUES (?, ?, ?, ?) " +
+          "ON CONFLICT(product_id, related_product_id, relation_type) DO UPDATE SET sort_order = excluded.sort_order"
+        )
+        .bind(productId, relatedProductId, relationType, sortOrder)
+        .run();
+
+      return Response.json({ ok: true, message: "رابطه با موفقیت ثبت شد." }, { status: 201 });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "RELATIONS_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول روابط محصول هنوز ایجاد نشده است. ابتدا Migration دیتابیس (database/categories-and-relations.sql) را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // DELETE /api/store/admin/product-relations?product_id=..&related_product_id=..&relation_type=..
+  if (url.pathname === "/api/store/admin/product-relations" && request.method === "DELETE") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const productId = Number(url.searchParams.get("product_id"));
+      const relatedProductId = Number(url.searchParams.get("related_product_id"));
+      const relationType = String(url.searchParams.get("relation_type") || "").trim();
+
+      if (!Number.isInteger(productId) || !Number.isInteger(relatedProductId) || !relationType) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "پارامترهای حذف رابطه ناقص است." }, { status: 400 });
+      }
+
+      await env.DB
+        .prepare("DELETE FROM product_relations WHERE product_id = ? AND related_product_id = ? AND relation_type = ?")
+        .bind(productId, relatedProductId, relationType)
+        .run();
+
+      return Response.json({ ok: true, message: "رابطه با موفقیت حذف شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // پرچم‌های نمایش عمومی (Feature Flags) — فقط Admin. مقدار پیش‌فرض همه خاموش.
+  // =========================================================================
+
+  const FEATURE_FLAG_COLUMNS = [
+    "show_categories_public",
+    "show_related_products",
+    "show_similar_products",
+    "show_cart_suggestions",
+  ];
+
+  if (url.pathname === "/api/store/admin/feature-flags" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    const flags = await getFeatureFlags(env);
+    return Response.json({ ok: true, flags }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  if (url.pathname === "/api/store/admin/feature-flags" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const updates = [];
+      const params = [];
+
+      for (const column of FEATURE_FLAG_COLUMNS) {
+        if (Object.prototype.hasOwnProperty.call(body, column)) {
+          updates.push(`${column} = ?`);
+          params.push(body[column] ? 1 : 0);
+        }
+      }
+
+      if (updates.length === 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "هیچ پرچمی برای تغییر ارسال نشده است." }, { status: 400 });
+      }
+
+      await env.DB
+        .prepare("INSERT INTO site_settings (id, store_status, services_status) VALUES (1, 'open', 'open') ON CONFLICT(id) DO NOTHING")
+        .run();
+
+      await env.DB.prepare(`UPDATE site_settings SET ${updates.join(", ")} WHERE id = 1`).bind(...params).run();
+
+      const flags = await getFeatureFlags(env);
+      return Response.json({ ok: true, flags });
+    } catch (error) {
+      const isMissingColumn = /no such column/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingColumn ? "FEATURE_FLAGS_MIGRATION_MISSING" : "DATABASE_ERROR",
+          message: isMissingColumn
+            ? "ستون‌های پرچم نمایش عمومی هنوز ایجاد نشده‌اند. ابتدا Migration دیتابیس (database/categories-and-relations.sql) را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // =========================================================================
+  // GET /api/store/admin/products/search?q=.. — جست‌وجوی سبک محصول برای
+  // انتخابگر «افزودن رابطه» در پنل مدیریت (فقط id/name/slug/image/active).
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/products/search" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const q = (url.searchParams.get("q") || "").trim();
+      const excludeId = Number(url.searchParams.get("exclude_id")) || 0;
+
+      const conditions = ["id != ?"];
+      const params = [excludeId];
+
+      if (q) {
+        conditions.push("(name LIKE ? OR slug LIKE ?)");
+        params.push(`%${q}%`, `%${q}%`);
+      }
+
+      const result = await env.DB
+        .prepare(
+          `SELECT id, name, slug, image, price, active FROM products WHERE ${conditions.join(" AND ")} ORDER BY id DESC LIMIT 20`
+        )
+        .bind(...params)
+        .all();
+
+      return Response.json({ ok: true, products: result.results || [] });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // POST /api/store/cart/suggestions — عمومی؛ «پیشنهادهای تکمیلی سبد خرید»
+  // (بخش ۸ دستور). فقط وقتی show_cart_suggestions روشن باشد چیزی برمی‌گردد؛
+  // در غیر این صورت آرایه خالی — یعنی امروز هیچ تغییری در سبد خرید دیده
+  // نمی‌شود، اما بک‌اند کاملاً آماده فعال‌سازی آینده است. دو منبع (روابط
+  // مکمل تعریف‌شده توسط مدیر + آمار واقعی خرید مشترک) این‌جا در یک لیست
+  // واحد و بدون تکرار ادغام می‌شوند.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/cart/suggestions" && request.method === "POST") {
+    try {
+      const flags = await getFeatureFlags(env);
+      if (!flags.show_cart_suggestions) {
+        return Response.json({ ok: true, suggestions: [] });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const cartProductIds = Array.isArray(body.product_ids)
+        ? [...new Set(body.product_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+        : [];
+
+      if (cartProductIds.length === 0) {
+        return Response.json({ ok: true, suggestions: [] });
+      }
+
+      const suggestionsById = new Map();
+
+      // منبع ۱: روابط «مکمل/همراه» تعریف‌شده دستی توسط مدیر
+      for (const productId of cartProductIds) {
+        const result = await env.DB
+          .prepare(
+            "SELECT p.id, p.name, p.slug, p.price, p.image, p.stock " +
+            "FROM product_relations pr JOIN products p ON p.id = pr.related_product_id " +
+            "WHERE pr.product_id = ? AND pr.relation_type = 'complementary' AND p.active = 1 AND p.stock > 0"
+          )
+          .bind(productId)
+          .all();
+        for (const row of result.results || []) {
+          if (!cartProductIds.includes(Number(row.id))) suggestionsById.set(Number(row.id), row);
+        }
+      }
+
+      // منبع ۲: آمار واقعی خرید مشترک (product_co_purchases)
+      for (const productId of cartProductIds) {
+        const coPurchased = await getCoPurchasedProducts(productId, 6);
+        for (const row of coPurchased) {
+          if (!cartProductIds.includes(Number(row.id)) && !suggestionsById.has(Number(row.id))) {
+            suggestionsById.set(Number(row.id), row);
+          }
+        }
+      }
+
+      return Response.json({ ok: true, suggestions: [...suggestionsById.values()].slice(0, 8) });
+    } catch (error) {
+      // این endpoint هرگز نباید تجربه سبد خرید را مختل کند.
+      console.error("[cart-suggestions] خطا:", error.message);
+      return Response.json({ ok: true, suggestions: [] });
+    }
+  }
+
   // =========================
   // Product - Single
   // =========================
@@ -2544,7 +3243,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "SELECT id, name, slug, description, price, image, stock, " +
           "brand, model, sku, compare_at_price, shipping_cost, shipping_method, shipping_time, " +
-          "warranty_months, warranty_provider, return_days " +
+          "warranty_months, warranty_provider, return_days, category_id " +
           "FROM products WHERE slug = ? AND active = 1 LIMIT 1"
         )
         .bind(slug)
@@ -2561,6 +3260,21 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         : images;
 
       result.specs = await getProductSpecs(result.id);
+
+      // زیرساخت «محصولات مرتبط/مشابه» — بخش ۸ دستور: فقط وقتی پرچم مربوطه
+      // در پنل مدیریت روشن باشد این فیلدها پر می‌شوند؛ در غیر این صورت آرایه
+      // خالی برمی‌گردد تا هیچ Frontend فعلی رفتار جدیدی نبیند (نمایش عمومی
+      // فعلاً خاموش است، دقیقاً طبق دستور).
+      const flags = await getFeatureFlags(env);
+      let relatedProducts = [];
+      let similarProducts = [];
+      if (flags.show_related_products || flags.show_similar_products) {
+        const grouped = await getProductRelationsGrouped(result.id);
+        if (flags.show_related_products) relatedProducts = grouped.related;
+        if (flags.show_similar_products) similarProducts = grouped.similar;
+      }
+      result.related_products = relatedProducts;
+      result.similar_products = similarProducts;
 
       return Response.json({ ok: true, product: buildProductViewModel(result) });
     } catch (error) {
@@ -2884,6 +3598,11 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           .prepare("INSERT INTO order_status_history (order_id, status, note) VALUES (?, 'pending', ?)")
           .bind(orderId, "ثبت سفارش توسط مشتری")
           .run();
+
+        // زیرساخت «مشتریان همراه این محصول خریده‌اند» — به‌روزرسانی شمارنده
+        // خرید مشترک بین اقلام همین سفارش. کاملاً غیربحرانی: خطای آن هرگز
+        // باعث شکست ثبت سفارش نمی‌شود (خودِ تابع خطا را می‌بلعد و فقط لاگ می‌کند).
+        await updateCoPurchases(env, verifiedItems.map((item) => item.productId), timestamp);
       } catch (error) {
         // اگر ثبت سفارش شکست خورد، موجودی کاهش‌یافته باید برگردد.
         for (const item of decremented) {

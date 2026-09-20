@@ -274,6 +274,7 @@ function renderPagination(container, { page, totalPages, total }, onPageClick) {
 const ADMIN_NAV_ITEMS = [
   { key: "dashboard", href: "/admin/", label: "داشبورد" },
   { key: "products", href: "/admin/products/", label: "محصولات" },
+  { key: "categories", href: "/admin/categories/", label: "دسته‌بندی" },
   { key: "orders", href: "/admin/orders/", label: "سفارش‌ها" },
   { key: "support", href: "/admin/support/", label: "پشتیبانی" },
   { key: "sms", href: "/admin/sms/", label: "مدیریت پیامک" },

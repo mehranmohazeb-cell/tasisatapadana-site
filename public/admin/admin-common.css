@@ -989,3 +989,104 @@ a {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* =========================
+   روابط محصول (مرتبط/مشابه/مکمل) — چیپ‌های قابل‌حذف + جست‌وجوی افزودن
+   افزوده‌شده برای صفحه مدیریت محصولات؛ الگویی عمومی و قابل‌استفاده مجدد
+   ========================= */
+
+.relation-group {
+  margin-bottom: 18px;
+}
+
+.relation-group h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #123b3b;
+}
+
+.relation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.relation-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eaf5ee;
+  border: 1px solid #cbe6d5;
+  border-radius: 999px;
+  padding: 5px 6px 5px 12px;
+  font-size: 12px;
+  color: #2f6b4f;
+}
+
+.relation-chip button {
+  border: none;
+  background: #fff;
+  color: #a23b3b;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.relation-search {
+  position: relative;
+}
+
+.relation-search input {
+  width: 100%;
+  border: 1px solid #cbd6d3;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.relation-search-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  background: #fff;
+  border: 1px solid #dbe3e1;
+  border-radius: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 6px 18px rgba(18, 59, 59, 0.12);
+}
+
+.relation-search-results button {
+  display: block;
+  width: 100%;
+  text-align: right;
+  border: none;
+  background: #fff;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.relation-search-results button:hover {
+  background: #f5f8f7;
+}
+
+.co-purchased-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid #e6ece9;
+}
+
+.co-purchased-row:last-child {
+  border-bottom: none;
+}

@@ -86,6 +86,51 @@ function formatDate(value) {
   }
 }
 
+// =========================================================
+// کپی کد پیگیری — با Clipboard API (مدرن) و fallback برای
+// مرورگرهایی که به آن دسترسی ندارند (مثلاً برخی WebViewهای قدیمی موبایل).
+// =========================================================
+
+function copyTrackingCode(code) {
+  const button = document.getElementById("copy-tracking-code");
+
+  const showCopiedFeedback = () => {
+    if (!button) return;
+    const originalText = button.dataset.originalText || button.textContent;
+    button.dataset.originalText = originalText;
+    button.textContent = "✅ کپی شد";
+    button.disabled = true;
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.disabled = false;
+    }, 1800);
+  };
+
+  const fallbackCopy = () => {
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = code;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      showCopiedFeedback();
+    } catch {
+      alert("کپی خودکار ممکن نشد. لطفاً کد پیگیری را به‌صورت دستی کپی کنید.");
+    }
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(code).then(showCopiedFeedback).catch(fallbackCopy);
+  } else {
+    fallbackCopy();
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
 
   updateCartCount();
@@ -205,7 +250,16 @@ document.addEventListener("DOMContentLoaded", () => {
     </p>
 
     <div class="tracking-code-box">
-      ${escapeHtml(order.tracking_code)}
+      <span id="tracking-code-text">${escapeHtml(order.tracking_code)}</span>
+      <button
+        type="button"
+        id="copy-tracking-code"
+        class="copy-btn"
+        onclick="copyTrackingCode('${escapeHtml(order.tracking_code)}')"
+        aria-label="کپی کد پیگیری"
+      >
+        📋 کپی
+      </button>
     </div>
 
 

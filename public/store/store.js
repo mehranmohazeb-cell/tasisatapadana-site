@@ -113,6 +113,11 @@ if (!image) {
     const title = escapeHtml(product.name || "محصول");
     const price = formatPrice(product.price);
 
+    // بررسی موجودی — دقیقاً همان منطقی که صفحه جزئیات محصول استفاده می‌کند:
+    // stock عددی بزرگ‌تر از صفر باشد. اگر ناموجود است، دکمه غیرفعال و متن
+    // «موجودی تمام شده» به‌جای «افزودن به سبد خرید» نمایش داده می‌شود.
+    const inStock = Number(product.stock) > 0;
+
     return `
       <article class="product-card">
 
@@ -145,9 +150,9 @@ if (!image) {
           <button
             class="product-button"
             type="button"
-            onclick="addToCart('${escapeAttribute(product.id)}')"
+            ${inStock ? `onclick="addToCart('${escapeAttribute(product.id)}')"` : "disabled"}
           >
-            افزودن به سبد خرید
+            ${inStock ? "افزودن به سبد خرید" : "موجودی تمام شده"}
           </button>
 
         </div>
@@ -185,6 +190,14 @@ function addToCart(id) {
 
   if (!product) return;
 
+  // بررسی مجدد موجودی همین‌جا (نه فقط در رندر کارت) — جلوی افزودن دستی از
+  // طریق کنسول مرورگر یا وضعیت قدیمی صفحه را هم می‌گیرد. تصمیم نهایی و
+  // واقعی همیشه در Backend هنگام ثبت سفارش گرفته می‌شود.
+  if (!(Number(product.stock) > 0)) {
+    alert("این محصول در حال حاضر ناموجود است.");
+    return;
+  }
+
   const cart = JSON.parse(
     localStorage.getItem("tasisat_apadana_cart") || "[]"
   );
@@ -194,6 +207,10 @@ function addToCart(id) {
   );
 
   if (existing) {
+    if (existing.quantity + 1 > Number(product.stock)) {
+      alert("موجودی این محصول کافی نیست.");
+      return;
+    }
     existing.quantity += 1;
   } else {
     cart.push({

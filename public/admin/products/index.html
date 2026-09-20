@@ -63,6 +63,14 @@
             <input id="product-sku" type="text" placeholder="کد انبار (اختیاری)">
           </div>
 
+          <div class="form-group">
+            <label for="product-category">دسته‌بندی</label>
+            <select id="product-category">
+              <option value="">— بدون دسته —</option>
+            </select>
+            <small>مدیریت دسته‌ها از <a href="../categories/" target="_blank" rel="noopener">صفحه دسته‌بندی</a></small>
+          </div>
+
           <div class="form-group full">
             <label for="product-description-editor">معرفی محصول</label>
             <div class="rte-toolbar">
@@ -166,6 +174,25 @@
 
       </form>
 
+    </section>
+
+    <!-- ===== روابط محصول (مرتبط/مشابه/مکمل) — فقط هنگام ویرایش ===== -->
+
+    <section class="admin-card" id="relations-section" style="display:none;">
+      <div class="section-heading">
+        <h2>روابط این محصول با محصولات دیگر</h2>
+      </div>
+      <p class="site-status-note" style="margin-top:0;">
+        نمایش این موارد برای مشتری فعلاً خاموش است (از صفحه دسته‌بندی قابل‌روشن‌کردن)؛
+        اما از هم‌اکنون می‌توانید آنها را مدیریت کنید.
+      </p>
+
+      <div id="relations-groups"></div>
+
+      <div class="admin-card" style="background:#f5f8f7; margin-top:14px;">
+        <h3 style="margin-top:0; font-size:14px;">محصولاتی که مشتریان معمولاً همراه این محصول خریده‌اند</h3>
+        <div id="co-purchased-list"><p class="loading">در حال بارگذاری...</p></div>
+      </div>
     </section>
 
     <!-- ===== لیست محصولات ===== -->
