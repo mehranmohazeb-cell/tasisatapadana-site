@@ -133,6 +133,18 @@
     <div class="summary-card">
       <h2>خلاصه سفارش</h2>
       <div id="summary-items"></div>
+
+      <div class="field field-full" style="margin-top:14px;">
+        <span style="display:block; margin-bottom:6px; font-weight:700;">روش ارسال *</span>
+        <div id="shipping-methods-container">
+          <p style="font-size:13px; color:#71817e;">ابتدا استان و شهر را در فرم سمت راست انتخاب کنید.</p>
+        </div>
+      </div>
+
+      <div class="summary-total">
+        <span>هزینه ارسال</span>
+        <strong id="summary-shipping">—</strong>
+      </div>
       <div class="summary-total">
         <span>مبلغ کل</span>
         <strong id="summary-total">۰ تومان</strong>
@@ -203,6 +215,9 @@ function fillCities(province, selectedCity) {
   citySelect.disabled = false;
 }
 
+let itemsTotal = 0;
+let selectedShippingMethod = null; // { id, name, cost, cost_type }
+
 function renderSummary() {
   const cart = getCart();
   const container = document.getElementById("summary-items");
@@ -215,8 +230,85 @@ function renderSummary() {
     return `<div class="summary-line"><span>${escapeHtml(item.name)} × ${quantity.toLocaleString("fa-IR")}</span><strong>${formatPrice(price * quantity)}</strong></div>`;
   }).join("");
 
-  document.getElementById("summary-total").textContent = formatPrice(total);
+  itemsTotal = total;
+  updateGrandTotal();
   return total;
+}
+
+function updateGrandTotal() {
+  const shippingEl = document.getElementById("summary-shipping");
+  const totalEl = document.getElementById("summary-total");
+
+  if (!selectedShippingMethod) {
+    shippingEl.textContent = "—";
+    totalEl.textContent = formatPrice(itemsTotal);
+    return;
+  }
+
+  const cost = Number(selectedShippingMethod.cost) || 0;
+  shippingEl.textContent = selectedShippingMethod.cost_type === "cod"
+    ? `${formatPrice(cost)} (پس‌کرایه)`
+    : formatPrice(cost);
+  totalEl.textContent = formatPrice(itemsTotal + cost);
+}
+
+async function loadShippingMethods(city) {
+  const container = document.getElementById("shipping-methods-container");
+  selectedShippingMethod = null;
+  updateGrandTotal();
+
+  if (!city) {
+    container.innerHTML = '<p style="font-size:13px; color:#71817e;">ابتدا استان و شهر را در فرم سمت راست انتخاب کنید.</p>';
+    return;
+  }
+
+  container.innerHTML = '<p style="font-size:13px; color:#71817e;">در حال دریافت روش‌های ارسال...</p>';
+
+  try {
+    const response = await fetch(`${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}`);
+    const data = await response.json();
+    const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
+
+    if (methods.length === 0) {
+      container.innerHTML = '<p style="font-size:13px; color:#a23b3b;">برای این مقصد روش ارسالی در دسترس نیست. لطفاً با پشتیبانی تماس بگیرید.</p>';
+      return;
+    }
+
+    container.innerHTML = methods.map((m, index) => `
+      <label class="field-checkbox" style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px;">
+        <input type="radio" name="shipping_method" value="${m.id}" ${index === 0 ? "checked" : ""} data-cost="${m.cost}" data-cost-type="${m.cost_type}" data-name="${escapeHtml(m.name)}">
+        <span>
+          ${escapeHtml(m.name)} — ${formatPrice(m.cost)}
+          ${m.cost_type === "cod" ? '<em style="color:#8a6100; font-style:normal;"> (پس‌کرایه)</em>' : ""}
+        </span>
+      </label>
+    `).join("");
+
+    container.querySelectorAll('input[name="shipping_method"]').forEach((input) => {
+      input.addEventListener("change", () => {
+        selectedShippingMethod = {
+          id: Number(input.value),
+          name: input.dataset.name,
+          cost: Number(input.dataset.cost),
+          cost_type: input.dataset.costType,
+        };
+        updateGrandTotal();
+      });
+    });
+
+    const firstInput = container.querySelector('input[name="shipping_method"]');
+    if (firstInput) {
+      selectedShippingMethod = {
+        id: Number(firstInput.value),
+        name: firstInput.dataset.name,
+        cost: Number(firstInput.dataset.cost),
+        cost_type: firstInput.dataset.costType,
+      };
+      updateGrandTotal();
+    }
+  } catch (error) {
+    container.innerHTML = '<p style="font-size:13px; color:#a23b3b;">دریافت روش‌های ارسال ممکن نشد. لطفاً صفحه را دوباره بارگذاری کنید.</p>';
+  }
 }
 
 function showMessage(text, type) {
@@ -253,6 +345,8 @@ async function checkSession() {
         document.getElementById("unit").value = address.unit || "";
         document.getElementById("postal_code").value = address.postal_code || "";
         document.getElementById("address_note").value = address.address_note || "";
+
+        if (address.city) loadShippingMethods(address.city);
       }
     }
   } catch (error) {
@@ -277,6 +371,10 @@ function validateForm() {
 
   if (postalCode.length !== config.postalCodeLength || !/^\d+$/.test(postalCode)) {
     return "کد پستی باید دقیقاً ۱۰ رقم باشد.";
+  }
+
+  if (!selectedShippingMethod) {
+    return "لطفاً یک روش ارسال انتخاب کنید.";
   }
 
   return null;
@@ -313,6 +411,7 @@ async function submitOrder(event) {
       address_note: document.getElementById("address_note").value.trim(),
     },
     items: cart.map((item) => ({ id: item.id, quantity: item.quantity })),
+    shipping_method_id: selectedShippingMethod?.id,
     save_address: document.getElementById("save_address")?.checked || false,
   };
 
@@ -333,6 +432,8 @@ async function submitOrder(event) {
     sessionStorage.setItem("apadana_last_order", JSON.stringify({
       tracking_code: data.tracking_code,
       total: data.total,
+      shipping_method_name: data.shipping_method_name,
+      shipping_is_cod: data.shipping_is_cod,
       created_at: data.created_at,
       mobile: data.mobile,
       items: cart,
@@ -362,6 +463,7 @@ document.addEventListener("DOMContentLoaded", () => {
   checkSession();
 
   document.getElementById("province").addEventListener("change", (e) => fillCities(e.target.value, ""));
+  document.getElementById("city").addEventListener("change", (e) => loadShippingMethods(e.target.value.trim()));
   document.getElementById("checkout-form").addEventListener("submit", submitOrder);
 });
 </script>

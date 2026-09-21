@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>روش‌های ارسال | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../admin-common.css">
+  <style>
+    .shipping-form { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); margin-bottom: 16px; }
+    .shipping-form .full-row { grid-column: 1 / -1; }
+    .shipping-form label { display: block; font-size: 13px; color: #45514f; margin-bottom: 4px; }
+    .shipping-form input, .shipping-form select { width: 100%; }
+    .shipping-method-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #e5e9e8; }
+    .shipping-method-row:last-child { border-bottom: none; }
+    .shipping-badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-inline-start: 6px; }
+    .shipping-badge.cod { background: #fff3d6; color: #8a6100; }
+    .shipping-badge.prepaid { background: #e4f3ec; color: #1c7a4f; }
+    .shipping-badge.inactive { background: #fde8e8; color: #a23b3b; }
+  </style>
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <section class="admin-card">
+      <h2 id="form-title">افزودن روش ارسال جدید</h2>
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        روش‌های ارسال (پست، تیپاکس، پیک اصفهان، پس‌کرایه و...) اینجا مدیریت می‌شوند و بدون
+        نیاز به تغییر کد یا Deploy، بلافاصله در صفحه پرداخت مشتری اعمال می‌شوند.
+      </p>
+
+      <form id="shipping-form" class="shipping-form">
+        <input type="hidden" id="method-id" value="">
+
+        <div>
+          <label for="method-name">نام روش ارسال</label>
+          <input id="method-name" type="text" required placeholder="مثلاً: پست پیشتاز">
+        </div>
+
+        <div>
+          <label for="method-cost">هزینه ارسال (تومان)</label>
+          <input id="method-cost" type="number" min="0" required placeholder="مثلاً: 50000">
+        </div>
+
+        <div>
+          <label for="method-cost-type">نوع هزینه</label>
+          <select id="method-cost-type">
+            <option value="prepaid">پرداخت هنگام خرید (آنلاین)</option>
+            <option value="cod">پس‌کرایه (دریافت توسط پیک/پست)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="method-scope">محدوده مقصد</label>
+          <select id="method-scope">
+            <option value="all">همه مقصدها</option>
+            <option value="city">فقط یک شهر مشخص</option>
+          </select>
+        </div>
+
+        <div id="method-city-wrapper" style="display:none;">
+          <label for="method-city">نام دقیق شهر مجاز</label>
+          <input id="method-city" type="text" placeholder="مثلاً: اصفهان">
+        </div>
+
+        <div>
+          <label for="method-sort">ترتیب نمایش (عدد کوچک‌تر = بالاتر)</label>
+          <input id="method-sort" type="number" value="0">
+        </div>
+
+        <div class="full-row" style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="method-active" checked style="width:auto;">
+          <label for="method-active" style="margin:0;">فعال (برای مشتری قابل انتخاب باشد)</label>
+        </div>
+
+        <div class="full-row" style="display:flex; gap:10px;">
+          <button type="submit" class="primary-button">ذخیره</button>
+          <button type="button" id="cancel-edit" class="secondary-button" style="display:none;">انصراف از ویرایش</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>روش‌های ارسال ثبت‌شده</h2>
+        <button id="refresh-methods" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="../admin-common.js"></script>
+  <script src="shipping.js"></script>
+</body>
+</html>

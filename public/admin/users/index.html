@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مدیریت کاربران | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>کاربران ثبت‌نام‌شده</h2>
+        <button id="refresh-users" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        فهرست حساب‌های مشتریان فروشگاه. غیرفعال‌کردن یک حساب، بلافاصله نشست‌های
+        ورود او را هم باطل می‌کند و اجازه ورود مجدد (چه با رمز عبور، چه با کد
+        پیامکی) را می‌گیرد.
+      </p>
+
+      <div class="filter-bar">
+        <input id="filter-search" type="text" placeholder="جست‌وجو بر اساس نام یا موبایل">
+        <select id="filter-active">
+          <option value="">همه کاربران</option>
+          <option value="1">فعال</option>
+          <option value="0">غیرفعال</option>
+        </select>
+      </div>
+
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+
+      <div id="pagination-container"></div>
+    </section>
+
+  </main>
+
+  <script src="../admin-common.js"></script>
+  <script src="users.js"></script>
+</body>
+</html>

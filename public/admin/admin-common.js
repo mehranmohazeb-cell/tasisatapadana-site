@@ -276,6 +276,8 @@ const ADMIN_NAV_ITEMS = [
   { key: "products", href: "/admin/products/", label: "محصولات" },
   { key: "categories", href: "/admin/categories/", label: "دسته‌بندی" },
   { key: "orders", href: "/admin/orders/", label: "سفارش‌ها" },
+  { key: "shipping", href: "/admin/shipping/", label: "روش‌های ارسال" },
+  { key: "users", href: "/admin/users/", label: "کاربران" },
   { key: "support", href: "/admin/support/", label: "پشتیبانی" },
   { key: "sms", href: "/admin/sms/", label: "مدیریت پیامک" },
 ];

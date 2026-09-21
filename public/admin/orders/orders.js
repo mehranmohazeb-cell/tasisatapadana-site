@@ -216,7 +216,7 @@ async function showOrderDetails(orderId) {
 
           ${
             Number(order.shipping_cost) > 0
-              ? `<div class="detail-row"><span>هزینه ارسال</span><span>${formatPrice(order.shipping_cost)} تومان</span></div>`
+              ? `<div class="detail-row"><span>روش/هزینه ارسال</span><span>${escapeHtml(order.shipping_method_name || "-")} — ${formatPrice(order.shipping_cost)} تومان${order.shipping_is_cod ? " (پس‌کرایه)" : ""}</span></div>`
               : ""
           }
 

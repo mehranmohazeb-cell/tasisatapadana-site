@@ -273,6 +273,13 @@ document.addEventListener("DOMContentLoaded", () => {
         </strong>
       </div>
 
+      ${order.shipping_method_name ? `
+      <div class="summary-line">
+        <span>روش ارسال</span>
+        <strong>${escapeHtml(order.shipping_method_name)}${order.shipping_is_cod ? " (پس‌کرایه)" : ""}</strong>
+      </div>
+      ` : ""}
+
 
       <div class="summary-line">
         <span>تاریخ ثبت</span>

@@ -41,6 +41,119 @@ function resolveShippingInfo(product) {
   };
 }
 
+// =========================================================================
+// مدیریت بسیار دقیق تومان/ریال — منبع واحد تبدیل واحد پول در کل پروژه.
+// قیمت‌ها همیشه در D1 و در نمایش به مشتری به «تومان» هستند. هر مبلغی که
+// قرار است به درگاه پرداخت ارسال شود، باید دقیقاً و فقط یک‌بار از این
+// تابع عبور کند. هرگز خروجی این تابع را دوباره به این تابع ندهید
+// (جلوگیری از تبدیل دوباره مبلغی که قبلاً به ریال تبدیل شده).
+// =========================================================================
+const TOMAN_TO_RIAL_MULTIPLIER = 10;
+
+function tomanToRial(tomanAmount) {
+  const amount = Number(tomanAmount);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("INVALID_TOMAN_AMOUNT");
+  }
+  return Math.round(amount) * TOMAN_TO_RIAL_MULTIPLIER;
+}
+
+function rialToToman(rialAmount) {
+  const amount = Number(rialAmount);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("INVALID_RIAL_AMOUNT");
+  }
+  return Math.round(amount / TOMAN_TO_RIAL_MULTIPLIER);
+}
+
+// =========================================================================
+// استانداردسازی دائمی علائم و واحدهای فنی (لایه نمایش، بدون تغییر داده خام)
+// =========================================================================
+// قوانین از جدول D1 «technical_format_rules» خوانده می‌شوند (کش سبک در
+// حافظه هر ایزوله، ۶۰ ثانیه) و هرگز مقدار خام محصول در دیتابیس را تغییر
+// نمی‌دهند؛ فقط متنی که در پاسخ API/SSR فرستاده می‌شود را فرمت می‌کنند.
+// یک قانون خراب فقط همان قانون را نادیده می‌گیرد، هرگز کل صفحه را خراب نمی‌کند.
+let _technicalFormatRulesCache = null;
+let _technicalFormatRulesCacheAt = 0;
+const TECHNICAL_FORMAT_RULES_CACHE_TTL_MS = 60 * 1000;
+
+async function getTechnicalFormatRules(env) {
+  const now = Date.now();
+  if (_technicalFormatRulesCache && now - _technicalFormatRulesCacheAt < TECHNICAL_FORMAT_RULES_CACHE_TTL_MS) {
+    return _technicalFormatRulesCache;
+  }
+
+  try {
+    const result = await env.DB
+      .prepare(
+        "SELECT id, rule_type, match_value, display_value FROM technical_format_rules " +
+        "WHERE active = 1 ORDER BY sort_order ASC, id ASC"
+      )
+      .all();
+
+    _technicalFormatRulesCache = result.results || [];
+    _technicalFormatRulesCacheAt = now;
+    return _technicalFormatRulesCache;
+  } catch (error) {
+    // Fail-Safe: اگر جدول هنوز Migrate نشده یا خطای دیگری رخ دهد، هیچ
+    // فرمتی اعمال نمی‌شود (متن خام دقیقاً مثل قبل نمایش داده می‌شود)،
+    // هرگز کل درخواست را خراب نمی‌کند.
+    console.error("[technical-format] خواندن قوانین ممکن نشد:", error.message);
+    return [];
+  }
+}
+
+function escapeRegexLiteral(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function formatTechnicalText(text, rules) {
+  if (text == null || typeof text !== "string" || !Array.isArray(rules) || rules.length === 0) {
+    return text;
+  }
+
+  let output = text;
+  for (const rule of rules) {
+    try {
+      const escapedValue = escapeRegexLiteral(rule.match_value);
+      if (rule.rule_type === "unit") {
+        // فقط وقتی عدد بلافاصله قبل از واحد بیاید جایگزین می‌شود (مثال:
+        // «60 C» یا «60C» → «60 °C»)؛ هرگز حرف/واحد را جدا از یک عدد
+        // جایگزین نمی‌کند تا از تبدیل حدسی/نادرست جلوگیری شود.
+        const re = new RegExp("(\\d+(?:[.,]\\d+)?)\\s?" + escapedValue + "\\b", "g");
+        output = output.replace(re, (_match, num) => `${num} ${rule.display_value}`);
+      } else {
+        // token: جایگزینی دقیق یک نماد مستقل با مرز کلمه (مثال: Qn → Qₙ)
+        const re = new RegExp("\\b" + escapedValue + "\\b", "g");
+        output = output.replace(re, rule.display_value);
+      }
+    } catch (error) {
+      console.error("[technical-format] قانون نادیده گرفته شد:", rule.id, error.message);
+    }
+  }
+  return output;
+}
+
+// یک محصول (و مشخصات فنی آن) را طبق قوانین فعلی فرمت می‌کند. ایمن است
+// حتی اگر specs وجود نداشته باشد یا rules خالی باشد.
+function applyTechnicalFormattingToProduct(product, rules) {
+  if (!product || !Array.isArray(rules) || rules.length === 0) return product;
+
+  if (product.description != null) product.description = formatTechnicalText(product.description, rules);
+  if (product.brand != null) product.brand = formatTechnicalText(product.brand, rules);
+  if (product.model != null) product.model = formatTechnicalText(product.model, rules);
+
+  if (Array.isArray(product.specs)) {
+    product.specs = product.specs.map((spec) => ({
+      ...spec,
+      label: formatTechnicalText(spec.label, rules),
+      value: formatTechnicalText(spec.value, rules),
+    }));
+  }
+
+  return product;
+}
+
 // معرفی محصول (description) به‌صورت HTML ساده (تیتر/پاراگراف/بولد/لیست/لینک)
 // از پنل مدیریت ذخیره می‌شود. این تابع قبل از INSERT/UPDATE، تگ/ویژگی خطرناک
 // را حذف می‌کند تا مقدار ذخیره‌شده در D1 از همان ابتدا امن باشد و صفحه
@@ -443,6 +556,109 @@ async function handleStoreApi(request, env) {
         show_cart_suggestions: false,
       };
     }
+  }
+
+  // =========================================================================
+  // مدیریت بسیار دقیق تومان/ریال برای درگاه پرداخت — بخش ۵ دستور.
+  //
+  // نکته حیاتی: در نسخه فعلی پروژه هیچ درگاه واقعی متصل نیست. این دو تابع
+  // «مسیر امن» آماده هستند تا وقتی یک درگاه واقعی (کلید API آن در
+  // env.PAYMENT_GATEWAY_API_KEY تنظیم شود) اضافه می‌شود، دقیقاً از همین
+  // مسیر (و همین تبدیل واحد) استفاده شود — نه از یک محاسبه جدید و موازی.
+  //
+  // مبلغ همیشه از خودِ ردیف سفارش در D1 دوباره خوانده می‌شود (هرگز از
+  // ورودی کلاینت)، تا مبلغ ارسالی به درگاه فقط به JavaScript سمت مشتری
+  // وابسته نباشد.
+  // =========================================================================
+
+  async function initiatePaymentRequest(env, orderId) {
+    const order = await env.DB
+      .prepare("SELECT id, payable_amount, total, payment_status FROM orders WHERE id = ? LIMIT 1")
+      .bind(orderId)
+      .first();
+
+    if (!order) {
+      return { ok: false, error: "ORDER_NOT_FOUND" };
+    }
+
+    // اگر سفارش‌های قدیمی‌تر از این Migration، payable_amount نداشته باشند
+    // (NULL)، به‌صورت امن روی total کامل سفارش Fallback می‌شود.
+    const amountToman = order.payable_amount != null ? Number(order.payable_amount) : Number(order.total) || 0;
+    const amountRial = tomanToRial(amountToman); // تنها جایی که این تبدیل باید انجام شود.
+
+    const timestamp = nowIso();
+    const insertResult = await env.DB
+      .prepare(
+        "INSERT INTO payment_transactions (order_id, amount_toman, amount_rial, gateway, status, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, 'initiated', ?, ?)"
+      )
+      .bind(orderId, amountToman, amountRial, env.PAYMENT_GATEWAY_NAME || "mock", timestamp, timestamp)
+      .run();
+
+    const transactionId = insertResult.meta?.last_row_id ?? null;
+
+    if (!env.PAYMENT_GATEWAY_API_KEY) {
+      // هیچ درگاه واقعی تنظیم نشده — هیچ درخواست خارجی‌ای زده نمی‌شود.
+      // این حالت طبیعی و فعلی پروژه است (پرداخت دستی/حضوری).
+      return {
+        ok: false,
+        mock: true,
+        reason: "GATEWAY_NOT_CONFIGURED",
+        transaction_id: transactionId,
+        amount_toman: amountToman,
+        amount_rial: amountRial,
+      };
+    }
+
+    // نقطه اتصال درگاه واقعی: وقتی کلید API تنظیم شد، اینجا باید یک
+    // fetch به API «درخواست پرداخت» درگاه انجام شود — دقیقاً با amountRial
+    // محاسبه‌شده در بالا (هرگز amountToman و هرگز محاسبه مجدد آن).
+    return {
+      ok: false,
+      mock: true,
+      reason: "GATEWAY_INTEGRATION_NOT_IMPLEMENTED",
+      transaction_id: transactionId,
+      amount_toman: amountToman,
+      amount_rial: amountRial,
+    };
+  }
+
+  async function verifyPaymentTransaction(env, transactionId, simulateSuccess) {
+    const transaction = await env.DB
+      .prepare("SELECT id, order_id, amount_toman, amount_rial, status FROM payment_transactions WHERE id = ? LIMIT 1")
+      .bind(transactionId)
+      .first();
+
+    if (!transaction) {
+      return { ok: false, error: "TRANSACTION_NOT_FOUND" };
+    }
+
+    if (transaction.status !== "initiated") {
+      return { ok: false, error: "TRANSACTION_ALREADY_FINALIZED", status: transaction.status };
+    }
+
+    const timestamp = nowIso();
+    const newStatus = simulateSuccess ? "paid" : "failed";
+
+    await env.DB
+      .prepare("UPDATE payment_transactions SET status = ?, updated_at = ? WHERE id = ?")
+      .bind(newStatus, timestamp, transaction.id)
+      .run();
+
+    if (simulateSuccess) {
+      await env.DB
+        .prepare("UPDATE orders SET payment_status = 'paid', updated_at = ? WHERE id = ?")
+        .bind(timestamp, transaction.order_id)
+        .run();
+    }
+
+    return {
+      ok: true,
+      status: newStatus,
+      order_id: transaction.order_id,
+      amount_toman: transaction.amount_toman,
+      amount_rial: transaction.amount_rial,
+    };
   }
 
   function nowIso() {
@@ -1038,6 +1254,27 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         ordersByStatus[row.status] = row.c;
       }
 
+      // «سفارش‌های جدید» دیگر صرفاً از روی status='pending' شمارش نمی‌شود؛
+      // منبع واقعی یک اعلان خوانده‌نشده در order_notifications است که فقط
+      // برای سفارش واقعاً pending هنوز باز است. با تغییر وضعیت (از جمله
+      // لغو) یا مشاهده جزئیات سفارش توسط ادمین، اعلان خوانده‌شده علامت
+      // می‌خورد و اینجا دیگر شمرده نمی‌شود — بدون نیاز به جدول جدید اگر
+      // Migration هنوز اجرا نشده (Fail-Safe: صفر).
+      let newOrdersCount = 0;
+      try {
+        const newOrdersRow = await env.DB
+          .prepare(
+            "SELECT COUNT(*) AS c FROM order_notifications n " +
+            "JOIN orders o ON o.id = n.order_id " +
+            "WHERE n.is_read = 0 AND o.status = 'pending'"
+          )
+          .first();
+        newOrdersCount = newOrdersRow?.c || 0;
+      } catch (notifError) {
+        console.error("[order-notifications] شمارش سفارش‌های جدید ممکن نشد:", notifError.message);
+        newOrdersCount = 0;
+      }
+
       const ticketsTotalRow = await env.DB
         .prepare("SELECT COUNT(*) AS c FROM tickets")
         .first();
@@ -1056,7 +1293,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       // tickets: received=جدید, in_review=در حال پیگیری, (received+in_review)=پاسخ‌داده‌نشده
       const orders = {
         total: ordersTotalRow?.c || 0,
-        new: ordersByStatus.pending || 0,
+        new: newOrdersCount,
         in_review: (ordersByStatus.confirmed || 0) + (ordersByStatus.preparing || 0),
         shipped: ordersByStatus.shipped || 0,
         completed: ordersByStatus.completed || 0,
@@ -1858,6 +2095,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 20));
       const q = (url.searchParams.get("q") || "").trim();
       const consentFilter = url.searchParams.get("consent");
+      const activeFilter = url.searchParams.get("active");
 
       const conditions = [];
       const params = [];
@@ -1869,6 +2107,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       if (consentFilter === "1" || consentFilter === "0") {
         conditions.push("sms_marketing_consent = ?");
         params.push(Number(consentFilter));
+      }
+      if (activeFilter === "1" || activeFilter === "0") {
+        conditions.push("is_active = ?");
+        params.push(Number(activeFilter));
       }
 
       const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -1884,7 +2126,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const result = await env.DB
         .prepare(
-          "SELECT id, full_name, phone, phone_verified, sms_marketing_consent, birthday, created_at " +
+          "SELECT id, full_name, phone, phone_verified, sms_marketing_consent, birthday, is_active, created_at " +
           `FROM customers ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
         )
         .bind(...params, limit, offset)
@@ -1901,6 +2143,59 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     } catch (error) {
       return Response.json(
         { ok: false, error: "DATABASE_ERROR", message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // =========================================================================
+  // مدیریت کاربران — بخش ۱ دستور: فعال/غیرفعال‌کردن حساب مشتری.
+  // رمز عبور یا هر اطلاعات حساس دیگری هرگز در هیچ پاسخی برگردانده نمی‌شود.
+  // سیستم نقش/سطح دسترسی جدیدی ساخته نشده — فقط یک پرچم ساده روی همان
+  // جدول customers موجود.
+  // =========================================================================
+  if (
+    url.pathname.startsWith("/api/store/admin/customers/") &&
+    url.pathname.endsWith("/status") &&
+    request.method === "PUT"
+  ) {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const idMatch = url.pathname.match(/^\/api\/store\/admin\/customers\/(\d+)\/status$/);
+    if (!idMatch) {
+      return Response.json({ ok: false, error: "INVALID_ID" }, { status: 400 });
+    }
+
+    try {
+      const body = await request.json();
+      const isActive = body.is_active ? 1 : 0;
+      const customerId = Number(idMatch[1]);
+
+      const result = await env.DB
+        .prepare("UPDATE customers SET is_active = ?, updated_at = ? WHERE id = ?")
+        .bind(isActive, nowIso(), customerId)
+        .run();
+
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "کاربر پیدا نشد." }, { status: 404 });
+      }
+
+      // غیرفعال‌کردن حساب، نشست‌های فعلی او را هم باطل می‌کند تا بلافاصله
+      // اثر کند (نه فقط جلوگیری از ورود بعدی).
+      if (!isActive) {
+        await env.DB.prepare("DELETE FROM customer_sessions WHERE customer_id = ?").bind(customerId).run();
+      }
+
+      return Response.json({
+        ok: true,
+        message: isActive ? "حساب کاربر فعال شد." : "حساب کاربر غیرفعال شد.",
+        is_active: isActive,
+      });
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: "SERVER_ERROR", message: error.message },
         { status: 500 }
       );
     }
@@ -1962,6 +2257,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           .all();
 
         const products = result.results || [];
+        const formatRules = await getTechnicalFormatRules(env);
 
         for (const product of products) {
           product.images = await getProductImages(product.id);
@@ -1969,6 +2265,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           if (product.images.length === 0 && product.image) {
             product.images = [{ id: null, image: product.image, sort_order: 0 }];
           }
+
+          applyTechnicalFormattingToProduct(product, formatRules);
         }
 
         return Response.json({ ok: true, products });
@@ -2023,6 +2321,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .all();
 
       const products = result.results || [];
+      const formatRules = await getTechnicalFormatRules(env);
 
       for (const product of products) {
         product.images = await getProductImages(product.id);
@@ -2031,6 +2330,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         if (product.images.length === 0 && product.image) {
           product.images = [{ id: null, image: product.image, sort_order: 0 }];
         }
+
+        applyTechnicalFormattingToProduct(product, formatRules);
       }
 
       return Response.json({
@@ -2098,7 +2399,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
           "customer_address, province, city, street, sub_street, alley, plaque, " +
-          "unit, postal_code, address_note, total, shipping_cost, status, payment_status, " +
+          "unit, postal_code, address_note, total, shipping_cost, shipping_method_id, " +
+          "shipping_method_name, shipping_is_cod, payable_amount, status, payment_status, " +
           "postal_carrier, postal_tracking_code, created_at, updated_at, " +
           "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id) AS ticket_count, " +
           "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id AND t.status != 'closed') AS open_ticket_count " +
@@ -2172,7 +2474,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
           "customer_address, province, city, street, sub_street, alley, plaque, " +
-          "unit, postal_code, address_note, total, shipping_cost, status, payment_status, " +
+          "unit, postal_code, address_note, total, shipping_cost, shipping_method_id, " +
+          "shipping_method_name, shipping_is_cod, payable_amount, status, payment_status, " +
           "payment_reference, postal_carrier, postal_tracking_code, created_at, updated_at " +
           "FROM orders WHERE id = ? LIMIT 1"
         )
@@ -2206,6 +2509,18 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       order.status_history = historyResult.results || [];
       order.customer_address = composeAddressText(order);
       order.is_guest = !order.customer_id;
+
+      // مشاهده جزئیات سفارش توسط مدیر یعنی «دیده شد» — اعلان مربوطه
+      // (در صورت وجود) خوانده‌شده علامت می‌خورد. هرگز نباید کل درخواست را
+      // خراب کند (مثلاً وقتی Migration مربوطه هنوز اجرا نشده).
+      try {
+        await env.DB
+          .prepare("UPDATE order_notifications SET is_read = 1, read_at = ? WHERE order_id = ? AND is_read = 0")
+          .bind(nowIso(), orderId)
+          .run();
+      } catch (notifError) {
+        console.error("[order-notifications] علامت‌گذاری خوانده‌شده ممکن نشد:", notifError.message);
+      }
 
       return Response.json({ ok: true, order });
     } catch (error) {
@@ -2312,6 +2627,18 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         )
         .bind(orderId, status, note || null)
         .run();
+
+      // تغییر وضعیت یعنی مدیر سفارش را دیده و رسیدگی کرده — اعلان مربوطه
+      // خوانده‌شده می‌شود (از جمله وقتی سفارش لغو می‌شود، دیگر «جدید»
+      // محسوب نمی‌شود، صرف‌نظر از اینکه قبلاً دیده شده بود یا نه).
+      try {
+        await env.DB
+          .prepare("UPDATE order_notifications SET is_read = 1, read_at = ? WHERE order_id = ? AND is_read = 0")
+          .bind(nowIso(), orderId)
+          .run();
+      } catch (notifError) {
+        console.error("[order-notifications] علامت‌گذاری خوانده‌شده ممکن نشد:", notifError.message);
+      }
 
       if (status !== existingOrder.status) {
         const label = STATUS_LABELS[status] || status;
@@ -2949,6 +3276,226 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   }
 
   // =========================================================================
+  // روش‌های ارسال — بخش ۴ دستور: مدیریت کامل از پنل مدیریت، بدون تغییر کد.
+  // =========================================================================
+
+  const SHIPPING_COST_TYPES = ["prepaid", "cod"];
+  const SHIPPING_SCOPES = ["all", "city"];
+
+  // GET /api/store/admin/shipping-methods — فهرست کامل (برای پنل مدیریت،
+  // شامل روش‌های غیرفعال هم می‌شود تا قابل فعال‌سازی مجدد باشند).
+  if (url.pathname === "/api/store/admin/shipping-methods" && request.method === "GET") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const result = await env.DB
+        .prepare(
+          "SELECT id, name, cost, cost_type, active, scope, allowed_city, sort_order, created_at, updated_at " +
+          "FROM shipping_methods ORDER BY sort_order ASC, id ASC"
+        )
+        .all();
+
+      return Response.json({ ok: true, shipping_methods: result.results || [] });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "SHIPPING_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول روش‌های ارسال هنوز ایجاد نشده است. ابتدا database/shipping-methods.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // POST /api/store/admin/shipping-methods — ایجاد روش ارسال جدید
+  if (url.pathname === "/api/store/admin/shipping-methods" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const name = String(body.name || "").trim();
+      const cost = Number(body.cost);
+      const costType = String(body.cost_type || "prepaid").trim();
+      const active = body.active === false ? 0 : 1;
+      const scope = String(body.scope || "all").trim();
+      const allowedCity = scope === "city" ? String(body.allowed_city || "").trim() : null;
+      const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+
+      if (!name) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "نام روش ارسال الزامی است." }, { status: 400 });
+      }
+      if (!Number.isFinite(cost) || cost < 0) {
+        return Response.json({ ok: false, error: "INVALID_COST", message: "هزینه ارسال نامعتبر است." }, { status: 400 });
+      }
+      if (!SHIPPING_COST_TYPES.includes(costType)) {
+        return Response.json({ ok: false, error: "INVALID_COST_TYPE", message: "نوع هزینه نامعتبر است." }, { status: 400 });
+      }
+      if (!SHIPPING_SCOPES.includes(scope)) {
+        return Response.json({ ok: false, error: "INVALID_SCOPE", message: "محدوده نامعتبر است." }, { status: 400 });
+      }
+      if (scope === "city" && !allowedCity) {
+        return Response.json(
+          { ok: false, error: "MISSING_CITY", message: "برای محدوده «شهر مشخص»، نام شهر مجاز را وارد کنید." },
+          { status: 400 }
+        );
+      }
+
+      const timestamp = nowIso();
+      const result = await env.DB
+        .prepare(
+          "INSERT INTO shipping_methods (name, cost, cost_type, active, scope, allowed_city, sort_order, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(name, Math.round(cost), costType, active, scope, allowedCity, sortOrder, timestamp, timestamp)
+        .run();
+
+      return Response.json(
+        { ok: true, message: "روش ارسال با موفقیت ایجاد شد.", id: result.meta?.last_row_id ?? null },
+        { status: 201 }
+      );
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // PUT /api/store/admin/shipping-methods — ویرایش (شامل فعال/غیرفعال‌کردن)
+  if (url.pathname === "/api/store/admin/shipping-methods" && request.method === "PUT") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      const id = Number(body.id);
+      const name = String(body.name || "").trim();
+      const cost = Number(body.cost);
+      const costType = String(body.cost_type || "prepaid").trim();
+      const active = body.active === false ? 0 : 1;
+      const scope = String(body.scope || "all").trim();
+      const allowedCity = scope === "city" ? String(body.allowed_city || "").trim() : null;
+      const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+
+      if (!Number.isInteger(id) || id <= 0 || !name) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه و نام روش ارسال الزامی است." }, { status: 400 });
+      }
+      if (!Number.isFinite(cost) || cost < 0) {
+        return Response.json({ ok: false, error: "INVALID_COST", message: "هزینه ارسال نامعتبر است." }, { status: 400 });
+      }
+      if (!SHIPPING_COST_TYPES.includes(costType)) {
+        return Response.json({ ok: false, error: "INVALID_COST_TYPE", message: "نوع هزینه نامعتبر است." }, { status: 400 });
+      }
+      if (!SHIPPING_SCOPES.includes(scope)) {
+        return Response.json({ ok: false, error: "INVALID_SCOPE", message: "محدوده نامعتبر است." }, { status: 400 });
+      }
+      if (scope === "city" && !allowedCity) {
+        return Response.json(
+          { ok: false, error: "MISSING_CITY", message: "برای محدوده «شهر مشخص»، نام شهر مجاز را وارد کنید." },
+          { status: 400 }
+        );
+      }
+
+      const result = await env.DB
+        .prepare(
+          "UPDATE shipping_methods SET name = ?, cost = ?, cost_type = ?, active = ?, scope = ?, " +
+          "allowed_city = ?, sort_order = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(name, Math.round(cost), costType, active, scope, allowedCity, sortOrder, nowIso(), id)
+        .run();
+
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "روش ارسال پیدا نشد." }, { status: 404 });
+      }
+
+      return Response.json({ ok: true, message: "روش ارسال با موفقیت ویرایش شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // DELETE /api/store/admin/shipping-methods?id=.. — حذف امن: اگر سفارشی
+  // قبلاً از این روش استفاده کرده، حذف رد می‌شود (تاریخچه سفارش نباید مبهم
+  // شود)؛ در آن صورت فقط می‌توان آن را غیرفعال کرد (PUT با active=false).
+  if (url.pathname === "/api/store/admin/shipping-methods" && request.method === "DELETE") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const id = Number(url.searchParams.get("id"));
+      if (!Number.isInteger(id) || id <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه نامعتبر است." }, { status: 400 });
+      }
+
+      const usedRow = await env.DB
+        .prepare("SELECT COUNT(*) AS c FROM orders WHERE shipping_method_id = ?")
+        .bind(id)
+        .first();
+      const usedCount = usedRow?.c || 0;
+
+      if (usedCount > 0) {
+        return Response.json(
+          {
+            ok: false,
+            error: "SHIPPING_METHOD_IN_USE",
+            message: `این روش ارسال در ${usedCount} سفارش استفاده شده و قابل حذف نیست. به‌جای حذف، آن را غیرفعال کنید.`,
+          },
+          { status: 409 }
+        );
+      }
+
+      const result = await env.DB.prepare("DELETE FROM shipping_methods WHERE id = ?").bind(id).run();
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "روش ارسال پیدا نشد." }, { status: 404 });
+      }
+
+      return Response.json({ ok: true, message: "روش ارسال حذف شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // GET /api/store/shipping-methods?city=... — عمومی (Checkout). فقط
+  // روش‌های فعال و مجاز برای مقصد داده‌شده را برمی‌گرداند. روش غیرفعال یا
+  // مخصوص شهر دیگر، اصلاً در این پاسخ حاضر نمی‌شود (نه اینکه در Frontend
+  // پنهان شود) — تا مشتری هرگز نتواند آن را انتخاب کند.
+  if (url.pathname === "/api/store/shipping-methods" && request.method === "GET") {
+    try {
+      const city = String(url.searchParams.get("city") || "").trim();
+
+      const result = await env.DB
+        .prepare(
+          "SELECT id, name, cost, cost_type, scope, allowed_city FROM shipping_methods " +
+          "WHERE active = 1 ORDER BY sort_order ASC, id ASC"
+        )
+        .all();
+
+      const methods = (result.results || []).filter((method) => {
+        if (method.scope !== "city") return true;
+        if (!city) return false;
+        return String(method.allowed_city || "").trim() === city;
+      });
+
+      return Response.json({ ok: true, shipping_methods: methods });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      // Fail-Safe: اگر جدول هنوز Migrate نشده، فهرست خالی برمی‌گردد (نه
+      // خطای ۵۰۰ که Checkout عمومی را کاملاً می‌شکند).
+      if (isMissingTable) {
+        return Response.json({ ok: true, shipping_methods: [] });
+      }
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
   // روابط محصولات — مرتبط / مشابه / مکمل (فقط Admin برای مدیریت؛ نمایش
   // عمومی آن در endpoint محصول تکی، پشت پرچم‌های show_related_products و
   // show_similar_products کنترل می‌شود).
@@ -3261,6 +3808,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       result.specs = await getProductSpecs(result.id);
 
+      const formatRules = await getTechnicalFormatRules(env);
+      applyTechnicalFormattingToProduct(result, formatRules);
+
       // زیرساخت «محصولات مرتبط/مشابه» — بخش ۸ دستور: فقط وقتی پرچم مربوطه
       // در پنل مدیریت روشن باشد این فیلدها پر می‌شوند؛ در غیر این صورت آرایه
       // خالی برمی‌گردد تا هیچ Frontend فعلی رفتار جدیدی نبیند (نمایش عمومی
@@ -3444,11 +3994,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const verifiedItems = [];
       let total = 0;
-      let shippingCost = 0;
 
       for (const [productId, quantity] of mergedItems.entries()) {
         const product = await env.DB
-          .prepare("SELECT id, name, price, stock, active, shipping_cost FROM products WHERE id = ? LIMIT 1")
+          .prepare("SELECT id, name, price, stock, active FROM products WHERE id = ? LIMIT 1")
           .bind(productId)
           .first();
 
@@ -3474,16 +4023,56 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         const subtotal = price * quantity;
         total += subtotal;
 
-        // هزینه ارسال یک‌بار برای کل سفارش محاسبه می‌شود، نه به‌ازای هر کالا؛
-        // اگر کالاهای سبد هزینه ارسال متفاوتی دارند، بیشترین مقدار ملاک است
-        // (بدون هزینه پنهان اضافه — دقیقاً همان مبلغی که در صفحه محصول/سبد دیده می‌شود).
-        const productShipping = resolveShippingInfo(product).shipping_cost;
-        if (productShipping > shippingCost) shippingCost = productShipping;
-
         verifiedItems.push({ productId: Number(product.id), productName: product.name, price, quantity, subtotal });
       }
 
+      const itemsTotal = total;
+
+      // --- روش ارسال — بخش ۴ دستور: کل سفارش از یک روش ارسال مشترک استفاده
+      // می‌کند (نه هر کالا جدا)، و هزینه/مجاز‌بودن آن همیشه سمت سرور و از
+      // روی جدول shipping_methods بازبینی می‌شود، هرگز از روی داده مرورگر. ---
+
+      const shippingMethodId = Number(body.shipping_method_id);
+      if (!Number.isInteger(shippingMethodId) || shippingMethodId <= 0) {
+        return Response.json(
+          { ok: false, error: "SHIPPING_METHOD_REQUIRED", message: "لطفاً یک روش ارسال انتخاب کنید." },
+          { status: 400 }
+        );
+      }
+
+      const shippingMethod = await env.DB
+        .prepare(
+          "SELECT id, name, cost, cost_type, active, scope, allowed_city FROM shipping_methods WHERE id = ? LIMIT 1"
+        )
+        .bind(shippingMethodId)
+        .first();
+
+      const shippingMethodAllowed =
+        shippingMethod &&
+        Number(shippingMethod.active) === 1 &&
+        (shippingMethod.scope !== "city" || String(shippingMethod.allowed_city || "").trim() === address.city);
+
+      if (!shippingMethodAllowed) {
+        return Response.json(
+          {
+            ok: false,
+            error: "INVALID_SHIPPING_METHOD",
+            message: "روش ارسال انتخاب‌شده برای این مقصد در دسترس نیست.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const shippingCost = Number(shippingMethod.cost) || 0;
+      const shippingIsCod = shippingMethod.cost_type === "cod";
+
       total += shippingCost;
+
+      // مبلغی که واقعاً باید به درگاه پرداخت ارسال شود (بخش ۵ دستور): اگر
+      // روش ارسال پس‌کرایه باشد، هزینه ارسال از مبلغ آنلاین کسر می‌شود چون
+      // نقداً توسط پیک/پست دریافت خواهد شد. total (جمع کامل سفارش برای
+      // نمایش/فاکتور) هرگز از این بابت تغییر نمی‌کند.
+      const payableAmount = itemsTotal + (shippingIsCod ? 0 : shippingCost);
 
       // --- کاهش اتمیک موجودی (هر UPDATE فقط وقتی موفق می‌شود که موجودی کافی باشد) ---
       // اگر یکی شکست بخورد، موجودیِ آیتم‌های قبلاً کاهش‌یافته برمی‌گردد (Rollback دستی).
@@ -3552,8 +4141,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
             "INSERT INTO orders (" +
             "tracking_code, customer_id, customer_name, customer_phone, customer_address, " +
             "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
-            "latitude, longitude, total, shipping_cost, status, payment_status, created_at, updated_at" +
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "latitude, longitude, total, shipping_cost, shipping_method_id, shipping_method_name, " +
+            "shipping_is_cod, payable_amount, status, payment_status, created_at, updated_at" +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
           )
           .bind(
             trackingCode,
@@ -3574,6 +4164,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
             address.longitude,
             total,
             shippingCost,
+            shippingMethod.id,
+            shippingMethod.name,
+            shippingIsCod ? 1 : 0,
+            payableAmount,
             "pending",
             "unpaid",
             timestamp,
@@ -3598,6 +4192,20 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           .prepare("INSERT INTO order_status_history (order_id, status, note) VALUES (?, 'pending', ?)")
           .bind(orderId, "ثبت سفارش توسط مشتری")
           .run();
+
+        // اعلان سفارش جدید برای پنل مدیریت — دقیقاً یک ردیف به‌ازای هر سفارش
+        // (order_id UNIQUE در جدول order_notifications جلوی اعلان تکراری را
+        // می‌گیرد، حتی اگر این کد به هر دلیلی دوباره اجرا شود).
+        try {
+          await env.DB
+            .prepare("INSERT OR IGNORE INTO order_notifications (order_id, created_at, is_read) VALUES (?, ?, 0)")
+            .bind(orderId, timestamp)
+            .run();
+        } catch (notifyError) {
+          // اعلان صرفاً برای نمایش badge در پنل است؛ خطای آن هرگز نباید ثبت
+          // سفارش واقعی مشتری را متوقف کند.
+          console.error("[order-notifications] ثبت اعلان شکست خورد:", notifyError.message);
+        }
 
         // زیرساخت «مشتریان همراه این محصول خریده‌اند» — به‌روزرسانی شمارنده
         // خرید مشترک بین اقلام همین سفارش. کاملاً غیربحرانی: خطای آن هرگز
@@ -3677,6 +4285,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           tracking_code: trackingCode,
           total,
           shipping_cost: shippingCost,
+          shipping_method_name: shippingMethod.name,
+          shipping_is_cod: shippingIsCod,
+          payable_amount: payableAmount,
           status: "pending",
           status_label: STATUS_LABELS.pending,
           created_at: timestamp,
@@ -3723,7 +4334,8 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
       .prepare(
         "SELECT id, tracking_code, customer_name, customer_phone, customer_address, " +
         "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
-        "total, shipping_cost, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
+        "total, shipping_cost, shipping_method_name, shipping_is_cod, payable_amount, " +
+        "status, payment_status, postal_carrier, postal_tracking_code, created_at " +
         "FROM orders WHERE tracking_code = ? AND customer_phone = ? LIMIT 1"
       )
       .bind(trackingCode, mobile)
@@ -3892,7 +4504,7 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
       const password = String(body.password || "");
 
       const customer = await env.DB
-        .prepare("SELECT id, full_name, phone, password_hash FROM customers WHERE phone = ? LIMIT 1")
+        .prepare("SELECT id, full_name, phone, password_hash, is_active FROM customers WHERE phone = ? LIMIT 1")
         .bind(mobile)
         .first();
 
@@ -3902,6 +4514,16 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
         return Response.json(
           { ok: false, error: "INVALID_CREDENTIALS", message: "شماره موبایل یا رمز عبور اشتباه است." },
           { status: 401 }
+        );
+      }
+
+      // حساب غیرفعال‌شده توسط مدیر — بدون فاش‌کردن این وضعیت در پیام
+      // INVALID_CREDENTIALS (تا اطلاعات اضافه‌ای درباره وجود حساب فاش نشود)،
+      // اما با کد خطای مجزا تا Frontend بتواند پیام مناسب نشان دهد.
+      if (Number(customer.is_active) === 0) {
+        return Response.json(
+          { ok: false, error: "ACCOUNT_DISABLED", message: "حساب کاربری شما غیرفعال شده است. لطفاً با پشتیبانی تماس بگیرید." },
+          { status: 403 }
         );
       }
 
@@ -4274,11 +4896,18 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
 
       if (purpose === "login") {
         const customer = await env.DB
-          .prepare("SELECT id, full_name, phone FROM customers WHERE phone = ? LIMIT 1")
+          .prepare("SELECT id, full_name, phone, is_active FROM customers WHERE phone = ? LIMIT 1")
           .bind(mobile)
           .first();
 
         if (!customer) return genericInvalid();
+
+        if (Number(customer.is_active) === 0) {
+          return Response.json(
+            { ok: false, error: "ACCOUNT_DISABLED", message: "حساب کاربری شما غیرفعال شده است. لطفاً با پشتیبانی تماس بگیرید." },
+            { status: 403 }
+          );
+        }
 
         const token = await createCustomerSession(customer.id);
 
@@ -4403,7 +5032,7 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
     try {
       const ordersResult = await env.DB
         .prepare(
-          "SELECT id, tracking_code, total, status, payment_status, postal_carrier, " +
+          "SELECT id, tracking_code, total, shipping_method_name, shipping_is_cod, status, payment_status, postal_carrier, " +
           "postal_tracking_code, created_at FROM orders WHERE customer_id = ? ORDER BY id DESC"
         )
         .bind(sessionCustomer.id)
@@ -4470,7 +5099,8 @@ if (
       .prepare(
         "SELECT id, tracking_code, customer_id, customer_name, customer_phone, " +
         "province, city, street, sub_street, alley, plaque, unit, postal_code, address_note, " +
-        "total, shipping_cost, status, payment_status, postal_carrier, postal_tracking_code, created_at " +
+        "total, shipping_cost, shipping_method_name, shipping_is_cod, payable_amount, " +
+        "status, payment_status, postal_carrier, postal_tracking_code, created_at " +
         "FROM orders WHERE id = ? LIMIT 1"
       )
       .bind(orderId)
@@ -5145,6 +5775,48 @@ if (
     }
   }
 
+  // =========================================================================
+  // تست مسیر پرداخت (فقط Admin) — بخش ۵/۶ دستور: امکان اجرای واقعی مسیر
+  // «ایجاد تراکنش → تبدیل تومان به ریال → Verify → بروزرسانی سفارش» روی یک
+  // سفارش واقعی، بدون نیاز به درگاه واقعی. دقیقاً همان مسیر initiatePaymentRequest/
+  // verifyPaymentTransaction را اجرا می‌کند که یک درگاه واقعی هم استفاده خواهد کرد.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/payment/test/initiate" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    try {
+      const body = await request.json();
+      const orderId = Number(body.order_id);
+      if (!Number.isInteger(orderId) || orderId <= 0) {
+        return Response.json({ ok: false, error: "INVALID_ORDER_ID" }, { status: 400 });
+      }
+      const result = await initiatePaymentRequest(env, orderId);
+      return Response.json(result);
+    } catch (error) {
+      return Response.json({ ok: false, error: "SERVER_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/store/admin/payment/test/verify" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    try {
+      const body = await request.json();
+      const transactionId = Number(body.transaction_id);
+      const simulateSuccess = body.success !== false;
+      if (!Number.isInteger(transactionId) || transactionId <= 0) {
+        return Response.json({ ok: false, error: "INVALID_TRANSACTION_ID" }, { status: 400 });
+      }
+      const result = await verifyPaymentTransaction(env, transactionId, simulateSuccess);
+      return Response.json(result);
+    } catch (error) {
+      return Response.json({ ok: false, error: "SERVER_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
   // =========================
   // API Not Found
   // =========================
@@ -5404,8 +6076,17 @@ async function handleProductPageSsr(request, env, slug) {
   }
 
   const images = await fetchProductImagesForSsr(env, productRow.id);
-  const specs = await fetchProductSpecsForSsr(env, productRow.id);
+  let specs = await fetchProductSpecsForSsr(env, productRow.id);
   const viewModel = buildProductViewModel(productRow);
+
+  const formatRules = await getTechnicalFormatRules(env);
+  applyTechnicalFormattingToProduct(viewModel, formatRules);
+  specs = specs.map((spec) => ({
+    ...spec,
+    label: formatTechnicalText(spec.label, formatRules),
+    value: formatTechnicalText(spec.value, formatRules),
+  }));
+
   const jsonLd = buildProductJsonLd(viewModel, images);
   const metaDescription = stripHtmlToText(viewModel.description, 155) ||
     `${viewModel.name} — خرید آنلاین از فروشگاه تأسیسات آپادانا`;
