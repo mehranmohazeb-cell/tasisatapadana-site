@@ -51,7 +51,10 @@
   </div>
 </footer>
 
+<script src="iran-locations.js"></script>
 <script>
+const API_BASE = "/api/store";
+
 function getCart() {
   try {
     return JSON.parse(localStorage.getItem("tasisat_apadana_cart")) || [];
@@ -259,6 +262,8 @@ function renderCart() {
         <strong>${formatPrice(total)}</strong>
       </div>
 
+      <div id="cart-shipping-estimator-container"></div>
+
       <a
         href="checkout.html"
         class="product-button cart-checkout-button"
@@ -269,6 +274,101 @@ function renderCart() {
     </div>
 
   `;
+
+  initCartShippingEstimator(cart, total);
+}
+
+function getAllCitiesFlat() {
+  const cities = new Set();
+  const locations = window.IRAN_LOCATIONS || {};
+  Object.values(locations).forEach((cityList) => cityList.forEach((city) => cities.add(city)));
+  return Array.from(cities).sort((a, b) => a.localeCompare(b, "fa"));
+}
+
+function renderCartShippingEstimatorBlock() {
+  const cities = getAllCitiesFlat();
+  const cityOptions = cities.map((city) => `<option value="${escapeHtml(city)}">${escapeHtml(city)}</option>`).join("");
+
+  return `
+    <div class="shipping-estimator">
+      <h4>برآورد هزینه ارسال</h4>
+      <select id="cart-estimator-city">
+        <option value="">شهر مقصد را انتخاب کنید</option>
+        ${cityOptions}
+      </select>
+      <select id="cart-estimator-method" disabled>
+        <option value="">ابتدا شهر را انتخاب کنید</option>
+      </select>
+      <div id="cart-estimator-result" class="shipping-estimate-result" style="display:none;"></div>
+      <div class="shipping-estimate-note">
+        این مبلغ فقط برآورد است؛ هزینه نهایی ارسال بر اساس آدرس ثبت‌شده هنگام تکمیل سفارش محاسبه می‌شود.
+      </div>
+    </div>
+  `;
+}
+
+async function loadCartShippingEstimatorMethods(city, productIds, itemsTotal) {
+  const methodSelect = document.getElementById("cart-estimator-method");
+  const resultBox = document.getElementById("cart-estimator-result");
+  resultBox.style.display = "none";
+
+  if (!city) {
+    methodSelect.innerHTML = '<option value="">ابتدا شهر را انتخاب کنید</option>';
+    methodSelect.disabled = true;
+    return;
+  }
+
+  methodSelect.innerHTML = '<option value="">در حال دریافت...</option>';
+  methodSelect.disabled = true;
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&product_ids=${encodeURIComponent(productIds.join(","))}`
+    );
+    const data = await response.json();
+    const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
+
+    if (methods.length === 0) {
+      methodSelect.innerHTML = '<option value="">برای این شهر روشی در دسترس نیست</option>';
+      methodSelect.disabled = true;
+      return;
+    }
+
+    methodSelect.innerHTML =
+      '<option value="">روش ارسال را انتخاب کنید</option>' +
+      methods.map((m) => `<option value="${m.id}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
+    methodSelect.disabled = false;
+
+    methodSelect.onchange = () => {
+      const option = methodSelect.selectedOptions[0];
+      if (!option || !option.value) {
+        resultBox.style.display = "none";
+        return;
+      }
+      const shippingCost = Number(option.dataset.cost) || 0;
+      const isCod = option.dataset.costType === "cod";
+      resultBox.innerHTML =
+        `هزینه ارسال: ${formatPrice(shippingCost)}${isCod ? " (پس‌کرایه)" : ""}<br>` +
+        `مجموع تقریبی کالا + ارسال: ${formatPrice(itemsTotal + shippingCost)}`;
+      resultBox.style.display = "block";
+    };
+  } catch (error) {
+    methodSelect.innerHTML = '<option value="">خطا در دریافت روش‌های ارسال</option>';
+    methodSelect.disabled = true;
+  }
+}
+
+function initCartShippingEstimator(cart, itemsTotal) {
+  const container = document.getElementById("cart-shipping-estimator-container");
+  if (!container) return;
+  container.innerHTML = renderCartShippingEstimatorBlock();
+
+  const productIds = cart.map((item) => item.id).filter(Boolean);
+  const citySelect = document.getElementById("cart-estimator-city");
+
+  citySelect.addEventListener("change", () => {
+    loadCartShippingEstimatorMethods(citySelect.value, productIds, itemsTotal);
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -105,8 +105,23 @@ function showMessage(text, type) {
   el.className = `form-message is-visible ${type === "error" ? "is-error" : "is-success"}`;
 }
 
-function renderOrder(order) {
+function renderOrder(order, mobile) {
   const container = document.getElementById("track-result");
+
+  // برای این‌که دکمه «دانلود فاکتور» بتواند از همان سیستم فاکتور فعلی
+  // (invoice.html، حالت مهمان) استفاده کند، اطلاعات لازم آن سیستم را در
+  // sessionStorage به‌روزرسانی می‌کنیم — بدون تکرار منطق فاکتور.
+  try {
+    sessionStorage.setItem("apadana_last_order", JSON.stringify({
+      tracking_code: order.tracking_code,
+      mobile: mobile,
+      total: order.total,
+      created_at: order.created_at,
+    }));
+  } catch (error) {
+    // ذخیره‌سازی صرفاً برای راحتی دسترسی فاکتور است؛ خطای آن نباید مانع
+    // نمایش نتیجه پیگیری شود.
+  }
 
   const itemsHtml = (order.items || []).map((item) => `
     <div class="summary-line">
@@ -136,6 +151,12 @@ function renderOrder(order) {
       <div class="summary-line"><span>تاریخ ثبت</span><strong>${escapeHtml(formatDate(order.created_at))}</strong></div>
       ${postalHtml}
       <div class="summary-total"><span>مبلغ کل</span><strong>${formatPrice(order.total)}</strong></div>
+
+      <div class="form-submit-row" style="margin-top:14px;">
+        <a href="invoice.html" target="_blank" rel="noopener" class="secondary-button" style="text-decoration:none; display:inline-block; text-align:center;">
+          دانلود فاکتور
+        </a>
+      </div>
 
       <h3 style="margin-top:20px;">اقلام سفارش</h3>
       ${itemsHtml}
@@ -172,7 +193,7 @@ async function submitTrack(event) {
       throw new Error(data.message || "سفارشی با این مشخصات پیدا نشد.");
     }
 
-    renderOrder(data.order);
+    renderOrder(data.order, mobile);
   } catch (error) {
     showMessage(error.message, "error");
   } finally {

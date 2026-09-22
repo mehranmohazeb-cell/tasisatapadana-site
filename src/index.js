@@ -2416,13 +2416,21 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       for (const order of orders) {
         const itemsResult = await env.DB
           .prepare(
-            "SELECT id, order_id, product_id, product_name, price, quantity, " +
-            "subtotal, created_at FROM order_items WHERE order_id = ? ORDER BY id ASC"
+            "SELECT oi.id, oi.order_id, oi.product_id, oi.product_name, oi.price, oi.quantity, " +
+            "oi.subtotal, oi.created_at, p.image AS product_image, " +
+            "(SELECT pi.image FROM product_images pi WHERE pi.product_id = oi.product_id " +
+            "ORDER BY pi.sort_order ASC, pi.id ASC LIMIT 1) AS gallery_image " +
+            "FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id " +
+            "WHERE oi.order_id = ? ORDER BY oi.id ASC"
           )
           .bind(order.id)
           .all();
 
-        order.items = itemsResult.results || [];
+        order.items = (itemsResult.results || []).map((item) => {
+          const rawImage = item.product_image || item.gallery_image || null;
+          const { gallery_image, ...rest } = item;
+          return { ...rest, product_image: rawImage ? resolveAbsoluteProductImageUrl(rawImage) : null };
+        });
         order.customer_address = composeAddressText(order);
         order.is_guest = !order.customer_id;
       }
@@ -2491,8 +2499,12 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const itemsResult = await env.DB
         .prepare(
-          "SELECT id, order_id, product_id, product_name, price, quantity, " +
-          "subtotal, created_at FROM order_items WHERE order_id = ? ORDER BY id ASC"
+          "SELECT oi.id, oi.order_id, oi.product_id, oi.product_name, oi.price, oi.quantity, " +
+          "oi.subtotal, oi.created_at, p.image AS product_image, " +
+          "(SELECT pi.image FROM product_images pi WHERE pi.product_id = oi.product_id " +
+          "ORDER BY pi.sort_order ASC, pi.id ASC LIMIT 1) AS gallery_image " +
+          "FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id " +
+          "WHERE oi.order_id = ? ORDER BY oi.id ASC"
         )
         .bind(orderId)
         .all();
@@ -2505,7 +2517,11 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .bind(orderId)
         .all();
 
-      order.items = itemsResult.results || [];
+      order.items = (itemsResult.results || []).map((item) => {
+        const rawImage = item.product_image || item.gallery_image || null;
+        const { gallery_image, ...rest } = item;
+        return { ...rest, product_image: rawImage ? resolveAbsoluteProductImageUrl(rawImage) : null };
+      });
       order.status_history = historyResult.results || [];
       order.customer_address = composeAddressText(order);
       order.is_guest = !order.customer_id;
@@ -3462,26 +3478,236 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     }
   }
 
-  // GET /api/store/shipping-methods?city=... — عمومی (Checkout). فقط
-  // روش‌های فعال و مجاز برای مقصد داده‌شده را برمی‌گرداند. روش غیرفعال یا
-  // مخصوص شهر دیگر، اصلاً در این پاسخ حاضر نمی‌شود (نه اینکه در Frontend
-  // پنهان شود) — تا مشتری هرگز نتواند آن را انتخاب کند.
+  // =========================================================================
+  // قواعد ارسال اختصاصی هر محصول — بخش ۳/۴ ویرایش. گسترش همان جدول
+  // shipping_methods (از طریق product_shipping_rates)، نه یک سیستم موازی.
+  // =========================================================================
+
+  // GET /api/store/admin/products/:id/shipping-rates — همه روش‌های فعال +
+  // وضعیت اختصاصی این محصول برای هرکدام (اگر ردیفی نباشد یعنی «پیش‌فرض»).
+  if (
+    /^\/api\/store\/admin\/products\/\d+\/shipping-rates$/.test(url.pathname) &&
+    request.method === "GET"
+  ) {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const productId = Number(url.pathname.match(/\/products\/(\d+)\//)[1]);
+
+      const methodsResult = await env.DB
+        .prepare(
+          "SELECT id, name, cost AS default_cost, cost_type, active FROM shipping_methods ORDER BY sort_order ASC, id ASC"
+        )
+        .all();
+
+      const ratesResult = await env.DB
+        .prepare(
+          "SELECT shipping_method_id, is_allowed, custom_cost FROM product_shipping_rates WHERE product_id = ?"
+        )
+        .bind(productId)
+        .all();
+
+      const rateMap = new Map((ratesResult.results || []).map((r) => [r.shipping_method_id, r]));
+
+      const rates = (methodsResult.results || []).map((method) => {
+        const rate = rateMap.get(method.id);
+        return {
+          shipping_method_id: method.id,
+          name: method.name,
+          default_cost: method.default_cost,
+          cost_type: method.cost_type,
+          method_active: Number(method.active) === 1,
+          is_allowed: rate ? Number(rate.is_allowed) === 1 : true,
+          custom_cost: rate && rate.custom_cost != null ? rate.custom_cost : null,
+        };
+      });
+
+      return Response.json({ ok: true, rates });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "SHIPPING_RATES_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول قواعد ارسال محصول هنوز ایجاد نشده. ابتدا database/product-shipping-rates.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // PUT /api/store/admin/products/:id/shipping-rates — ذخیره یک‌جای قواعد.
+  // ردیف‌هایی که دقیقاً حالت پیش‌فرض هستند (مجاز + بدون هزینه اختصاصی)
+  // اصلاً ذخیره نمی‌شوند (حذف می‌شوند) تا جدول شلوغ نشود.
+  if (
+    /^\/api\/store\/admin\/products\/\d+\/shipping-rates$/.test(url.pathname) &&
+    request.method === "PUT"
+  ) {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const productId = Number(url.pathname.match(/\/products\/(\d+)\//)[1]);
+      const body = await request.json();
+      const rates = Array.isArray(body.rates) ? body.rates : [];
+
+      const timestamp = nowIso();
+
+      for (const rate of rates) {
+        const methodId = Number(rate.shipping_method_id);
+        if (!Number.isInteger(methodId) || methodId <= 0) continue;
+
+        const isAllowed = rate.is_allowed === false ? 0 : 1;
+        const customCost =
+          rate.custom_cost != null && rate.custom_cost !== "" && Number.isFinite(Number(rate.custom_cost))
+            ? Math.round(Number(rate.custom_cost))
+            : null;
+
+        const isDefaultState = isAllowed === 1 && customCost === null;
+
+        if (isDefaultState) {
+          await env.DB
+            .prepare("DELETE FROM product_shipping_rates WHERE product_id = ? AND shipping_method_id = ?")
+            .bind(productId, methodId)
+            .run();
+          continue;
+        }
+
+        await env.DB
+          .prepare(
+            "INSERT INTO product_shipping_rates (product_id, shipping_method_id, is_allowed, custom_cost, created_at, updated_at) " +
+            "VALUES (?, ?, ?, ?, ?, ?) " +
+            "ON CONFLICT(product_id, shipping_method_id) DO UPDATE SET " +
+            "is_allowed = excluded.is_allowed, custom_cost = excluded.custom_cost, updated_at = excluded.updated_at"
+          )
+          .bind(productId, methodId, isAllowed, customCost, timestamp, timestamp)
+          .run();
+      }
+
+      return Response.json({ ok: true, message: "قواعد ارسال این محصول ذخیره شد." });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "SHIPPING_RATES_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول قواعد ارسال محصول هنوز ایجاد نشده. ابتدا database/product-shipping-rates.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // =========================================================================
+  // منبع واحد محاسبه «روش‌های ارسال مجاز + هزینه واقعی» برای یک سبد از
+  // محصولات و یک شهر مقصد — هم برآورد صفحه محصول/سبد، هم Checkout نهایی،
+  // هر دو دقیقاً همین یک تابع را صدا می‌زنند (بدون سیستم موازی).
+  //
+  // تصمیم معماری (طبق درخواست، اینجا مستند شده): چون طبق ساختار فعلی سفارش
+  // فقط یک روش ارسال مشترک برای کل سفارش ذخیره می‌شود (نه هزینه جدا برای
+  // هر کالا)، وقتی چند محصول با هزینه‌های اختصاصی متفاوت برای همان روش در
+  // سبد باشند، هزینه نهایی آن روش = بیشترین هزینه اختصاصی/پیش‌فرض در بین
+  // همان محصولات (نه مجموع). این دقیقاً همان قاعده‌ای است که قبل از این
+  // ویرایش هم برای هزینه ارسال ترکیبی استفاده می‌شد، فقط حالا هزینه هر
+  // محصول از پنل مدیریت قابل تنظیم است، نه فقط از یک مقدار ثابت.
+  //
+  // اگر برای یک (محصول، روش ارسال) در product_shipping_rates ردیفی با
+  // is_allowed=0 باشد، آن روش برای کل سبد (نه فقط آن محصول) از فهرست حذف
+  // می‌شود — چون سفارش نمی‌تواند دو روش ارسال جدا داشته باشد.
+  // =========================================================================
+  async function resolveShippingOptionsForCart(env, productIds, city) {
+    const uniqueProductIds = [
+      ...new Set((productIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
+    ];
+
+    const methodsResult = await env.DB
+      .prepare(
+        "SELECT id, name, cost, cost_type, scope, allowed_city FROM shipping_methods " +
+        "WHERE active = 1 ORDER BY sort_order ASC, id ASC"
+      )
+      .all();
+
+    const destinationMethods = (methodsResult.results || []).filter((method) => {
+      if (method.scope !== "city") return true;
+      if (!city) return false;
+      return String(method.allowed_city || "").trim() === city;
+    });
+
+    if (uniqueProductIds.length === 0) {
+      return destinationMethods.map((m) => ({ ...m, cost: Number(m.cost) }));
+    }
+
+    let rateRows = [];
+    try {
+      const placeholders = uniqueProductIds.map(() => "?").join(",");
+      const ratesResult = await env.DB
+        .prepare(
+          `SELECT product_id, shipping_method_id, is_allowed, custom_cost FROM product_shipping_rates ` +
+          `WHERE product_id IN (${placeholders})`
+        )
+        .bind(...uniqueProductIds)
+        .all();
+      rateRows = ratesResult.results || [];
+    } catch (error) {
+      // Fail-Safe: اگر جدول قواعد اختصاصی هنوز Migrate نشده، همه محصولات از
+      // هزینه پیش‌فرض همان روش ارسال استفاده می‌کنند (رفتار قبلی دست‌نخورده).
+      rateRows = [];
+    }
+
+    const rateMap = new Map();
+    for (const row of rateRows) {
+      rateMap.set(`${row.product_id}:${row.shipping_method_id}`, row);
+    }
+
+    const options = [];
+    for (const method of destinationMethods) {
+      let allowed = true;
+      let effectiveCost = 0;
+
+      for (const productId of uniqueProductIds) {
+        const rate = rateMap.get(`${productId}:${method.id}`);
+        if (rate && Number(rate.is_allowed) === 0) {
+          allowed = false;
+          break;
+        }
+        const productCost = rate && rate.custom_cost != null ? Number(rate.custom_cost) : Number(method.cost);
+        if (productCost > effectiveCost) effectiveCost = productCost;
+      }
+
+      if (allowed) {
+        options.push({ ...method, cost: effectiveCost });
+      }
+    }
+
+    return options;
+  }
+
+  // GET /api/store/shipping-methods?city=...&product_id=..&product_ids=1,2,3
+  // — عمومی (صفحه محصول، سبد خرید، Checkout). فقط روش‌های فعال، مجاز برای
+  // مقصد، و مجاز/با هزینه واقعی برای محصولات داده‌شده را برمی‌گرداند. روش
+  // غیرفعال یا غیرمجاز، اصلاً در این پاسخ حاضر نمی‌شود (نه اینکه در
+  // Frontend پنهان شود) — تا مشتری هرگز نتواند آن را انتخاب کند.
   if (url.pathname === "/api/store/shipping-methods" && request.method === "GET") {
     try {
       const city = String(url.searchParams.get("city") || "").trim();
 
-      const result = await env.DB
-        .prepare(
-          "SELECT id, name, cost, cost_type, scope, allowed_city FROM shipping_methods " +
-          "WHERE active = 1 ORDER BY sort_order ASC, id ASC"
-        )
-        .all();
+      let productIds = [];
+      const productIdsParam = url.searchParams.get("product_ids");
+      const productIdParam = url.searchParams.get("product_id");
+      if (productIdsParam) {
+        productIds = productIdsParam.split(",").map((v) => Number(v.trim()));
+      } else if (productIdParam) {
+        productIds = [Number(productIdParam)];
+      }
 
-      const methods = (result.results || []).filter((method) => {
-        if (method.scope !== "city") return true;
-        if (!city) return false;
-        return String(method.allowed_city || "").trim() === city;
-      });
+      const methods = await resolveShippingOptionsForCart(env, productIds, city);
 
       return Response.json({ ok: true, shipping_methods: methods });
     } catch (error) {
@@ -4028,9 +4254,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
       const itemsTotal = total;
 
-      // --- روش ارسال — بخش ۴ دستور: کل سفارش از یک روش ارسال مشترک استفاده
-      // می‌کند (نه هر کالا جدا)، و هزینه/مجاز‌بودن آن همیشه سمت سرور و از
-      // روی جدول shipping_methods بازبینی می‌شود، هرگز از روی داده مرورگر. ---
+      // --- روش ارسال — بخش ۴/۱ دستور: کل سفارش از یک روش ارسال مشترک استفاده
+      // می‌کند (نه هر کالا جدا)، و هزینه/مجاز‌بودن آن همیشه سمت سرور، از روی
+      // آدرس واقعی سفارش و قواعد ارسال واقعی محصولات سبد (نه از داده مرورگر
+      // و نه از برآورد قبلی صفحه محصول/سبد) دوباره محاسبه می‌شود. ---
 
       const shippingMethodId = Number(body.shipping_method_id);
       if (!Number.isInteger(shippingMethodId) || shippingMethodId <= 0) {
@@ -4040,24 +4267,16 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         );
       }
 
-      const shippingMethod = await env.DB
-        .prepare(
-          "SELECT id, name, cost, cost_type, active, scope, allowed_city FROM shipping_methods WHERE id = ? LIMIT 1"
-        )
-        .bind(shippingMethodId)
-        .first();
+      const cartProductIds = verifiedItems.map((item) => item.productId);
+      const availableShippingOptions = await resolveShippingOptionsForCart(env, cartProductIds, address.city);
+      const shippingMethod = availableShippingOptions.find((m) => m.id === shippingMethodId);
 
-      const shippingMethodAllowed =
-        shippingMethod &&
-        Number(shippingMethod.active) === 1 &&
-        (shippingMethod.scope !== "city" || String(shippingMethod.allowed_city || "").trim() === address.city);
-
-      if (!shippingMethodAllowed) {
+      if (!shippingMethod) {
         return Response.json(
           {
             ok: false,
             error: "INVALID_SHIPPING_METHOD",
-            message: "روش ارسال انتخاب‌شده برای این مقصد در دسترس نیست.",
+            message: "روش ارسال انتخاب‌شده برای این مقصد یا برای کالاهای سبد شما در دسترس نیست.",
           },
           { status: 400 }
         );
@@ -4359,7 +4578,9 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
         "oi.price, " +
         "oi.quantity, " +
         "oi.subtotal, " +
-        "p.image AS product_image " +
+        "p.image AS product_image, " +
+        "(SELECT pi.image FROM product_images pi WHERE pi.product_id = oi.product_id " +
+        "ORDER BY pi.sort_order ASC, pi.id ASC LIMIT 1) AS gallery_image " +
         "FROM order_items oi " +
         "LEFT JOIN products p ON p.id = oi.product_id " +
         "WHERE oi.order_id = ? " +
@@ -4375,6 +4596,15 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
       )
       .bind(order.id)
       .all();
+
+    const invoiceItems = (itemsResult.results || []).map((item) => {
+      const rawImage = item.product_image || item.gallery_image || null;
+      const { gallery_image, ...rest } = item;
+      return {
+        ...rest,
+        product_image: rawImage ? resolveAbsoluteProductImageUrl(rawImage) : null,
+      };
+    });
 
     return Response.json({
       ok: true,
@@ -4406,7 +4636,7 @@ if (url.pathname === "/api/store/track" && request.method === "GET") {
 
         created_at: order.created_at,
 
-        items: itemsResult.results || [],
+        items: invoiceItems,
 
         history: (historyResult.results || []).map((h) => ({
           status: h.status,
@@ -5124,7 +5354,9 @@ if (
         "oi.price, " +
         "oi.quantity, " +
         "oi.subtotal, " +
-        "p.image AS product_image " +
+        "p.image AS product_image, " +
+        "(SELECT pi.image FROM product_images pi WHERE pi.product_id = oi.product_id " +
+        "ORDER BY pi.sort_order ASC, pi.id ASC LIMIT 1) AS gallery_image " +
         "FROM order_items oi " +
         "LEFT JOIN products p ON p.id = oi.product_id " +
         "WHERE oi.order_id = ? " +
@@ -5153,7 +5385,19 @@ if (
       PAYMENT_STATUS_LABELS[order.payment_status] ||
       order.payment_status;
 
-    order.items = itemsResult.results || [];
+    // تصویر واقعی محصول برای فاکتور — اول تصویر اصلی محصول (products.image)،
+    // در نبود آن اولین تصویر گالری (product_images)، و در نهایت Placeholder.
+    // resolveProductImageUrl مسیر را با همان قاعده‌ای می‌سازد که در بقیه سایت
+    // (فروشگاه/SSR) استفاده می‌شود — چه فایل JPG/JPEG باشد چه WebP، فقط یک
+    // پیشوند مسیر اضافه می‌کند و به فرمت فایل کاری ندارد.
+    order.items = (itemsResult.results || []).map((item) => {
+      const rawImage = item.product_image || item.gallery_image || null;
+      const { gallery_image, ...rest } = item;
+      return {
+        ...rest,
+        product_image: rawImage ? resolveAbsoluteProductImageUrl(rawImage) : null,
+      };
+    });
 
     order.history = (historyResult.results || []).map((h) => ({
       status: h.status,
@@ -5850,6 +6094,15 @@ function resolveProductImageUrl(image) {
   if (value.startsWith("assets/")) return "/" + value;
   if (value.startsWith("products/")) return "/assets/" + value;
   return "/assets/products/" + value;
+}
+
+// نسخه مطلق resolveProductImageUrl — برای فاکتور/PDF که باید حتی خارج از
+// مرورگر سایت (مثلاً هنگام دانلود/چاپ) درست باز شود. اگر مسیر از قبل کامل
+// (http/https/data:) باشد، هرگز دوباره پیشوند نمی‌گیرد.
+function resolveAbsoluteProductImageUrl(image) {
+  const resolved = resolveProductImageUrl(image);
+  if (/^(https?:|data:)/.test(resolved)) return resolved;
+  return `${STORE_BASE_URL}${resolved}`;
 }
 
 async function fetchProductImagesForSsr(env, productId) {

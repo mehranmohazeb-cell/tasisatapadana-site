@@ -150,6 +150,10 @@ function clearForm() {
 
   const relationsSection = document.getElementById("relations-section");
   if (relationsSection) relationsSection.style.display = "none";
+
+  const shippingRatesSection = document.getElementById("shipping-rates-section");
+  if (shippingRatesSection) shippingRatesSection.style.display = "none";
+  shippingRatesCache = [];
 }
 
 function editProduct(id) {
@@ -194,7 +198,96 @@ function editProduct(id) {
     loadProductRelations(editingProductId);
   }
 
+  const shippingRatesSection = document.getElementById("shipping-rates-section");
+  if (shippingRatesSection) {
+    shippingRatesSection.style.display = "block";
+    loadProductShippingRates(editingProductId);
+  }
+
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// =========================
+// قواعد ارسال اختصاصی محصول (گسترش shipping_methods، بدون سیستم موازی)
+// =========================
+
+let shippingRatesCache = [];
+
+async function loadProductShippingRates(productId) {
+  const container = document.getElementById("shipping-rates-list");
+  if (!container) return;
+  container.innerHTML = '<p class="loading">در حال بارگذاری...</p>';
+
+  try {
+    const data = await fetchAdmin(`/admin/products/${productId}/shipping-rates`);
+    shippingRatesCache = data.rates || [];
+    renderShippingRatesList();
+  } catch (error) {
+    container.innerHTML = `<p class="loading">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderShippingRatesList() {
+  const container = document.getElementById("shipping-rates-list");
+  if (!container) return;
+
+  if (shippingRatesCache.length === 0) {
+    container.innerHTML = '<p class="loading">هنوز روش ارسالی در پنل مدیریت تعریف نشده است.</p>';
+    return;
+  }
+
+  container.innerHTML = shippingRatesCache.map((rate, index) => `
+    <div style="display:flex; align-items:center; gap:10px; padding:9px 11px; background:#f5f8f7; border:1px solid #dbe3e1; border-radius:8px; margin-bottom:8px; flex-wrap:wrap;">
+      <label style="display:flex; align-items:center; gap:6px; min-width:160px;">
+        <input type="checkbox" ${rate.is_allowed ? "checked" : ""} onchange="updateShippingRateAllowed(${index}, this.checked)" style="width:auto;">
+        ${escapeHtml(rate.name)}${!rate.method_active ? " (غیرفعال)" : ""}
+      </label>
+      <span style="font-size:12px; color:#71817e;">پیش‌فرض: ${Number(rate.default_cost).toLocaleString("fa-IR")} تومان</span>
+      <input
+        type="number"
+        min="0"
+        placeholder="هزینه اختصاصی (اختیاری)"
+        value="${rate.custom_cost != null ? rate.custom_cost : ""}"
+        style="flex:1; min-width:160px; border:1px solid #cbd6d3; border-radius:8px; padding:7px 9px; font-size:12px;"
+        oninput="updateShippingRateCost(${index}, this.value)"
+        ${rate.is_allowed ? "" : "disabled"}
+      >
+    </div>
+  `).join("");
+}
+
+function updateShippingRateAllowed(index, checked) {
+  if (shippingRatesCache[index]) {
+    shippingRatesCache[index].is_allowed = checked;
+    renderShippingRatesList();
+  }
+}
+
+function updateShippingRateCost(index, value) {
+  if (shippingRatesCache[index]) {
+    shippingRatesCache[index].custom_cost = value === "" ? null : Number(value);
+  }
+}
+
+async function saveProductShippingRates() {
+  if (!editingProductId) return;
+
+  try {
+    await fetchAdmin(`/admin/products/${editingProductId}/shipping-rates`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        rates: shippingRatesCache.map((r) => ({
+          shipping_method_id: r.shipping_method_id,
+          is_allowed: r.is_allowed,
+          custom_cost: r.custom_cost,
+        })),
+      }),
+    });
+    showToast("قواعد ارسال این محصول ذخیره شد.", "success");
+  } catch (error) {
+    showToast(error.message, "error");
+  }
 }
 
 // =========================
@@ -545,6 +638,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("product-form")?.addEventListener("submit", saveProduct);
+  document.getElementById("save-shipping-rates")?.addEventListener("click", saveProductShippingRates);
 
   document.getElementById("products-search-button")?.addEventListener("click", () => loadProducts(1));
   document.getElementById("products-search")?.addEventListener("keydown", (event) => {

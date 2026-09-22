@@ -204,6 +204,7 @@
 </footer>
 
 
+<script src="iran-locations.js"></script>
 <script>
 
 const API_BASE = "/api/store";
@@ -265,6 +266,97 @@ function renderShippingBlock(product) {
   if (product.shipping_time) rows.push(`<div>زمان ارسال: ${escapeHtml(product.shipping_time)}</div>`);
   return `<div class="product-shipping-info">${rows.join("")}</div>`;
 }
+
+function getAllCitiesFlat() {
+  const cities = new Set();
+  const locations = window.IRAN_LOCATIONS || {};
+  Object.values(locations).forEach((cityList) => cityList.forEach((city) => cities.add(city)));
+  return Array.from(cities).sort((a, b) => a.localeCompare(b, "fa"));
+}
+
+function renderShippingEstimatorBlock() {
+  const cities = getAllCitiesFlat();
+  const cityOptions = cities.map((city) => `<option value="${escapeHtml(city)}">${escapeHtml(city)}</option>`).join("");
+
+  return `
+    <div class="shipping-estimator">
+      <h4>برآورد هزینه ارسال</h4>
+      <select id="estimator-city">
+        <option value="">شهر مقصد را انتخاب کنید</option>
+        ${cityOptions}
+      </select>
+      <select id="estimator-method" disabled>
+        <option value="">ابتدا شهر را انتخاب کنید</option>
+      </select>
+      <div id="estimator-result" class="shipping-estimate-result" style="display:none;"></div>
+      <div class="shipping-estimate-note">
+        این مبلغ فقط برآورد است؛ هزینه نهایی ارسال بر اساس آدرس ثبت‌شده هنگام تکمیل سفارش محاسبه می‌شود.
+      </div>
+    </div>
+  `;
+}
+
+async function loadShippingEstimatorMethods(city, productId) {
+  const methodSelect = document.getElementById("estimator-method");
+  const resultBox = document.getElementById("estimator-result");
+  resultBox.style.display = "none";
+
+  if (!city) {
+    methodSelect.innerHTML = '<option value="">ابتدا شهر را انتخاب کنید</option>';
+    methodSelect.disabled = true;
+    return;
+  }
+
+  methodSelect.innerHTML = '<option value="">در حال دریافت...</option>';
+  methodSelect.disabled = true;
+
+  try {
+    const response = await fetch(`${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&product_id=${encodeURIComponent(productId)}`);
+    const data = await response.json();
+    const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
+
+    if (methods.length === 0) {
+      methodSelect.innerHTML = '<option value="">برای این شهر روشی در دسترس نیست</option>';
+      methodSelect.disabled = true;
+      return;
+    }
+
+    methodSelect.innerHTML =
+      '<option value="">روش ارسال را انتخاب کنید</option>' +
+      methods.map((m) => `<option value="${m.id}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
+    methodSelect.disabled = false;
+  } catch (error) {
+    methodSelect.innerHTML = '<option value="">خطا در دریافت روش‌های ارسال</option>';
+    methodSelect.disabled = true;
+  }
+}
+
+function initShippingEstimator(productId) {
+  const container = document.getElementById("shipping-estimator-container");
+  if (!container) return;
+  container.innerHTML = renderShippingEstimatorBlock();
+
+  const citySelect = document.getElementById("estimator-city");
+  const methodSelect = document.getElementById("estimator-method");
+  const resultBox = document.getElementById("estimator-result");
+
+  citySelect.addEventListener("change", () => {
+    loadShippingEstimatorMethods(citySelect.value, productId);
+  });
+
+  methodSelect.addEventListener("change", () => {
+    const option = methodSelect.selectedOptions[0];
+    if (!option || !option.value) {
+      resultBox.style.display = "none";
+      return;
+    }
+    const cost = Number(option.dataset.cost) || 0;
+    const isCod = option.dataset.costType === "cod";
+    resultBox.textContent = `هزینه تقریبی ارسال: ${formatPrice(cost)}${isCod ? " (پس‌کرایه)" : ""}`;
+    resultBox.style.display = "block";
+  });
+}
+
 
 function renderAssuranceList(product) {
   const items = [];
@@ -1570,6 +1662,8 @@ if (!slug) {
 
           ${renderShippingBlock(currentProduct)}
 
+          <div id="shipping-estimator-container"></div>
+
           ${renderAssuranceList(currentProduct)}
 
           ${renderPolicyLinks()}
@@ -1699,6 +1793,8 @@ if (!slug) {
     updateLightboxNavigation();
 
     startViewerTracking(currentProduct.slug);
+
+    initShippingEstimator(currentProduct.id);
 
 
   } catch (error) {
