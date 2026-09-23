@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shipping Classes | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="shipping-sub-nav"></div>
+
+    <section class="admin-card">
+      <h2>افزودن Shipping Class جدید</h2>
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        به‌جای وارد کردن هزینه ارسال برای تک‌تک محصولات، محصولات مشابه را در
+        یک گروه حمل (مثلاً «سبک»، «سنگین»، «حجیم») قرار دهید و برای همان گروه
+        در بخش Table Rates تعرفه تعریف کنید.
+      </p>
+
+      <form id="class-form" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+        <input type="hidden" id="class-id" value="">
+        <div style="flex:1; min-width:200px;">
+          <label for="class-name" style="display:block; font-size:13px; margin-bottom:4px;">نام</label>
+          <input id="class-name" type="text" required placeholder="مثلاً: سنگین">
+        </div>
+        <div>
+          <label style="display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="class-active" checked style="width:auto;">
+            فعال
+          </label>
+        </div>
+        <button type="submit" class="primary-button">ذخیره</button>
+        <button type="button" id="cancel-class-edit" class="secondary-button" style="display:none;">انصراف</button>
+      </form>
+    </section>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>Shipping Classes ثبت‌شده</h2>
+        <button id="refresh-classes" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="classes.js"></script>
+</body>
+</html>

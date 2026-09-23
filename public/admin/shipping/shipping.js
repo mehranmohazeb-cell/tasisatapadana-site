@@ -112,6 +112,7 @@ async function deleteMethod(id) {
 
 document.addEventListener("DOMContentLoaded", () => {
   initAdminPage("shipping");
+  renderShippingSubNav("shipping-methods");
   loadMethods();
 
   document.getElementById("refresh-methods")?.addEventListener("click", loadMethods);

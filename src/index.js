@@ -107,6 +107,41 @@ function escapeRegexLiteral(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// =========================================================================
+// معماری عمومی محتوای فنی — نگاشت یونیکد زیرنویس/بالانویس (بخش اول دستور).
+//
+// این دو جدول، تنها منبع تبدیل کاراکتر-به-کاراکتر برای rule_type='auto_script'
+// هستند. فقط نویسه‌هایی که یونیکد برایشان معادل رسمی زیرنویس/بالانویس دارد
+// اینجا فهرست شده‌اند؛ هر نویسه دیگری (که معادل ندارد) دست‌نخورده می‌ماند —
+// هرگز حدس زده یا نزدیک‌ترین شکل جایگزین نمی‌شود.
+// =========================================================================
+const SUBSCRIPT_CHAR_MAP = {
+  "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
+  "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+  a: "ₐ", e: "ₑ", h: "ₕ", i: "ᵢ", j: "ⱼ", k: "ₖ", l: "ₗ", m: "ₘ",
+  n: "ₙ", o: "ₒ", p: "ₚ", r: "ᵣ", s: "ₛ", t: "ₜ", u: "ᵤ", v: "ᵥ", x: "ₓ",
+  "+": "₊", "-": "₋",
+};
+
+// بالانویس فقط برای ارقام + علامت (پرکاربردترین و بی‌خطرترین حالت مهندسی،
+// مثل m² یا m³)؛ عمداً حروف بالانویس اضافه نشده چون رندر آن‌ها در فونت‌های
+// معمول ناپایدار است — تصمیمی محافظه‌کارانه برای جلوگیری از تبدیل نامطمئن.
+const SUPERSCRIPT_CHAR_MAP = {
+  "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+  "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+  "+": "⁺", "-": "⁻",
+};
+
+function convertToScript(suffix, scriptType) {
+  const map = scriptType === "superscript" ? SUPERSCRIPT_CHAR_MAP : SUBSCRIPT_CHAR_MAP;
+  // عمداً حروف بزرگ تبدیل نمی‌شوند (مثلاً «O» در H2O باید دست‌نخورده بماند)؛
+  // فقط نویسه‌ای که دقیقاً در نگاشت باشد (ارقام و حروف کوچک رایج) تبدیل می‌شود.
+  return suffix
+    .split("")
+    .map((ch) => map[ch] || ch)
+    .join("");
+}
+
 function formatTechnicalText(text, rules) {
   if (text == null || typeof text !== "string" || !Array.isArray(rules) || rules.length === 0) {
     return text;
@@ -122,6 +157,16 @@ function formatTechnicalText(text, rules) {
         // جایگزین نمی‌کند تا از تبدیل حدسی/نادرست جلوگیری شود.
         const re = new RegExp("(\\d+(?:[.,]\\d+)?)\\s?" + escapedValue + "\\b", "g");
         output = output.replace(re, (_match, num) => `${num} ${rule.display_value}`);
+      } else if (rule.rule_type === "auto_script") {
+        // معماری عمومی زیرنویس/بالانویس: پیشوند (مثلاً Q یا P) + حداکثر ۳
+        // حرف/رقم بلافاصله بعدش (طول متغیرهای رایج مهندسی مثل n, m, max,
+        // min) → همان دنباله به یونیکد زیرنویس/بالانویس تبدیل می‌شود. سقف
+        // ۳ نویسه عمداً گذاشته شده تا کلمات معمولی طولانی‌تر (مثلاً
+        // Quality) اشتباهی به‌عنوان نماد فنی برداشت نشوند. یک قانون واحد،
+        // همه ترکیب‌های آینده (Qm، Qmax، Qmin، Pn، ...) را بدون افزودن Rule
+        // جدید پوشش می‌دهد.
+        const re = new RegExp("\\b" + escapedValue + "([A-Za-z0-9]{1,3})\\b", "g");
+        output = output.replace(re, (_match, suffix) => rule.match_value + convertToScript(suffix, rule.script_type));
       } else {
         // token: جایگزینی دقیق یک نماد مستقل با مرز کلمه (مثال: Qn → Qₙ)
         const re = new RegExp("\\b" + escapedValue + "\\b", "g");
@@ -2759,6 +2804,16 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const returnDays =
         body.return_days != null && body.return_days !== "" ? Number(body.return_days) : null;
 
+      // Shipping Class + وزن/ابعاد — بخش دوم دستور (اختیاری؛ NULL یعنی
+      // «بدون Shipping Class»، همان رفتار قبلی قبل از این قابلیت).
+      const shippingClassId =
+        body.shipping_class_id != null && body.shipping_class_id !== "" ? Number(body.shipping_class_id) : null;
+      const weightGrams =
+        body.weight_grams != null && body.weight_grams !== "" ? Number(body.weight_grams) : null;
+      const lengthCm = body.length_cm != null && body.length_cm !== "" ? Number(body.length_cm) : null;
+      const widthCm = body.width_cm != null && body.width_cm !== "" ? Number(body.width_cm) : null;
+      const heightCm = body.height_cm != null && body.height_cm !== "" ? Number(body.height_cm) : null;
+
       // دسته‌بندی — کاملاً اختیاری (بخش دسته‌بندی محصولات). NULL یعنی
       // «بدون دسته»، دقیقاً همان رفتار محصولات فعلی قبل از این قابلیت.
       const categoryId =
@@ -2810,13 +2865,15 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "INSERT INTO products " +
           "(name, slug, description, price, image, stock, active, brand, model, sku, compare_at_price, " +
           "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days, " +
+          "shipping_class_id, weight_grams, length_cm, width_cm, height_cm, " +
           "category_id) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           name, slug, description, price, image, stock, active,
           brand, model, sku, compareAtPrice,
           shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
+          shippingClassId, weightGrams, lengthCm, widthCm, heightCm,
           categoryId
         )
         .run();
@@ -2907,6 +2964,14 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const returnDays =
         body.return_days != null && body.return_days !== "" ? Number(body.return_days) : null;
 
+      const shippingClassId =
+        body.shipping_class_id != null && body.shipping_class_id !== "" ? Number(body.shipping_class_id) : null;
+      const weightGrams =
+        body.weight_grams != null && body.weight_grams !== "" ? Number(body.weight_grams) : null;
+      const lengthCm = body.length_cm != null && body.length_cm !== "" ? Number(body.length_cm) : null;
+      const widthCm = body.width_cm != null && body.width_cm !== "" ? Number(body.width_cm) : null;
+      const heightCm = body.height_cm != null && body.height_cm !== "" ? Number(body.height_cm) : null;
+
       const categoryId =
         body.category_id != null && body.category_id !== "" ? Number(body.category_id) : null;
 
@@ -2972,12 +3037,15 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "description = ?, price = ?, image = ?, stock = ?, active = ?, " +
           "brand = ?, model = ?, sku = ?, compare_at_price = ?, " +
           "shipping_cost = ?, shipping_method = ?, shipping_time = ?, " +
-          "warranty_months = ?, warranty_provider = ?, return_days = ?, category_id = ? WHERE id = ?"
+          "warranty_months = ?, warranty_provider = ?, return_days = ?, " +
+          "shipping_class_id = ?, weight_grams = ?, length_cm = ?, width_cm = ?, height_cm = ?, " +
+          "category_id = ? WHERE id = ?"
         )
         .bind(
           name, slug, description, price, image, stock, active,
           brand, model, sku, compareAtPrice,
           shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
+          shippingClassId, weightGrams, lengthCm, widthCm, heightCm,
           categoryId,
           id
         )
@@ -3606,6 +3674,324 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   }
 
   // =========================================================================
+  // Shipping Classes — بخش دوم ویرایش سوم. گروه‌بندی محصولات بر اساس ویژگی
+  // حمل (سبک/متوسط/سنگین/حجیم/...)، به‌جای وارد کردن دستی تعرفه برای
+  // تک‌تک محصولات. مدیر هر تعداد کلاس دلخواه می‌تواند بسازد.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/shipping-classes" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const result = await env.DB
+        .prepare("SELECT id, name, active, sort_order, created_at, updated_at FROM shipping_classes ORDER BY sort_order ASC, id ASC")
+        .all();
+      return Response.json({ ok: true, shipping_classes: result.results || [] });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "SHIPPING_CLASSES_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول Shipping Class هنوز ایجاد نشده. ابتدا database/shipping-classes-and-rates.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (url.pathname === "/api/store/admin/shipping-classes" && request.method === "POST") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const name = String(body.name || "").trim();
+      const active = body.active === false ? 0 : 1;
+      const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+
+      if (!name) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "نام Shipping Class الزامی است." }, { status: 400 });
+      }
+
+      const timestamp = nowIso();
+      const result = await env.DB
+        .prepare(
+          "INSERT INTO shipping_classes (name, active, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(name, active, sortOrder, timestamp, timestamp)
+        .run();
+
+      return Response.json(
+        { ok: true, message: "Shipping Class ایجاد شد.", id: result.meta?.last_row_id ?? null },
+        { status: 201 }
+      );
+    } catch (error) {
+      const isDuplicate = /unique/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isDuplicate ? "DUPLICATE_NAME" : "DATABASE_ERROR",
+          message: isDuplicate ? "این نام قبلاً برای یک Shipping Class دیگر استفاده شده است." : error.message,
+        },
+        { status: isDuplicate ? 409 : 500 }
+      );
+    }
+  }
+
+  if (url.pathname === "/api/store/admin/shipping-classes" && request.method === "PUT") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const id = Number(body.id);
+      const name = String(body.name || "").trim();
+      const active = body.active === false ? 0 : 1;
+      const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+
+      if (!Number.isInteger(id) || id <= 0 || !name) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه و نام الزامی است." }, { status: 400 });
+      }
+
+      const result = await env.DB
+        .prepare("UPDATE shipping_classes SET name = ?, active = ?, sort_order = ?, updated_at = ? WHERE id = ?")
+        .bind(name, active, sortOrder, nowIso(), id)
+        .run();
+
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "Shipping Class پیدا نشد." }, { status: 404 });
+      }
+
+      return Response.json({ ok: true, message: "Shipping Class ویرایش شد." });
+    } catch (error) {
+      const isDuplicate = /unique/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isDuplicate ? "DUPLICATE_NAME" : "DATABASE_ERROR",
+          message: isDuplicate ? "این نام قبلاً برای یک Shipping Class دیگر استفاده شده است." : error.message,
+        },
+        { status: isDuplicate ? 409 : 500 }
+      );
+    }
+  }
+
+  // DELETE فقط وقتی هیچ محصولی به این کلاس متصل نباشد (حذف امن — تاریخچه
+  // محصولات نباید مبهم شود). در غیر این صورت فقط غیرفعال‌کردن (PUT) ممکن است.
+  if (url.pathname === "/api/store/admin/shipping-classes" && request.method === "DELETE") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const id = Number(url.searchParams.get("id"));
+      if (!Number.isInteger(id) || id <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه نامعتبر است." }, { status: 400 });
+      }
+
+      const usedRow = await env.DB.prepare("SELECT COUNT(*) AS c FROM products WHERE shipping_class_id = ?").bind(id).first();
+      if ((usedRow?.c || 0) > 0) {
+        return Response.json(
+          {
+            ok: false,
+            error: "SHIPPING_CLASS_IN_USE",
+            message: `این Shipping Class روی ${usedRow.c} محصول تنظیم شده و قابل حذف نیست. به‌جای حذف، آن را غیرفعال کنید.`,
+          },
+          { status: 409 }
+        );
+      }
+
+      const result = await env.DB.prepare("DELETE FROM shipping_classes WHERE id = ?").bind(id).run();
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "Shipping Class پیدا نشد." }, { status: 404 });
+      }
+      return Response.json({ ok: true, message: "Shipping Class حذف شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // Table Rate Shipping — تعرفه‌های چندشرطی (وزن/تعداد/مبلغ/مقصد) بر اساس
+  // Shipping Class + روش ارسال. اولویت محاسبه دقیقاً در resolveShippingOptionsForCart
+  // مستند شده: قاعده اختصاصی محصول > Table Rate > هزینه پیش‌فرض روش ارسال.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/shipping-table-rates" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const result = await env.DB
+        .prepare(
+          "SELECT tr.*, sm.name AS method_name, sc.name AS class_name FROM shipping_table_rates tr " +
+          "LEFT JOIN shipping_methods sm ON sm.id = tr.shipping_method_id " +
+          "LEFT JOIN shipping_classes sc ON sc.id = tr.shipping_class_id " +
+          "ORDER BY tr.priority DESC, tr.id ASC"
+        )
+        .all();
+      return Response.json({ ok: true, table_rates: result.results || [] });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "TABLE_RATES_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول Table Rate هنوز ایجاد نشده. ابتدا database/shipping-classes-and-rates.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  function parseTableRateBody(body) {
+    const toNullableInt = (v) => (v != null && v !== "" && Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+    return {
+      shippingMethodId: Number(body.shipping_method_id),
+      shippingClassId: toNullableInt(body.shipping_class_id),
+      minWeightGrams: toNullableInt(body.min_weight_grams),
+      maxWeightGrams: toNullableInt(body.max_weight_grams),
+      minQuantity: toNullableInt(body.min_quantity),
+      maxQuantity: toNullableInt(body.max_quantity),
+      minCartValue: toNullableInt(body.min_cart_value),
+      maxCartValue: toNullableInt(body.max_cart_value),
+      destinationCity: body.destination_city != null && String(body.destination_city).trim() !== ""
+        ? String(body.destination_city).trim()
+        : null,
+      cost: toNullableInt(body.cost),
+      active: body.active === false ? 0 : 1,
+      priority: Number.isInteger(Number(body.priority)) ? Number(body.priority) : 0,
+    };
+  }
+
+  if (url.pathname === "/api/store/admin/shipping-table-rates" && request.method === "POST") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const r = parseTableRateBody(body);
+
+      if (!Number.isInteger(r.shippingMethodId) || r.shippingMethodId <= 0 || r.cost == null || r.cost < 0) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "روش ارسال و هزینه (عدد صفر یا بیشتر) الزامی است." },
+          { status: 400 }
+        );
+      }
+
+      const timestamp = nowIso();
+      const result = await env.DB
+        .prepare(
+          "INSERT INTO shipping_table_rates " +
+          "(shipping_method_id, shipping_class_id, min_weight_grams, max_weight_grams, min_quantity, max_quantity, " +
+          "min_cart_value, max_cart_value, destination_city, cost, active, priority, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(
+          r.shippingMethodId, r.shippingClassId, r.minWeightGrams, r.maxWeightGrams, r.minQuantity, r.maxQuantity,
+          r.minCartValue, r.maxCartValue, r.destinationCity, r.cost, r.active, r.priority, timestamp, timestamp
+        )
+        .run();
+
+      return Response.json(
+        { ok: true, message: "Table Rate ایجاد شد.", id: result.meta?.last_row_id ?? null },
+        { status: 201 }
+      );
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/store/admin/shipping-table-rates" && request.method === "PUT") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const id = Number(body.id);
+      const r = parseTableRateBody(body);
+
+      if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(r.shippingMethodId) || r.shippingMethodId <= 0 || r.cost == null || r.cost < 0) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "شناسه، روش ارسال و هزینه معتبر الزامی است." },
+          { status: 400 }
+        );
+      }
+
+      const result = await env.DB
+        .prepare(
+          "UPDATE shipping_table_rates SET shipping_method_id = ?, shipping_class_id = ?, min_weight_grams = ?, " +
+          "max_weight_grams = ?, min_quantity = ?, max_quantity = ?, min_cart_value = ?, max_cart_value = ?, " +
+          "destination_city = ?, cost = ?, active = ?, priority = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(
+          r.shippingMethodId, r.shippingClassId, r.minWeightGrams, r.maxWeightGrams, r.minQuantity, r.maxQuantity,
+          r.minCartValue, r.maxCartValue, r.destinationCity, r.cost, r.active, r.priority, nowIso(), id
+        )
+        .run();
+
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "Table Rate پیدا نشد." }, { status: 404 });
+      }
+      return Response.json({ ok: true, message: "Table Rate ویرایش شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/store/admin/shipping-table-rates" && request.method === "DELETE") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const id = Number(url.searchParams.get("id"));
+      if (!Number.isInteger(id) || id <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه نامعتبر است." }, { status: 400 });
+      }
+      const result = await env.DB.prepare("DELETE FROM shipping_table_rates WHERE id = ?").bind(id).run();
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "Table Rate پیدا نشد." }, { status: 404 });
+      }
+      return Response.json({ ok: true, message: "Table Rate حذف شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // GET /api/store/admin/shipping-table-rates/export.csv — خروجی CSV برای
+  // ویرایش گروهی خارج از پنل (بخش ۱۷ دستور — فقط Export در این مرحله؛
+  // Import در گزارش نهایی به‌عنوان «باقی‌مانده برای مرحله بعد» اعلام شده).
+  if (url.pathname === "/api/store/admin/shipping-table-rates/export.csv" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const result = await env.DB
+        .prepare(
+          "SELECT tr.id, sm.name AS method_name, sc.name AS class_name, tr.min_weight_grams, tr.max_weight_grams, " +
+          "tr.min_quantity, tr.max_quantity, tr.min_cart_value, tr.max_cart_value, tr.destination_city, tr.cost, " +
+          "tr.active, tr.priority FROM shipping_table_rates tr " +
+          "LEFT JOIN shipping_methods sm ON sm.id = tr.shipping_method_id " +
+          "LEFT JOIN shipping_classes sc ON sc.id = tr.shipping_class_id " +
+          "ORDER BY tr.priority DESC, tr.id ASC"
+        )
+        .all();
+
+      const rows = result.results || [];
+      const header = [
+        "id", "method_name", "class_name", "min_weight_grams", "max_weight_grams",
+        "min_quantity", "max_quantity", "min_cart_value", "max_cart_value",
+        "destination_city", "cost", "active", "priority",
+      ];
+      const csvEscape = (v) => {
+        if (v == null) return "";
+        const s = String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csvLines = [header.join(",")];
+      for (const row of rows) {
+        csvLines.push(header.map((key) => csvEscape(row[key])).join(","));
+      }
+
+      return new Response(csvLines.join("\r\n"), {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="shipping-table-rates.csv"',
+        },
+      });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
   // منبع واحد محاسبه «روش‌های ارسال مجاز + هزینه واقعی» برای یک سبد از
   // محصولات و یک شهر مقصد — هم برآورد صفحه محصول/سبد، هم Checkout نهایی،
   // هر دو دقیقاً همین یک تابع را صدا می‌زنند (بدون سیستم موازی).
@@ -3622,10 +4008,42 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   // is_allowed=0 باشد، آن روش برای کل سبد (نه فقط آن محصول) از فهرست حذف
   // می‌شود — چون سفارش نمی‌تواند دو روش ارسال جدا داشته باشد.
   // =========================================================================
-  async function resolveShippingOptionsForCart(env, productIds, city) {
-    const uniqueProductIds = [
-      ...new Set((productIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
-    ];
+  // =========================================================================
+  // منبع واحد محاسبه «روش‌های ارسال مجاز + هزینه واقعی» برای یک سبد از
+  // محصولات و یک شهر مقصد — هم برآورد صفحه محصول/سبد، هم Checkout نهایی،
+  // هر دو دقیقاً همین یک تابع را صدا می‌زنند (بدون سیستم موازی).
+  //
+  // اولویت محاسبه هزینه هر محصول (مستند و ثابت — بخش ۱۴ دستور):
+  //   ۱. product_shipping_rates — استثنای دستی همان محصول برای همان روش
+  //      ارسال (custom_cost)، اگر تعریف شده باشد. بالاترین اولویت، چون
+  //      مدیر عمداً و آگاهانه آن را برای همین محصول ثبت کرده.
+  //   ۲. shipping_table_rates — بر اساس Shipping Class محصول + شرایط کل
+  //      سبد (وزن کل، تعداد کل، مبلغ کل، مقصد)، بالاترین priority که با
+  //      شرایط فعلی سازگار باشد.
+  //   ۳. shipping_methods.cost — هزینه پیش‌فرض سراسری همان روش ارسال،
+  //      وقتی نه استثنای دستی و نه Table Rate منطبقی پیدا شود (Fallback
+  //      نهایی؛ رفتار قدیمی محصولات بدون Shipping Class دقیقاً همین است).
+  //
+  // تصمیم معماری سبد چندمحصولی (از ویرایش قبلی، همچنان معتبر): چون سفارش
+  // فقط یک هزینه/روش ارسال مشترک ذخیره می‌کند، هزینه نهایی هر روش = بیشترین
+  // هزینه (طبق کاسکید بالا) در بین محصولات سبد؛ اگر حتی یک محصول آن روش را
+  // غیرمجاز کرده باشد، آن روش برای کل سبد حذف می‌شود.
+  // =========================================================================
+  async function resolveShippingOptionsForCart(env, cartItems, city) {
+    const normalizedItems = (cartItems || [])
+      .map((item) => {
+        if (typeof item === "number" || typeof item === "string") {
+          return { productId: Number(item), quantity: 1, price: 0 };
+        }
+        return {
+          productId: Number(item.productId ?? item.id),
+          quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
+          price: Number(item.price) || 0,
+        };
+      })
+      .filter((item) => Number.isInteger(item.productId) && item.productId > 0);
+
+    const uniqueProductIds = [...new Set(normalizedItems.map((i) => i.productId))];
 
     const methodsResult = await env.DB
       .prepare(
@@ -3642,6 +4060,32 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
     if (uniqueProductIds.length === 0) {
       return destinationMethods.map((m) => ({ ...m, cost: Number(m.cost) }));
+    }
+
+    // اطلاعات وزن/Shipping Class محصولات سبد (برای شرایط Table Rate)
+    let productRows = [];
+    try {
+      const placeholders = uniqueProductIds.map(() => "?").join(",");
+      const productsResult = await env.DB
+        .prepare(`SELECT id, shipping_class_id, weight_grams FROM products WHERE id IN (${placeholders})`)
+        .bind(...uniqueProductIds)
+        .all();
+      productRows = productsResult.results || [];
+    } catch (error) {
+      productRows = [];
+    }
+    const productInfoMap = new Map(productRows.map((p) => [p.id, p]));
+
+    // مجموع سبد — برای تطبیق شرایط Table Rate (وزن کل/تعداد کل/مبلغ کل)
+    let totalWeightGrams = 0;
+    let totalQuantity = 0;
+    let cartValue = 0;
+    for (const item of normalizedItems) {
+      const info = productInfoMap.get(item.productId);
+      const weight = info?.weight_grams != null ? Number(info.weight_grams) : 0;
+      totalWeightGrams += weight * item.quantity;
+      totalQuantity += item.quantity;
+      cartValue += item.price * item.quantity;
     }
 
     let rateRows = [];
@@ -3666,6 +4110,34 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       rateMap.set(`${row.product_id}:${row.shipping_method_id}`, row);
     }
 
+    let tableRateRows = [];
+    try {
+      const tableRateResult = await env.DB
+        .prepare("SELECT * FROM shipping_table_rates WHERE active = 1 ORDER BY priority DESC, id ASC")
+        .all();
+      tableRateRows = tableRateResult.results || [];
+    } catch (error) {
+      // Fail-Safe: جدول Table Rate هنوز Migrate نشده -> همه محصولات فقط از
+      // استثنای دستی (اگر باشد) یا هزینه پیش‌فرض روش استفاده می‌کنند.
+      tableRateRows = [];
+    }
+
+    function findTableRate(methodId, classId) {
+      for (const rate of tableRateRows) {
+        if (rate.shipping_method_id !== methodId) continue;
+        if (rate.shipping_class_id != null && rate.shipping_class_id !== classId) continue;
+        if (rate.min_weight_grams != null && totalWeightGrams < rate.min_weight_grams) continue;
+        if (rate.max_weight_grams != null && totalWeightGrams > rate.max_weight_grams) continue;
+        if (rate.min_quantity != null && totalQuantity < rate.min_quantity) continue;
+        if (rate.max_quantity != null && totalQuantity > rate.max_quantity) continue;
+        if (rate.min_cart_value != null && cartValue < rate.min_cart_value) continue;
+        if (rate.max_cart_value != null && cartValue > rate.max_cart_value) continue;
+        if (rate.destination_city != null && String(rate.destination_city).trim() !== city) continue;
+        return rate;
+      }
+      return null;
+    }
+
     const options = [];
     for (const method of destinationMethods) {
       let allowed = true;
@@ -3677,7 +4149,17 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           allowed = false;
           break;
         }
-        const productCost = rate && rate.custom_cost != null ? Number(rate.custom_cost) : Number(method.cost);
+
+        let productCost;
+        if (rate && rate.custom_cost != null) {
+          productCost = Number(rate.custom_cost); // اولویت ۱
+        } else {
+          const info = productInfoMap.get(productId);
+          const classId = info?.shipping_class_id ?? null;
+          const tableRate = findTableRate(method.id, classId); // اولویت ۲
+          productCost = tableRate ? Number(tableRate.cost) : Number(method.cost); // اولویت ۳ (Fallback)
+        }
+
         if (productCost > effectiveCost) effectiveCost = productCost;
       }
 
@@ -3707,7 +4189,18 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         productIds = [Number(productIdParam)];
       }
 
-      const methods = await resolveShippingOptionsForCart(env, productIds, city);
+      // مقادیر تعداد اختیاری (برای برآورد دقیق‌تر بر اساس وزن/تعداد کل سبد)
+      // — اگر ارسال نشود، هر محصول با تعداد ۱ در نظر گرفته می‌شود (کافی
+      // برای برآورد صفحه محصول؛ Checkout همیشه تعداد واقعی را می‌فرستد).
+      const quantitiesParam = url.searchParams.get("quantities");
+      const quantities = quantitiesParam ? quantitiesParam.split(",").map((v) => Number(v.trim())) : [];
+
+      const cartItems = productIds.map((id, index) => ({
+        productId: id,
+        quantity: quantities[index] > 0 ? quantities[index] : 1,
+      }));
+
+      const methods = await resolveShippingOptionsForCart(env, cartItems, city);
 
       return Response.json({ ok: true, shipping_methods: methods });
     } catch (error) {
@@ -4267,8 +4760,12 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         );
       }
 
-      const cartProductIds = verifiedItems.map((item) => item.productId);
-      const availableShippingOptions = await resolveShippingOptionsForCart(env, cartProductIds, address.city);
+      const cartItemsForShipping = verifiedItems.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+      }));
+      const availableShippingOptions = await resolveShippingOptionsForCart(env, cartItemsForShipping, address.city);
       const shippingMethod = availableShippingOptions.find((m) => m.id === shippingMethodId);
 
       if (!shippingMethod) {

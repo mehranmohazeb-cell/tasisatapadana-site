@@ -19,6 +19,21 @@ let categoriesForSelect = [];
 // دسته‌بندی — بارگذاری برای select فرم محصول
 // =========================
 
+async function loadShippingClassesForSelect() {
+  const select = document.getElementById("product-shipping-class");
+  if (!select) return;
+  try {
+    const data = await fetchAdmin("/admin/shipping-classes");
+    const classes = data.shipping_classes || [];
+    select.innerHTML =
+      '<option value="">— بدون Shipping Class —</option>' +
+      classes.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+  } catch (error) {
+    // اختیاری است؛ اگر جدول هنوز Migrate نشده یا خطایی رخ دهد، فرم محصول
+    // همچنان بدون این گزینه به کار خودش ادامه می‌دهد.
+  }
+}
+
 async function loadCategoriesForSelect() {
   const select = document.getElementById("product-category");
   if (!select) return;
@@ -176,6 +191,12 @@ function editProduct(id) {
   document.getElementById("product-shipping-cost").value = product.shipping_cost ?? "";
   document.getElementById("product-shipping-method").value = product.shipping_method || "";
   document.getElementById("product-shipping-time").value = product.shipping_time || "";
+  document.getElementById("product-shipping-class").value =
+    product.shipping_class_id != null ? String(product.shipping_class_id) : "";
+  document.getElementById("product-weight").value = product.weight_grams ?? "";
+  document.getElementById("product-length").value = product.length_cm ?? "";
+  document.getElementById("product-width").value = product.width_cm ?? "";
+  document.getElementById("product-height").value = product.height_cm ?? "";
   document.getElementById("product-warranty-months").value = product.warranty_months ?? "";
   document.getElementById("product-warranty-provider").value = product.warranty_provider || "";
   document.getElementById("product-return-days").value = product.return_days ?? "";
@@ -390,6 +411,17 @@ function setupRichTextToolbar() {
     editor.focus();
     document.execCommand("createLink", false, url);
   });
+
+  // جدول فنی ساده (بخش ۸ دستور) — یک جدول ۲×۳ پیش‌فرض در محل نشانگر درج
+  // می‌شود؛ مدیر می‌تواند بعداً سطر/ستون را مستقیم در همان جدول ویرایش کند
+  // (مرورگرها امکان افزودن ردیف/سلول با Tab و Enter داخل جدول را می‌دهند).
+  document.getElementById("rte-table-button")?.addEventListener("click", () => {
+    editor.focus();
+    const tableHtml =
+      '<table class="content-table"><thead><tr><th>عنوان مشخصه</th><th>مقدار</th></tr></thead>' +
+      "<tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table><p><br></p>";
+    document.execCommand("insertHTML", false, tableHtml);
+  });
 }
 
 // =========================
@@ -412,6 +444,11 @@ async function saveProduct(event) {
   const shippingCostRaw = document.getElementById("product-shipping-cost")?.value;
   const shippingMethod = document.getElementById("product-shipping-method")?.value.trim();
   const shippingTime = document.getElementById("product-shipping-time")?.value.trim();
+  const shippingClassRaw = document.getElementById("product-shipping-class")?.value;
+  const weightRaw = document.getElementById("product-weight")?.value;
+  const lengthRaw = document.getElementById("product-length")?.value;
+  const widthRaw = document.getElementById("product-width")?.value;
+  const heightRaw = document.getElementById("product-height")?.value;
   const warrantyMonthsRaw = document.getElementById("product-warranty-months")?.value;
   const warrantyProvider = document.getElementById("product-warranty-provider")?.value.trim();
   const returnDaysRaw = document.getElementById("product-return-days")?.value;
@@ -429,6 +466,11 @@ async function saveProduct(event) {
     shipping_cost: shippingCostRaw ? Number(shippingCostRaw) : null,
     shipping_method: shippingMethod || null,
     shipping_time: shippingTime || null,
+    shipping_class_id: shippingClassRaw ? Number(shippingClassRaw) : null,
+    weight_grams: weightRaw ? Number(weightRaw) : null,
+    length_cm: lengthRaw ? Number(lengthRaw) : null,
+    width_cm: widthRaw ? Number(widthRaw) : null,
+    height_cm: heightRaw ? Number(heightRaw) : null,
     warranty_months: warrantyMonthsRaw ? Number(warrantyMonthsRaw) : null,
     warranty_provider: warrantyProvider || null,
     return_days: returnDaysRaw ? Number(returnDaysRaw) : null,
@@ -618,6 +660,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initAdminPage("products");
   setupRichTextToolbar();
   loadCategoriesForSelect();
+  loadShippingClassesForSelect();
 
   document.getElementById("refresh-products")?.addEventListener("click", () => loadProducts(currentPage));
   document.getElementById("cancel-edit")?.addEventListener("click", clearForm);

@@ -307,7 +307,7 @@ function renderCartShippingEstimatorBlock() {
   `;
 }
 
-async function loadCartShippingEstimatorMethods(city, productIds, itemsTotal) {
+async function loadCartShippingEstimatorMethods(city, productIds, quantities, itemsTotal) {
   const methodSelect = document.getElementById("cart-estimator-method");
   const resultBox = document.getElementById("cart-estimator-result");
   resultBox.style.display = "none";
@@ -323,7 +323,7 @@ async function loadCartShippingEstimatorMethods(city, productIds, itemsTotal) {
 
   try {
     const response = await fetch(
-      `${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&product_ids=${encodeURIComponent(productIds.join(","))}`
+      `${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&product_ids=${encodeURIComponent(productIds.join(","))}&quantities=${encodeURIComponent(quantities.join(","))}`
     );
     const data = await response.json();
     const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
@@ -364,10 +364,11 @@ function initCartShippingEstimator(cart, itemsTotal) {
   container.innerHTML = renderCartShippingEstimatorBlock();
 
   const productIds = cart.map((item) => item.id).filter(Boolean);
+  const quantities = cart.map((item) => Number(item.quantity) || 1);
   const citySelect = document.getElementById("cart-estimator-city");
 
   citySelect.addEventListener("change", () => {
-    loadCartShippingEstimatorMethods(citySelect.value, productIds, itemsTotal);
+    loadCartShippingEstimatorMethods(citySelect.value, productIds, quantities, itemsTotal);
   });
 }
 

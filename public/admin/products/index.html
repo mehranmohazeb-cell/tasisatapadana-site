@@ -74,11 +74,16 @@
           <div class="form-group full">
             <label for="product-description-editor">معرفی محصول</label>
             <div class="rte-toolbar">
-              <button type="button" data-rte-cmd="bold" title="بولد"><b>B</b></button>
-              <button type="button" data-rte-cmd="insertUnorderedList" title="لیست">• لیست</button>
-              <button type="button" data-rte-cmd="formatBlock" data-rte-value="h3" title="تیتر">تیتر</button>
+              <button type="button" data-rte-cmd="formatBlock" data-rte-value="h2" title="تیتر بزرگ">H2</button>
+              <button type="button" data-rte-cmd="formatBlock" data-rte-value="h3" title="تیتر">H3</button>
+              <button type="button" data-rte-cmd="formatBlock" data-rte-value="h4" title="زیرتیتر">H4</button>
               <button type="button" data-rte-cmd="formatBlock" data-rte-value="p" title="پاراگراف">پاراگراف</button>
+              <button type="button" data-rte-cmd="bold" title="بولد"><b>B</b></button>
+              <button type="button" data-rte-cmd="italic" title="ایتالیک"><i>I</i></button>
+              <button type="button" data-rte-cmd="insertUnorderedList" title="لیست بولت">• لیست</button>
+              <button type="button" data-rte-cmd="insertOrderedList" title="لیست شماره‌دار">۱. لیست</button>
               <button type="button" id="rte-link-button" title="لینک">لینک</button>
+              <button type="button" id="rte-table-button" title="جدول فنی">جدول</button>
             </div>
             <div id="product-description-editor" class="rte-editor" contenteditable="true"></div>
             <small>متن را انتخاب کنید و از دکمه‌های بالا برای قالب‌بندی استفاده کنید.</small>
@@ -141,6 +146,33 @@
           <div class="form-group">
             <label for="product-shipping-time">زمان ارسال</label>
             <input id="product-shipping-time" type="text" placeholder="پیش‌فرض فروشگاه: حداکثر ۳ روز کاری">
+          </div>
+
+          <div class="form-group">
+            <label for="product-shipping-class">Shipping Class (برای تعرفه گروهی)</label>
+            <select id="product-shipping-class">
+              <option value="">— بدون Shipping Class —</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="product-weight">وزن (گرم)</label>
+            <input id="product-weight" type="number" min="0" placeholder="مثلاً: 3500">
+          </div>
+
+          <div class="form-group" style="display:flex; gap:8px;">
+            <div style="flex:1;">
+              <label for="product-length">طول (سانتی‌متر)</label>
+              <input id="product-length" type="number" min="0">
+            </div>
+            <div style="flex:1;">
+              <label for="product-width">عرض (سانتی‌متر)</label>
+              <input id="product-width" type="number" min="0">
+            </div>
+            <div style="flex:1;">
+              <label for="product-height">ارتفاع (سانتی‌متر)</label>
+              <input id="product-height" type="number" min="0">
+            </div>
           </div>
 
           <div class="form-group">

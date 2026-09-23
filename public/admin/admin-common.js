@@ -313,6 +313,23 @@ function renderSmsSubNav(activeKey) {
   `).join("");
 }
 
+// زیرمنوی داخلی بخش «روش‌های ارسال» (Shipping Methods / Shipping Classes /
+// Table Rates از هم تفکیک‌شده — طبق دستور)
+const SHIPPING_SUB_NAV_ITEMS = [
+  { key: "shipping-methods", href: "/admin/shipping/", label: "روش‌های ارسال" },
+  { key: "shipping-classes", href: "/admin/shipping/classes/", label: "Shipping Classes" },
+  { key: "shipping-table-rates", href: "/admin/shipping/table-rates/", label: "Table Rates" },
+];
+
+function renderShippingSubNav(activeKey) {
+  const nav = document.getElementById("shipping-sub-nav");
+  if (!nav) return;
+
+  nav.innerHTML = SHIPPING_SUB_NAV_ITEMS.map((item) => `
+    <a href="${item.href}" class="${item.key === activeKey ? "active" : ""}">${item.label}</a>
+  `).join("");
+}
+
 // Badge‌های ناوبری را از /api/store/admin/summary پر می‌کند (فقط COUNT، سبک).
 async function loadAdminNavBadges() {
   try {

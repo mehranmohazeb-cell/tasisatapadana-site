@@ -829,6 +829,26 @@ input {
   text-decoration: underline;
 }
 
+.product-description table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 14px;
+  text-align: start;
+}
+
+.product-description th,
+.product-description td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: start;
+}
+
+.product-description th {
+  background: var(--bg-alt);
+  font-weight: 700;
+}
+
 
 /* =========================================================
    Footer

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Table Rates | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+  <style>
+    .rate-form { display: grid; gap: 12px; grid-template-columns: repeat(3, 1fr); margin-bottom: 16px; }
+    .rate-form .full-row { grid-column: 1 / -1; }
+    .rate-form label { display: block; font-size: 12px; color: #45514f; margin-bottom: 4px; }
+    .rate-form input, .rate-form select { width: 100%; }
+    .rate-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e9e8; font-size: 13px; }
+    .rate-row:last-child { border-bottom: none; }
+  </style>
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="shipping-sub-nav"></div>
+
+    <section class="admin-card">
+      <h2 id="form-title">افزودن Table Rate جدید</h2>
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        تعرفه‌های چندشرطی — بر اساس Shipping Class، وزن، تعداد، مبلغ سبد و مقصد.
+        اولویت محاسبه: ابتدا قانون اختصاصی همان محصول (در فرم ویرایش محصول)،
+        سپس بالاترین Table Rate منطبق اینجا، در آخر هزینه پیش‌فرض روش ارسال.
+        هر شرط را خالی بگذارید یعنی «بدون محدودیت» روی آن شرط.
+      </p>
+
+      <form id="rate-form" class="rate-form">
+        <input type="hidden" id="rate-id" value="">
+
+        <div>
+          <label for="rate-method">روش ارسال *</label>
+          <select id="rate-method" required></select>
+        </div>
+        <div>
+          <label for="rate-class">Shipping Class (خالی = همه)</label>
+          <select id="rate-class"><option value="">— همه Classها —</option></select>
+        </div>
+        <div>
+          <label for="rate-cost">هزینه (تومان) *</label>
+          <input id="rate-cost" type="number" min="0" required>
+        </div>
+
+        <div>
+          <label for="rate-min-weight">حداقل وزن سبد (گرم)</label>
+          <input id="rate-min-weight" type="number" min="0">
+        </div>
+        <div>
+          <label for="rate-max-weight">حداکثر وزن سبد (گرم)</label>
+          <input id="rate-max-weight" type="number" min="0">
+        </div>
+        <div>
+          <label for="rate-destination">مقصد (خالی = همه شهرها)</label>
+          <input id="rate-destination" type="text" placeholder="مثلاً: اصفهان">
+        </div>
+
+        <div>
+          <label for="rate-min-qty">حداقل تعداد کل سبد</label>
+          <input id="rate-min-qty" type="number" min="0">
+        </div>
+        <div>
+          <label for="rate-max-qty">حداکثر تعداد کل سبد</label>
+          <input id="rate-max-qty" type="number" min="0">
+        </div>
+        <div>
+          <label for="rate-priority">اولویت (عدد بزرگ‌تر = اولویت بالاتر)</label>
+          <input id="rate-priority" type="number" value="0">
+        </div>
+
+        <div>
+          <label for="rate-min-value">حداقل مبلغ سبد (تومان)</label>
+          <input id="rate-min-value" type="number" min="0">
+        </div>
+        <div>
+          <label for="rate-max-value">حداکثر مبلغ سبد (تومان)</label>
+          <input id="rate-max-value" type="number" min="0">
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <label style="display:flex; align-items:center; gap:6px; margin:0;">
+            <input type="checkbox" id="rate-active" checked style="width:auto;">
+            فعال
+          </label>
+        </div>
+
+        <div class="full-row" style="display:flex; gap:10px;">
+          <button type="submit" class="primary-button">ذخیره</button>
+          <button type="button" id="cancel-rate-edit" class="secondary-button" style="display:none;">انصراف</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>Table Rateهای ثبت‌شده</h2>
+        <div style="display:flex; gap:8px;">
+          <button id="export-csv-btn" class="secondary-button" type="button">خروجی CSV</button>
+          <button id="refresh-rates" class="secondary-button" type="button">بروزرسانی</button>
+        </div>
+      </div>
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="table-rates.js"></script>
+</body>
+</html>
