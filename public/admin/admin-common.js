@@ -319,6 +319,9 @@ const SHIPPING_SUB_NAV_ITEMS = [
   { key: "shipping-methods", href: "/admin/shipping/", label: "روش‌های ارسال" },
   { key: "shipping-classes", href: "/admin/shipping/classes/", label: "Shipping Classes" },
   { key: "shipping-table-rates", href: "/admin/shipping/table-rates/", label: "Table Rates" },
+  { key: "shipping-import", href: "/admin/shipping/import/", label: "Import تعرفه" },
+  { key: "shipping-providers", href: "/admin/shipping/providers/", label: "Providers" },
+  { key: "shipping-quote-history", href: "/admin/shipping/quote-history/", label: "تاریخچه استعلام" },
 ];
 
 function renderShippingSubNav(activeKey) {

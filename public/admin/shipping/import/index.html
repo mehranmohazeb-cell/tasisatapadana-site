@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Import تعرفه ارسال | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+  <style>
+    .import-form { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-bottom: 16px; }
+    .import-form .full-row { grid-column: 1 / -1; }
+    .import-form label { display: block; font-size: 13px; color: #45514f; margin-bottom: 4px; }
+    .import-form input, .import-form select { width: 100%; }
+    .preview-stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+    .preview-stat { background: #f4f7f6; border-radius: 10px; padding: 10px 16px; font-size: 13px; }
+    .preview-stat b { font-size: 18px; display: block; }
+    .error-row { background: #fde8e8; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-size: 12px; }
+    .version-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e9e8; font-size: 13px; }
+    .version-row:last-child { border-bottom: none; }
+    .badge-archived { background: #eee; color: #777; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+    .badge-active { background: #e4f3ec; color: #1c7a4f; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+  </style>
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="shipping-sub-nav"></div>
+
+    <section class="admin-card">
+      <h2>Import تعرفه (CSV)</h2>
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        فایل CSV تعرفه را انتخاب کنید تا ابتدا پیش‌نمایش (اعتبارسنجی بدون ذخیره) نشان داده شود.
+        ستون‌های شناخته‌شده: method_name/service، class_name، min_weight_grams/weight_min،
+        max_weight_grams/weight_max، min_quantity/quantity_min، max_quantity/quantity_max،
+        min_cart_value/cart_total_min، max_cart_value/cart_total_max، destination_city/destination/city،
+        cost، priority، active. همان فایلی که از «Table Rates → خروجی CSV» گرفته‌اید هم مستقیماً قابل Import است.
+        ردیف‌های خراب حذف می‌شوند؛ بقیه سیستم/ردیف‌های سالم دست‌نخورده وارد می‌شوند.
+      </p>
+
+      <div class="import-form">
+        <div class="full-row">
+          <label for="csv-file">فایل CSV</label>
+          <input type="file" id="csv-file" accept=".csv,text/csv">
+        </div>
+        <div>
+          <label for="version-label">نام/برچسب نسخه</label>
+          <input type="text" id="version-label" placeholder="مثلاً: تعرفه پاییز ۱۴۰۴">
+        </div>
+        <div>
+          <label for="version-source">منبع</label>
+          <select id="version-source">
+            <option value="manual">دستی</option>
+            <option value="tapin">Tapin</option>
+            <option value="post">پست</option>
+            <option value="tipax">تیپاکس</option>
+            <option value="other">سایر</option>
+          </select>
+        </div>
+        <div class="full-row" style="display:flex; gap:10px;">
+          <button id="preview-btn" class="secondary-button" type="button">پیش‌نمایش</button>
+          <button id="commit-btn" class="primary-button" type="button" disabled>تأیید و Import نهایی</button>
+        </div>
+      </div>
+
+      <div id="preview-container"></div>
+    </section>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>نسخه‌های تعرفه ثبت‌شده</h2>
+        <button id="refresh-versions" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+      <div id="versions-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="import.js"></script>
+</body>
+</html>

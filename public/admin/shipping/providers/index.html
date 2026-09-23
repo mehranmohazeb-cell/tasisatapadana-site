@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Providerهای ارسال | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+  <style>
+    .provider-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid #e5e9e8; }
+    .provider-row:last-child { border-bottom: none; }
+    .provider-badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-inline-start: 6px; }
+    .provider-badge.active { background: #e4f3ec; color: #1c7a4f; }
+    .provider-badge.disabled { background: #fde8e8; color: #a23b3b; }
+    .mode-form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  </style>
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="shipping-sub-nav"></div>
+
+    <section class="admin-card">
+      <h2>حالت محاسبه ارسال</h2>
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        پیش‌فرض «فقط موتور داخلی» است — دقیقاً همان رفتار امروز سایت، بدون هیچ تغییری.
+        تغییر این حالت فقط روی Endpoint پیش‌نمایش Admin اثر دارد؛ Checkout واقعی مشتری هنوز
+        مستقیماً از موتور داخلی استفاده می‌کند تا وقتی یک Provider آنلاین واقعاً به API متصل و تست شود.
+      </p>
+      <div class="mode-form">
+        <select id="mode-select">
+          <option value="internal">فقط موتور داخلی (پیش‌فرض/رفتار فعلی)</option>
+          <option value="online">فقط Provider آنلاین (بدون Fallback)</option>
+          <option value="online_fallback_internal">Provider آنلاین + Fallback به موتور داخلی</option>
+        </select>
+        <button id="save-mode" class="primary-button" type="button">ذخیره</button>
+      </div>
+    </section>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>Providerهای ارسال</h2>
+        <button id="refresh-providers" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+      <p style="font-size:13px; color:#71817e;">
+        موتور داخلی همیشه فعال و غیرقابل‌غیرفعال‌سازی است (Fallback نهایی سیستم).
+        Providerهای آنلاین (مثل Tapin) تا وقتی Credential/Endpoint واقعی متصل و تست نشده، غیرفعال می‌مانند.
+      </p>
+      <div id="providers-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="providers.js"></script>
+</body>
+</html>
