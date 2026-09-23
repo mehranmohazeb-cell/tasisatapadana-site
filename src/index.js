@@ -4452,10 +4452,31 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const quantitiesParam = url.searchParams.get("quantities");
       const productIds = productIdsParam ? productIdsParam.split(",").map((v) => Number(v.trim())) : [];
       const quantities = quantitiesParam ? quantitiesParam.split(",").map((v) => Number(v.trim())) : [];
-      const cartItems = productIds.map((id, index) => ({
-        productId: id,
-        quantity: quantities[index] > 0 ? quantities[index] : 1,
-      }));
+
+      // اطلاعات واقعی محصول (نام/قیمت/وزن) از همان جدول products — دقیقاً
+      // همان الگویی که resolveShippingOptionsForCart برای وزن استفاده می‌کند
+      // (بخش ۴۰ دستور: بدون ساخت منبع موازی). این اطلاعات برای Tapin Adapter
+      // (که به وزن/قیمت هر قلم برای products[] نیاز دارد) هم لازم است.
+      let productsById = new Map();
+      if (productIds.length > 0) {
+        const placeholders = productIds.map(() => "?").join(",");
+        const productsResult = await env.DB
+          .prepare(`SELECT id, name, price, weight_grams FROM products WHERE id IN (${placeholders})`)
+          .bind(...productIds)
+          .all();
+        productsById = new Map((productsResult.results || []).map((p) => [p.id, p]));
+      }
+
+      const cartItems = productIds.map((id, index) => {
+        const product = productsById.get(id);
+        return {
+          productId: id,
+          quantity: quantities[index] > 0 ? quantities[index] : 1,
+          price: Number(product?.price) || 0,
+          weightGrams: Number(product?.weight_grams) || 0,
+          name: product?.name || null,
+        };
+      });
 
       const engineResult = await getShippingOptionsViaEngine(env, {
         cartItems,
