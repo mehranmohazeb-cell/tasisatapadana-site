@@ -3,6 +3,16 @@
 // شامل: محصولات، سفارش واقعی (Checkout)، پیگیری مهمان، حساب مشتری، پنل مدیریت
 // =========================================================================
 
+import {
+  getShippingCalculationMode,
+  setShippingCalculationMode,
+  listShippingProviders,
+  updateShippingProvider,
+  listShippingQuoteHistory,
+  getShippingOptionsViaEngine,
+  TARIFF_SOURCES,
+} from "./shipping-engine.js";
+
 const STATUS_LABELS = {
   pending: "در حال بررسی",
   confirmed: "تأیید شده",
@@ -3988,6 +3998,474 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       });
     } catch (error) {
       return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // Import تعرفه (CSV) — بخش ۱۰/۱۱/۱۲/۱۳/۱۴/۲۹ دستور توسعه Provider Engine.
+  // این بخش کاملاً روی جدول موجود «shipping_table_rates» سوار می‌شود (بدون
+  // جدول موازی)؛ فقط دو ستون جدید Nullable/Default-دار (source,
+  // tariff_version_id) که Migration «shipping-providers-and-quotes.sql»
+  // اضافه می‌کند، استفاده می‌شود. هیچ ردیف قدیمی حذف/بازنویسی نمی‌شود —
+  // Import همیشه ردیف‌های جدید اضافه می‌کند؛ آرشیو/غیرفعال‌کردن تعرفه‌های
+  // قدیمی هم‌چنان با همان دکمه «فعال/غیرفعال» فعلی هر Table Rate است.
+  // =========================================================================
+
+  // یک CSV Parser ساده و مستقل (بدون کتابخانه خارجی) — از quote (") و کاما
+  // پشتیبانی می‌کند، هم CRLF و هم LF را می‌شناسد.
+  function parseCsvText(text) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let inQuotes = false;
+    const pushField = () => { row.push(field); field = ""; };
+    const pushRow = () => { pushField(); rows.push(row); row = []; };
+
+    const normalized = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    for (let i = 0; i < normalized.length; i++) {
+      const ch = normalized[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (normalized[i + 1] === '"') { field += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          field += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        pushField();
+      } else if (ch === "\n") {
+        pushRow();
+      } else {
+        field += ch;
+      }
+    }
+    // آخرین ردیف (اگر فایل با newline تمام نشده باشد)
+    if (field.length > 0 || row.length > 0) pushRow();
+
+    // ردیف‌های کاملاً خالی را نادیده بگیر (مثلاً خط خالی انتهای فایل)
+    const nonEmptyRows = rows.filter((r) => r.some((v) => String(v).trim() !== ""));
+    if (nonEmptyRows.length === 0) return { header: [], rows: [] };
+
+    const header = nonEmptyRows[0].map((h) => String(h).trim());
+    const dataRows = nonEmptyRows.slice(1);
+    return { header, rows: dataRows };
+  }
+
+  // نگاشت نام ستون‌های ورودی به فیلدهای واقعی shipping_table_rates (بخش ۲۹
+  // دستور) — هم سازگار با فایل Export فعلی، هم با نام‌های عمومی‌تر.
+  const TABLE_RATE_COLUMN_ALIASES = {
+    method_name: ["method_name", "service", "shipping_method", "method"],
+    class_name: ["class_name", "shipping_class"],
+    min_weight_grams: ["min_weight_grams", "weight_min"],
+    max_weight_grams: ["max_weight_grams", "weight_max"],
+    min_quantity: ["min_quantity", "quantity_min"],
+    max_quantity: ["max_quantity", "quantity_max"],
+    min_cart_value: ["min_cart_value", "cart_total_min"],
+    max_cart_value: ["max_cart_value", "cart_total_max"],
+    destination_city: ["destination_city", "destination", "city"],
+    cost: ["cost"],
+    active: ["active"],
+    priority: ["priority"],
+  };
+
+  function buildColumnMapping(header) {
+    const lowerHeader = header.map((h) => h.toLowerCase());
+    const mapping = {};
+    const recognizedIndexes = new Set();
+    for (const [canonical, aliases] of Object.entries(TABLE_RATE_COLUMN_ALIASES)) {
+      for (const alias of aliases) {
+        const idx = lowerHeader.indexOf(alias.toLowerCase());
+        if (idx !== -1) {
+          mapping[canonical] = idx;
+          recognizedIndexes.add(idx);
+          break;
+        }
+      }
+    }
+    const unrecognized = header.filter((_, idx) => !recognizedIndexes.has(idx) && header[idx] !== "id");
+    return { mapping, unrecognized };
+  }
+
+  function parseBoolCell(value, defaultValue) {
+    if (value == null || String(value).trim() === "") return defaultValue;
+    const v = String(value).trim().toLowerCase();
+    if (["1", "true", "yes", "فعال"].includes(v)) return 1;
+    if (["0", "false", "no", "غیرفعال"].includes(v)) return 0;
+    return defaultValue;
+  }
+
+  function parseIntCell(value) {
+    if (value == null || String(value).trim() === "") return null;
+    const n = Number(String(value).trim());
+    return Number.isFinite(n) ? Math.round(n) : NaN;
+  }
+
+  // اعتبارسنجی + تبدیل ردیف‌های CSV به ردیف‌های قابل درج در shipping_table_rates.
+  // هرگز کل Import را به‌خاطر چند ردیف خراب متوقف نمی‌کند (بخش ۱۱ دستور):
+  // ردیف‌های معتبر و نامعتبر جدا برمی‌گردند.
+  async function validateTableRateImportRows(env, header, rows) {
+    const { mapping, unrecognized } = buildColumnMapping(header);
+
+    const methodsResult = await env.DB.prepare("SELECT id, name FROM shipping_methods").all();
+    const classesResult = await env.DB.prepare("SELECT id, name FROM shipping_classes").all();
+    const methodsByName = new Map((methodsResult.results || []).map((m) => [String(m.name).trim().toLowerCase(), m.id]));
+    const classesByName = new Map((classesResult.results || []).map((c) => [String(c.name).trim().toLowerCase(), c.id]));
+
+    const validRows = [];
+    const invalidRows = [];
+
+    rows.forEach((cells, index) => {
+      const rowNumber = index + 2; // +۱ برای هدر، +۱ برای شروع از ۱ نه ۰
+      const get = (key) => (mapping[key] != null ? cells[mapping[key]] : undefined);
+      const errors = [];
+
+      const methodNameRaw = get("method_name");
+      const methodName = methodNameRaw != null ? String(methodNameRaw).trim() : "";
+      const shippingMethodId = methodName ? methodsByName.get(methodName.toLowerCase()) : undefined;
+      if (!methodName) errors.push("روش ارسال (method_name/service) خالی است.");
+      else if (shippingMethodId == null) errors.push(`روش ارسال ناشناخته: «${methodName}»`);
+
+      const classNameRaw = get("class_name");
+      const className = classNameRaw != null ? String(classNameRaw).trim() : "";
+      let shippingClassId = null;
+      if (className) {
+        shippingClassId = classesByName.get(className.toLowerCase());
+        if (shippingClassId == null) errors.push(`Shipping Class ناشناخته: «${className}»`);
+      }
+
+      const cost = parseIntCell(get("cost"));
+      if (cost == null || Number.isNaN(cost) || cost < 0) errors.push("مقدار هزینه (cost) نامعتبر یا خالی است.");
+
+      const numericFields = [
+        "min_weight_grams", "max_weight_grams", "min_quantity", "max_quantity", "min_cart_value", "max_cart_value",
+      ];
+      const numericValues = {};
+      for (const f of numericFields) {
+        const parsed = parseIntCell(get(f));
+        if (Number.isNaN(parsed)) errors.push(`مقدار نامعتبر برای ستون ${f}.`);
+        numericValues[f] = Number.isNaN(parsed) ? null : parsed;
+      }
+
+      const priorityParsed = parseIntCell(get("priority"));
+      const priority = Number.isNaN(priorityParsed) ? 0 : (priorityParsed ?? 0);
+      const active = parseBoolCell(get("active"), 1);
+      const destinationCityRaw = get("destination_city");
+      const destinationCity = destinationCityRaw != null && String(destinationCityRaw).trim() !== ""
+        ? String(destinationCityRaw).trim()
+        : null;
+
+      if (errors.length > 0) {
+        invalidRows.push({ row_number: rowNumber, raw: cells, errors });
+        return;
+      }
+
+      validRows.push({
+        row_number: rowNumber,
+        shipping_method_id: shippingMethodId,
+        shipping_class_id: shippingClassId,
+        min_weight_grams: numericValues.min_weight_grams,
+        max_weight_grams: numericValues.max_weight_grams,
+        min_quantity: numericValues.min_quantity,
+        max_quantity: numericValues.max_quantity,
+        min_cart_value: numericValues.min_cart_value,
+        max_cart_value: numericValues.max_cart_value,
+        destination_city: destinationCity,
+        cost,
+        active,
+        priority,
+      });
+    });
+
+    return {
+      columnsDetected: Object.keys(mapping),
+      columnsUnrecognized: unrecognized,
+      validRows,
+      invalidRows,
+    };
+  }
+
+  async function sha256Hex(text) {
+    const data = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  // POST /api/store/admin/shipping-table-rates/import/preview
+  // Body: { filename?, content_type?, csv_text }
+  // فقط اعتبارسنجی و پیش‌نمایش — هیچ نوشتنی در D1 انجام نمی‌شود.
+  if (url.pathname === "/api/store/admin/shipping-table-rates/import/preview" && request.method === "POST") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const csvText = String(body.csv_text || "");
+      if (!csvText.trim()) {
+        return Response.json({ ok: false, error: "EMPTY_FILE", message: "فایل خالی است." }, { status: 400 });
+      }
+
+      const { header, rows } = parseCsvText(csvText);
+      if (header.length === 0) {
+        return Response.json({ ok: false, error: "EMPTY_FILE", message: "فایل خالی یا بدون هدر است." }, { status: 400 });
+      }
+
+      const { columnsDetected, columnsUnrecognized, validRows, invalidRows } =
+        await validateTableRateImportRows(env, header, rows);
+
+      return Response.json({
+        ok: true,
+        preview: {
+          filename: body.filename || null,
+          row_count: rows.length,
+          valid_row_count: validRows.length,
+          error_row_count: invalidRows.length,
+          columns_detected: columnsDetected,
+          columns_unrecognized: columnsUnrecognized,
+          sample_valid_rows: validRows.slice(0, 20),
+          invalid_rows: invalidRows.slice(0, 50),
+        },
+      });
+    } catch (error) {
+      return Response.json({ ok: false, error: "IMPORT_PREVIEW_FAILED", message: error.message }, { status: 500 });
+    }
+  }
+
+  // POST /api/store/admin/shipping-table-rates/import/commit
+  // Body: { filename?, content_type?, csv_text, source, version_label }
+  // یک نسخه تعرفه جدید می‌سازد و ردیف‌های معتبر را در همان تراکنش درج می‌کند.
+  // ردیف‌های نامعتبر رد می‌شوند (نه کل Import). هیچ ردیف/نسخه قبلی حذف نمی‌شود.
+  if (url.pathname === "/api/store/admin/shipping-table-rates/import/commit" && request.method === "POST") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const csvText = String(body.csv_text || "");
+      const source = TARIFF_SOURCES.includes(body.source) ? body.source : "manual";
+      const versionLabel = String(body.version_label || "").trim() || `Import ${nowIso()}`;
+
+      if (!csvText.trim()) {
+        return Response.json({ ok: false, error: "EMPTY_FILE", message: "فایل خالی است." }, { status: 400 });
+      }
+
+      const { header, rows } = parseCsvText(csvText);
+      if (header.length === 0) {
+        return Response.json({ ok: false, error: "EMPTY_FILE", message: "فایل خالی یا بدون هدر است." }, { status: 400 });
+      }
+
+      const { validRows, invalidRows } = await validateTableRateImportRows(env, header, rows);
+      const checksum = await sha256Hex(csvText);
+      const timestamp = nowIso();
+
+      const versionInsert = await env.DB
+        .prepare(
+          "INSERT INTO shipping_tariff_versions " +
+          "(version_label, source, status, filename, content_type, checksum, row_count, valid_row_count, " +
+          "error_row_count, raw_content, uploaded_at) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(
+          versionLabel, source, body.filename || null, body.content_type || "text/csv", checksum,
+          rows.length, validRows.length, invalidRows.length, csvText, timestamp
+        )
+        .run();
+
+      const tariffVersionId = versionInsert.meta?.last_row_id ?? null;
+
+      // درج تراکنشی ردیف‌های معتبر — اگر یکی شکست بخورد، هیچ‌کدام درج
+      // نمی‌شوند (batch اتمیک D1)، اما این کاملاً جدا از خطاهای Validation
+      // بالاست که از قبل فیلتر شده‌اند.
+      if (validRows.length > 0) {
+        const statements = validRows.map((r) =>
+          env.DB
+            .prepare(
+              "INSERT INTO shipping_table_rates " +
+              "(shipping_method_id, shipping_class_id, min_weight_grams, max_weight_grams, min_quantity, max_quantity, " +
+              "min_cart_value, max_cart_value, destination_city, cost, active, priority, source, tariff_version_id, " +
+              "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(
+              r.shipping_method_id, r.shipping_class_id, r.min_weight_grams, r.max_weight_grams,
+              r.min_quantity, r.max_quantity, r.min_cart_value, r.max_cart_value, r.destination_city,
+              r.cost, r.active, r.priority, source, tariffVersionId, timestamp, timestamp
+            )
+        );
+        await env.DB.batch(statements);
+      }
+
+      return Response.json({
+        ok: true,
+        message: `Import انجام شد: ${validRows.length} ردیف معتبر درج شد، ${invalidRows.length} ردیف رد شد.`,
+        tariff_version_id: tariffVersionId,
+        valid_row_count: validRows.length,
+        error_row_count: invalidRows.length,
+        invalid_rows: invalidRows.slice(0, 50),
+      });
+    } catch (error) {
+      return Response.json({ ok: false, error: "IMPORT_COMMIT_FAILED", message: error.message }, { status: 500 });
+    }
+  }
+
+  // GET /api/store/admin/shipping-tariff-versions — تاریخچه نسخه‌های تعرفه
+  if (url.pathname === "/api/store/admin/shipping-tariff-versions" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const result = await env.DB
+        .prepare(
+          "SELECT id, version_label, source, status, filename, content_type, checksum, row_count, " +
+          "valid_row_count, error_row_count, uploaded_at, activated_at, created_by " +
+          "FROM shipping_tariff_versions ORDER BY uploaded_at DESC, id DESC"
+        )
+        .all();
+      return Response.json({ ok: true, versions: result.results || [] });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "TARIFF_VERSIONS_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول نسخه‌بندی تعرفه هنوز ایجاد نشده. ابتدا database/shipping-providers-and-quotes.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // POST /api/store/admin/shipping-tariff-versions/archive — { id }
+  // فقط وضعیت متادیتای نسخه را archived می‌کند؛ هیچ ردیف Table Rate حذف نمی‌شود.
+  if (url.pathname === "/api/store/admin/shipping-tariff-versions/archive" && request.method === "POST") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const id = Number(body.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه نامعتبر است." }, { status: 400 });
+      }
+      const result = await env.DB
+        .prepare("UPDATE shipping_tariff_versions SET status = 'archived' WHERE id = ?")
+        .bind(id)
+        .run();
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "نسخه پیدا نشد." }, { status: 404 });
+      }
+      return Response.json({ ok: true, message: "نسخه آرشیو شد (ردیف‌های Table Rate آن حذف نشدند)." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // Shipping Providers — رجیستری Provider (داخلی/آنلاین) + حالت محاسبه ارسال.
+  // هرگز Secret/API Key از این Endpointها خوانده یا نوشته نمی‌شود.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/shipping-providers" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const providers = await listShippingProviders(env);
+      const mode = await getShippingCalculationMode(env);
+      return Response.json({ ok: true, providers, shipping_calculation_mode: mode });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "PROVIDERS_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول Providerها هنوز ایجاد نشده. ابتدا database/shipping-providers-and-quotes.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // PUT /api/store/admin/shipping-providers — { code, status?, mode?, fallback_provider_code?, config? }
+  if (url.pathname === "/api/store/admin/shipping-providers" && request.method === "PUT") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const result = await updateShippingProvider(env, body.code, body);
+      if (!result.ok) {
+        return Response.json(result, { status: result.error === "NOT_FOUND" ? 404 : 400 });
+      }
+      return Response.json(result);
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // GET/PUT /api/store/admin/shipping-calculation-mode
+  if (url.pathname === "/api/store/admin/shipping-calculation-mode" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const mode = await getShippingCalculationMode(env);
+      return Response.json({ ok: true, mode });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/store/admin/shipping-calculation-mode" && request.method === "PUT") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const result = await setShippingCalculationMode(env, body.mode);
+      if (!result.ok) return Response.json(result, { status: 400 });
+      return Response.json(result);
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // GET /api/store/admin/shipping-quote-history — تاریخچه/Audit استعلام آنلاین
+  if (url.pathname === "/api/store/admin/shipping-quote-history" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const limit = Number(url.searchParams.get("limit")) || 50;
+      const history = await listShippingQuoteHistory(env, { limit });
+      return Response.json({ ok: true, history });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "QUOTE_HISTORY_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول تاریخچه استعلام هنوز ایجاد نشده. ابتدا database/shipping-providers-and-quotes.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // GET /api/store/admin/shipping-engine-preview?city=...&product_ids=1,2&quantities=1,2
+  // Admin-only — Orchestration کامل Engine (Provider آنلاین + Fallback طبق
+  // shipping_calculation_mode) را بدون هیچ اثر روی Checkout/Cart واقعی مشتری
+  // تست می‌کند. اتصال زنده مشتری هنوز به resolveShippingOptionsForCart است
+  // (بخش «وضعیت این مرحله» در src/shipping-engine.js را ببینید).
+  if (url.pathname === "/api/store/admin/shipping-engine-preview" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const city = String(url.searchParams.get("city") || "").trim();
+      const productIdsParam = url.searchParams.get("product_ids");
+      const quantitiesParam = url.searchParams.get("quantities");
+      const productIds = productIdsParam ? productIdsParam.split(",").map((v) => Number(v.trim())) : [];
+      const quantities = quantitiesParam ? quantitiesParam.split(",").map((v) => Number(v.trim())) : [];
+      const cartItems = productIds.map((id, index) => ({
+        productId: id,
+        quantity: quantities[index] > 0 ? quantities[index] : 1,
+      }));
+
+      const engineResult = await getShippingOptionsViaEngine(env, {
+        cartItems,
+        city,
+        internalOptionsFn: resolveShippingOptionsForCart,
+      });
+
+      return Response.json({ ok: true, ...engineResult });
+    } catch (error) {
+      return Response.json({ ok: false, error: "ENGINE_PREVIEW_FAILED", message: error.message }, { status: 500 });
     }
   }
 
