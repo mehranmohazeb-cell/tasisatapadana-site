@@ -13,6 +13,8 @@ import {
   TARIFF_SOURCES,
 } from "./shipping-engine.js";
 
+import { formatTechnicalText, applyTechnicalFormattingToProduct } from "./technical-format.js";
+
 const STATUS_LABELS = {
   pending: "در حال بررسی",
   confirmed: "تأیید شده",
@@ -79,10 +81,13 @@ function rialToToman(rialAmount) {
 // =========================================================================
 // استانداردسازی دائمی علائم و واحدهای فنی (لایه نمایش، بدون تغییر داده خام)
 // =========================================================================
-// قوانین از جدول D1 «technical_format_rules» خوانده می‌شوند (کش سبک در
-// حافظه هر ایزوله، ۶۰ ثانیه) و هرگز مقدار خام محصول در دیتابیس را تغییر
-// نمی‌دهند؛ فقط متنی که در پاسخ API/SSR فرستاده می‌شود را فرمت می‌کنند.
-// یک قانون خراب فقط همان قانون را نادیده می‌گیرد، هرگز کل صفحه را خراب نمی‌کند.
+// موتور واقعی فرمت‌دهی (تشخیص notation، حل تداخل بین Ruleها، HTML-safety)
+// در «src/technical-format.js» است (import بالای همین فایل). این‌جا فقط
+// خواندن Ruleهای فعال از D1 با یک کش سبک (۶۰ ثانیه در حافظه هر ایزوله)
+// انجام می‌شود؛ هرگز مقدار خام محصول در دیتابیس تغییر نمی‌کند — فقط متنی
+// که در پاسخ API/SSR فرستاده می‌شود فرمت می‌شود. یک قانون خراب فقط همان
+// قانون را نادیده می‌گیرد (داخل technical-format.js)، هرگز کل صفحه را خراب
+// نمی‌کند.
 let _technicalFormatRulesCache = null;
 let _technicalFormatRulesCacheAt = 0;
 const TECHNICAL_FORMAT_RULES_CACHE_TTL_MS = 60 * 1000;
@@ -96,8 +101,8 @@ async function getTechnicalFormatRules(env) {
   try {
     const result = await env.DB
       .prepare(
-        "SELECT id, rule_type, match_value, display_value FROM technical_format_rules " +
-        "WHERE active = 1 ORDER BY sort_order ASC, id ASC"
+        "SELECT id, rule_type, match_value, display_value, script_type, suffix_mode, max_suffix_len " +
+        "FROM technical_format_rules WHERE active = 1 ORDER BY sort_order ASC, id ASC"
       )
       .all();
 
@@ -111,102 +116,6 @@ async function getTechnicalFormatRules(env) {
     console.error("[technical-format] خواندن قوانین ممکن نشد:", error.message);
     return [];
   }
-}
-
-function escapeRegexLiteral(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// =========================================================================
-// معماری عمومی محتوای فنی — نگاشت یونیکد زیرنویس/بالانویس (بخش اول دستور).
-//
-// این دو جدول، تنها منبع تبدیل کاراکتر-به-کاراکتر برای rule_type='auto_script'
-// هستند. فقط نویسه‌هایی که یونیکد برایشان معادل رسمی زیرنویس/بالانویس دارد
-// اینجا فهرست شده‌اند؛ هر نویسه دیگری (که معادل ندارد) دست‌نخورده می‌ماند —
-// هرگز حدس زده یا نزدیک‌ترین شکل جایگزین نمی‌شود.
-// =========================================================================
-const SUBSCRIPT_CHAR_MAP = {
-  "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
-  "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
-  a: "ₐ", e: "ₑ", h: "ₕ", i: "ᵢ", j: "ⱼ", k: "ₖ", l: "ₗ", m: "ₘ",
-  n: "ₙ", o: "ₒ", p: "ₚ", r: "ᵣ", s: "ₛ", t: "ₜ", u: "ᵤ", v: "ᵥ", x: "ₓ",
-  "+": "₊", "-": "₋",
-};
-
-// بالانویس فقط برای ارقام + علامت (پرکاربردترین و بی‌خطرترین حالت مهندسی،
-// مثل m² یا m³)؛ عمداً حروف بالانویس اضافه نشده چون رندر آن‌ها در فونت‌های
-// معمول ناپایدار است — تصمیمی محافظه‌کارانه برای جلوگیری از تبدیل نامطمئن.
-const SUPERSCRIPT_CHAR_MAP = {
-  "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
-  "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
-  "+": "⁺", "-": "⁻",
-};
-
-function convertToScript(suffix, scriptType) {
-  const map = scriptType === "superscript" ? SUPERSCRIPT_CHAR_MAP : SUBSCRIPT_CHAR_MAP;
-  // عمداً حروف بزرگ تبدیل نمی‌شوند (مثلاً «O» در H2O باید دست‌نخورده بماند)؛
-  // فقط نویسه‌ای که دقیقاً در نگاشت باشد (ارقام و حروف کوچک رایج) تبدیل می‌شود.
-  return suffix
-    .split("")
-    .map((ch) => map[ch] || ch)
-    .join("");
-}
-
-function formatTechnicalText(text, rules) {
-  if (text == null || typeof text !== "string" || !Array.isArray(rules) || rules.length === 0) {
-    return text;
-  }
-
-  let output = text;
-  for (const rule of rules) {
-    try {
-      const escapedValue = escapeRegexLiteral(rule.match_value);
-      if (rule.rule_type === "unit") {
-        // فقط وقتی عدد بلافاصله قبل از واحد بیاید جایگزین می‌شود (مثال:
-        // «60 C» یا «60C» → «60 °C»)؛ هرگز حرف/واحد را جدا از یک عدد
-        // جایگزین نمی‌کند تا از تبدیل حدسی/نادرست جلوگیری شود.
-        const re = new RegExp("(\\d+(?:[.,]\\d+)?)\\s?" + escapedValue + "\\b", "g");
-        output = output.replace(re, (_match, num) => `${num} ${rule.display_value}`);
-      } else if (rule.rule_type === "auto_script") {
-        // معماری عمومی زیرنویس/بالانویس: پیشوند (مثلاً Q یا P) + حداکثر ۳
-        // حرف/رقم بلافاصله بعدش (طول متغیرهای رایج مهندسی مثل n, m, max,
-        // min) → همان دنباله به یونیکد زیرنویس/بالانویس تبدیل می‌شود. سقف
-        // ۳ نویسه عمداً گذاشته شده تا کلمات معمولی طولانی‌تر (مثلاً
-        // Quality) اشتباهی به‌عنوان نماد فنی برداشت نشوند. یک قانون واحد،
-        // همه ترکیب‌های آینده (Qm، Qmax، Qmin، Pn، ...) را بدون افزودن Rule
-        // جدید پوشش می‌دهد.
-        const re = new RegExp("\\b" + escapedValue + "([A-Za-z0-9]{1,3})\\b", "g");
-        output = output.replace(re, (_match, suffix) => rule.match_value + convertToScript(suffix, rule.script_type));
-      } else {
-        // token: جایگزینی دقیق یک نماد مستقل با مرز کلمه (مثال: Qn → Qₙ)
-        const re = new RegExp("\\b" + escapedValue + "\\b", "g");
-        output = output.replace(re, rule.display_value);
-      }
-    } catch (error) {
-      console.error("[technical-format] قانون نادیده گرفته شد:", rule.id, error.message);
-    }
-  }
-  return output;
-}
-
-// یک محصول (و مشخصات فنی آن) را طبق قوانین فعلی فرمت می‌کند. ایمن است
-// حتی اگر specs وجود نداشته باشد یا rules خالی باشد.
-function applyTechnicalFormattingToProduct(product, rules) {
-  if (!product || !Array.isArray(rules) || rules.length === 0) return product;
-
-  if (product.description != null) product.description = formatTechnicalText(product.description, rules);
-  if (product.brand != null) product.brand = formatTechnicalText(product.brand, rules);
-  if (product.model != null) product.model = formatTechnicalText(product.model, rules);
-
-  if (Array.isArray(product.specs)) {
-    product.specs = product.specs.map((spec) => ({
-      ...spec,
-      label: formatTechnicalText(spec.label, rules),
-      value: formatTechnicalText(spec.value, rules),
-    }));
-  }
-
-  return product;
 }
 
 // معرفی محصول (description) به‌صورت HTML ساده (تیتر/پاراگراف/بولد/لیست/لینک)
@@ -2376,8 +2285,15 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .all();
 
       const products = result.results || [];
-      const formatRules = await getTechnicalFormatRules(env);
 
+      // مهم: این لیست پنل مدیریت (بر خلاف لیست عمومی فروشگاه) عمداً هیچ
+      // Technical Formatting‌ای اعمال نمی‌کند. این همان داده‌ای است که
+      // فرم ویرایش محصول (editProduct در products.js) مستقیماً از آن پر
+      // می‌شود؛ اگر این‌جا متن فرمت‌شده (با نویسه‌های یونیکد زیرنویس/
+      // بالانویس جایگزین‌شده) برگردانده شود، با اولین Save، همان متن
+      // فرمت‌شده به‌جای متن خام در D1 ذخیره می‌شود — دقیقاً همان تضمینی
+      // که در بالای این فایل مستند شده («هرگز مقدار خام محصول در دیتابیس
+      // تغییر نمی‌کند») را نقض می‌کند. مدیر همیشه باید متن خام را ویرایش کند.
       for (const product of products) {
         product.images = await getProductImages(product.id);
         product.specs = await getProductSpecs(product.id);
@@ -2385,8 +2301,6 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         if (product.images.length === 0 && product.image) {
           product.images = [{ id: null, image: product.image, sort_order: 0 }];
         }
-
-        applyTechnicalFormattingToProduct(product, formatRules);
       }
 
       return Response.json({
