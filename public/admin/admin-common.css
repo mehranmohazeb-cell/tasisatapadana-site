@@ -670,10 +670,13 @@ a {
   outline-offset: 1px;
 }
 
+.spec-row-wrap {
+  margin-bottom: 8px;
+}
+
 .spec-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 8px;
   align-items: center;
 }
 
@@ -684,6 +687,19 @@ a {
   padding: 8px 10px;
   font-family: inherit;
   font-size: 13px;
+}
+
+/* پیش‌نمایش Technical Formatter — فقط نمایشی؛ مقدار خام input هرگز از
+   این طریق تغییر نمی‌کند. */
+.tech-format-preview {
+  display: block;
+  color: #8a7458;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.tech-format-preview:empty {
+  display: none;
 }
 
 /* =========================

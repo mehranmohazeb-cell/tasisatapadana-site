@@ -349,6 +349,80 @@ function removeProductImage(index) {
 }
 
 // =========================
+// پیش‌نمایش Technical Formatter در فرم ویرایش محصول
+// -------------------------------------------------------------------------
+// این پیش‌نمایش فقط نمایشی است و از همان Endpoint متکی بر Technical
+// Formatter مرکزی (src/technical-format.js) استفاده می‌کند. مقدار inputها
+// (برند/مدل/Label/Value مشخصات) همیشه همان متن خام تایپ/بارگذاری‌شده باقی
+// می‌ماند و دقیقاً همان چیزی است که هنگام ذخیره ارسال می‌شود — این تابع
+// هرگز value هیچ inputای را تغییر نمی‌دهد.
+// =========================
+
+let technicalPreviewTimer = null;
+
+function scheduleTechnicalPreviewRefresh() {
+  clearTimeout(technicalPreviewTimer);
+  technicalPreviewTimer = setTimeout(refreshTechnicalPreview, 300);
+}
+
+function setPreviewText(el, formattedText, rawText) {
+  if (!el) return;
+  // اگر فرمت‌شده دقیقاً همان خام باشد (چیز فنی‌ای برای فرمت شدن نبود)،
+  // پیش‌نمایش خالی می‌ماند تا فرم شلوغ نشود.
+  if (!formattedText || formattedText === rawText) {
+    el.textContent = "";
+    return;
+  }
+  el.textContent = `پیش‌نمایش: ${formattedText}`;
+}
+
+function clearTechnicalPreview() {
+  setPreviewText(document.getElementById("product-brand-preview"), "", "");
+  setPreviewText(document.getElementById("product-model-preview"), "", "");
+  for (let index = 0; index < productSpecs.length; index++) {
+    setPreviewText(document.getElementById(`spec-preview-label-${index}`), "", "");
+    setPreviewText(document.getElementById(`spec-preview-value-${index}`), "", "");
+  }
+}
+
+async function refreshTechnicalPreview() {
+  const brandRaw = document.getElementById("product-brand")?.value || "";
+  const modelRaw = document.getElementById("product-model")?.value || "";
+
+  const texts = [brandRaw, modelRaw];
+  for (const spec of productSpecs) {
+    texts.push(spec.label || "", spec.value || "");
+  }
+
+  if (!texts.some((text) => text && text.trim())) {
+    clearTechnicalPreview();
+    return;
+  }
+
+  try {
+    const data = await fetchAdmin("/admin/technical-format-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texts }),
+    });
+    const formatted = data.formatted || [];
+
+    setPreviewText(document.getElementById("product-brand-preview"), formatted[0], brandRaw);
+    setPreviewText(document.getElementById("product-model-preview"), formatted[1], modelRaw);
+
+    productSpecs.forEach((spec, index) => {
+      const labelFormatted = formatted[2 + index * 2];
+      const valueFormatted = formatted[2 + index * 2 + 1];
+      setPreviewText(document.getElementById(`spec-preview-label-${index}`), labelFormatted, spec.label || "");
+      setPreviewText(document.getElementById(`spec-preview-value-${index}`), valueFormatted, spec.value || "");
+    });
+  } catch (error) {
+    // پیش‌نمایش کاملاً جانبی و اختیاری است؛ اگر ناموفق شود، فرم بدون آن
+    // (فقط با داده خام در inputها) به کار عادی خودش ادامه می‌دهد.
+  }
+}
+
+// =========================
 // مشخصات فنی (label/value قابل افزودن/حذف/ترتیب)
 // =========================
 
@@ -358,22 +432,31 @@ function renderSpecsList() {
 
   if (productSpecs.length === 0) {
     container.innerHTML = '<p class="loading">هنوز مشخصه‌ای اضافه نشده است.</p>';
-    return;
+  } else {
+    container.innerHTML = productSpecs.map((spec, index) => `
+      <div class="spec-row-wrap">
+        <div class="spec-row">
+          <input type="text" placeholder="مشخصه (مثلاً: برند)" value="${escapeAttribute(spec.label)}" oninput="updateSpec(${index}, 'label', this.value)">
+          <input type="text" placeholder="مقدار" value="${escapeAttribute(spec.value)}" oninput="updateSpec(${index}, 'value', this.value)">
+          <button type="button" class="secondary-button" onclick="moveSpec(${index}, -1)" ${index === 0 ? "disabled" : ""}>▲</button>
+          <button type="button" class="secondary-button" onclick="moveSpec(${index}, 1)" ${index === productSpecs.length - 1 ? "disabled" : ""}>▼</button>
+          <button type="button" class="danger-button" onclick="removeSpec(${index})">حذف</button>
+        </div>
+        <small class="tech-format-preview" id="spec-preview-label-${index}"></small>
+        <small class="tech-format-preview" id="spec-preview-value-${index}"></small>
+      </div>
+    `).join("");
   }
 
-  container.innerHTML = productSpecs.map((spec, index) => `
-    <div class="spec-row">
-      <input type="text" placeholder="مشخصه (مثلاً: برند)" value="${escapeAttribute(spec.label)}" oninput="updateSpec(${index}, 'label', this.value)">
-      <input type="text" placeholder="مقدار" value="${escapeAttribute(spec.value)}" oninput="updateSpec(${index}, 'value', this.value)">
-      <button type="button" class="secondary-button" onclick="moveSpec(${index}, -1)" ${index === 0 ? "disabled" : ""}>▲</button>
-      <button type="button" class="secondary-button" onclick="moveSpec(${index}, 1)" ${index === productSpecs.length - 1 ? "disabled" : ""}>▼</button>
-      <button type="button" class="danger-button" onclick="removeSpec(${index})">حذف</button>
-    </div>
-  `).join("");
+  // بعد از هر بازسازی لیست (بارگذاری اولیه/افزودن/جابه‌جایی/حذف ردیف/خالی‌شدن
+  // با clearForm)، پیش‌نمایش فرمت‌شده دوباره محاسبه می‌شود تا هرگز پیش‌نمایش
+  // محصول قبلی باقی نماند؛ خودِ inputها هرگز از این مسیر دست نمی‌خورند.
+  refreshTechnicalPreview();
 }
 
 function updateSpec(index, field, value) {
   if (productSpecs[index]) productSpecs[index][field] = value;
+  scheduleTechnicalPreviewRefresh();
 }
 
 function moveSpec(index, direction) {
@@ -674,6 +757,9 @@ document.addEventListener("DOMContentLoaded", () => {
     input.value = "";
     renderImageList();
   });
+
+  document.getElementById("product-brand")?.addEventListener("input", scheduleTechnicalPreviewRefresh);
+  document.getElementById("product-model")?.addEventListener("input", scheduleTechnicalPreviewRefresh);
 
   document.getElementById("add-spec-row")?.addEventListener("click", () => {
     productSpecs.push({ label: "", value: "" });
