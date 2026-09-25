@@ -101,7 +101,7 @@ async function getTechnicalFormatRules(env) {
   try {
     const result = await env.DB
       .prepare(
-        "SELECT id, rule_type, match_value, display_value, script_type, suffix_mode, max_suffix_len " +
+        "SELECT id, rule_type, match_value, display_value, script_type, suffix_mode, max_suffix_len, case_sensitive " +
         "FROM technical_format_rules WHERE active = 1 ORDER BY sort_order ASC, id ASC"
       )
       .all();
@@ -110,6 +110,28 @@ async function getTechnicalFormatRules(env) {
     _technicalFormatRulesCacheAt = now;
     return _technicalFormatRulesCache;
   } catch (error) {
+    // سازگاری با قبل از اجرای Migration v4 (ستون case_sensitive): اگر ستون
+    // هنوز روی D1 وجود ندارد، به‌جای خراب کردن کل فرمت‌دهی، دوباره بدون آن
+    // ستون بخوان — یعنی همه‌ی Ruleها دقیقاً مثل قبل (case-sensitive) رفتار
+    // می‌کنند تا وقتی Migration اجرا شود.
+    if (/no such column/i.test(error.message || "")) {
+      try {
+        const fallbackResult = await env.DB
+          .prepare(
+            "SELECT id, rule_type, match_value, display_value, script_type, suffix_mode, max_suffix_len " +
+            "FROM technical_format_rules WHERE active = 1 ORDER BY sort_order ASC, id ASC"
+          )
+          .all();
+
+        _technicalFormatRulesCache = fallbackResult.results || [];
+        _technicalFormatRulesCacheAt = now;
+        return _technicalFormatRulesCache;
+      } catch (fallbackError) {
+        console.error("[technical-format] خواندن قوانین ممکن نشد:", fallbackError.message);
+        return [];
+      }
+    }
+
     // Fail-Safe: اگر جدول هنوز Migrate نشده یا خطای دیگری رخ دهد، هیچ
     // فرمتی اعمال نمی‌شود (متن خام دقیقاً مثل قبل نمایش داده می‌شود)،
     // هرگز کل درخواست را خراب نمی‌کند.
@@ -4808,6 +4830,37 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         },
         { status: 500 }
       );
+    }
+  }
+
+  // =========================================================================
+  // POST /api/store/admin/technical-format-preview — پیش‌نمایش فرمت‌شده‌ی
+  // متن‌های فنی (برند/مدل/Label و Value مشخصات) برای فرم ویرایش محصول در
+  // پنل مدیریت. این Endpoint هیچ‌چیزی در D1 تغییر نمی‌دهد؛ فقط از همان تابع
+  // مرکزی formatTechnicalText (src/technical-format.js) — دقیقاً همان
+  // موتوری که نمایش عمومی محصول را فرمت می‌کند — برای محاسبه‌ی یک نسخه‌ی
+  // نمایشی موقت استفاده می‌کند. سیستم فرمت‌دهی موازی/جدا ساخته نشده است.
+  // مدیر همچنان باید و فقط باید مقدار خام را در input ویرایش کند؛ خروجی این
+  // Endpoint صرفاً برای یک متن پیش‌نمایش کنار همان فیلد است.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/technical-format-preview" && request.method === "POST") {
+    if (!isAdmin(request, env)) {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    try {
+      const body = await request.json().catch(() => ({}));
+      const texts = Array.isArray(body?.texts) ? body.texts : [];
+      const formatRules = await getTechnicalFormatRules(env);
+
+      const formatted = texts.map((text) =>
+        typeof text === "string" && text !== "" ? formatTechnicalText(text, formatRules) : ""
+      );
+
+      return Response.json({ ok: true, formatted });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
     }
   }
 

@@ -48,6 +48,20 @@ export function escapeRegexLiteral(value) {
 }
 
 // -------------------------------------------------------------------------
+// حساسیت به بزرگی/کوچکی حروف — به‌صورت پیش‌فرض هر Rule دقیقاً مثل قبل
+// case-sensitive است (rule.case_sensitive == null یا 1). فقط وقتی مدیر
+// صریحاً case_sensitive=0 را برای همان یک Rule تنظیم کند (مثلاً واحد kW،
+// برای پوشش دادن داده‌های واقعی "KW")، تطابق آن Rule به‌تنهایی
+// case-insensitive می‌شود؛ این هرگز کل Technical Formatter را global و
+// کورکورانه case-insensitive نمی‌کند — هر Rule دیگر (حتی واحدهای تک‌حرفی
+// پرریسک مثل C/F) دست‌نخورده و حساس به بزرگی/کوچکی حروف باقی می‌ماند.
+// -------------------------------------------------------------------------
+export function ruleRegexFlags(rule) {
+  const insensitive = rule && (rule.case_sensitive === 0 || rule.case_sensitive === false || rule.case_sensitive === "0");
+  return insensitive ? "gi" : "g";
+}
+
+// -------------------------------------------------------------------------
 // اولویت (Tier) بین rule_typeها برای حل تداخل. هر چه عدد بزرگ‌تر، اولویت
 // بالاتر. این عدد تعیین می‌کند وقتی دو Rule روی یک بازه از متن هم‌پوشانی
 // دارند (مثال کلاسیک: واحد «Pa» در برابر قانون عمومی subscript پیشوند «P»)
@@ -76,10 +90,12 @@ export function findCandidatesForRule(text, rule) {
   const sortOrder = Number(rule.sort_order) || 0;
 
   try {
+    const flags = ruleRegexFlags(rule);
+
     if (rule.rule_type === "exception") {
       // استثنای صریح: این نویسه دقیقاً همین‌طور که هست باقی می‌ماند و مانع
       // اعمال هر Rule دیگری (با اولویت پایین‌تر) روی همین بازه می‌شود.
-      const re = new RegExp("\\b" + escapedValue + "\\b", "g");
+      const re = new RegExp("\\b" + escapedValue + "\\b", flags);
       let m;
       while ((m = re.exec(text)) !== null) {
         candidates.push({
@@ -95,7 +111,7 @@ export function findCandidatesForRule(text, rule) {
       }
     } else if (rule.rule_type === "token") {
       // جایگزینی دقیق یک نماد مستقل با مرز کلمه (alias/جایگزینی ثابت).
-      const re = new RegExp("\\b" + escapedValue + "\\b", "g");
+      const re = new RegExp("\\b" + escapedValue + "\\b", flags);
       let m;
       while ((m = re.exec(text)) !== null) {
         candidates.push({
@@ -112,7 +128,7 @@ export function findCandidatesForRule(text, rule) {
     } else if (rule.rule_type === "unit") {
       // حالت ۱ — عدد+واحد: وقتی عدد بلافاصله قبل از واحد بیاید، جایگزین
       // نمایشی واقعی اعمال می‌شود («60 C» یا «60C» → «60 °C»).
-      const reWithNumber = new RegExp("(\\d+(?:[.,]\\d+)?)\\s?" + escapedValue + "\\b", "g");
+      const reWithNumber = new RegExp("(\\d+(?:[.,]\\d+)?)\\s?" + escapedValue + "\\b", flags);
       let m;
       while ((m = reWithNumber.exec(text)) !== null) {
         candidates.push({
@@ -135,7 +151,7 @@ export function findCandidatesForRule(text, rule) {
       // آن را حدس نزند. وقتی عدد واقعاً وجود دارد، تطابق حالت ۱ طولانی‌تر
       // است و طبق حل تداخل (طول تطابق بلندتر در Tier مساوی) خودکار برنده
       // می‌شود؛ این حالت فقط برای وقتی عدد نیست وارد عمل می‌شود.
-      const reBare = new RegExp("\\b" + escapedValue + "\\b", "g");
+      const reBare = new RegExp("\\b" + escapedValue + "\\b", flags);
       while ((m = reBare.exec(text)) !== null) {
         candidates.push({
           start: m.index,
@@ -157,7 +173,7 @@ export function findCandidatesForRule(text, rule) {
       // suffix_mode='alnum'   → حرف/رقم (پیش‌فرض؛ برای Qn/Qm/Pmax/...).
       const maxLen = Math.max(1, Math.min(6, Number(rule.max_suffix_len) || 3));
       const suffixClass = rule.suffix_mode === "digits" ? "0-9" : "A-Za-z0-9";
-      const re = new RegExp("\\b" + escapedValue + "([" + suffixClass + "]{1," + maxLen + "})\\b", "g");
+      const re = new RegExp("\\b" + escapedValue + "([" + suffixClass + "]{1," + maxLen + "})\\b", flags);
       let m;
       while ((m = re.exec(text)) !== null) {
         candidates.push({
