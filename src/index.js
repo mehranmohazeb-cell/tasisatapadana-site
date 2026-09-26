@@ -15,6 +15,16 @@ import {
 
 import { formatTechnicalText, applyTechnicalFormattingToProduct } from "./technical-format.js";
 
+import {
+  buildCartShipmentPackages,
+  chargeableWeightForDivisor,
+  loadPackagingProfiles,
+  resolveEffectiveProfile,
+  estimateProductPackage,
+  BUILTIN_FALLBACK_PROFILE,
+  DEFAULT_VOLUMETRIC_DIVISOR,
+} from "./packaging-estimation.js";
+
 const STATUS_LABELS = {
   pending: "در حال بررسی",
   confirmed: "تأیید شده",
@@ -2300,7 +2310,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "SELECT id, name, slug, description, price, image, stock, active, " +
           "brand, model, sku, compare_at_price, shipping_cost, shipping_method, shipping_time, " +
-          "warranty_months, warranty_provider, return_days, category_id " +
+          "warranty_months, warranty_provider, return_days, category_id, " +
+          "shipping_class_id, weight_grams, length_cm, width_cm, height_cm, " +
+          "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, " +
+          "package_weight_grams, packaging_confidence " +
           `FROM products ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
         )
         .bind(...params, limit, offset)
@@ -2392,7 +2405,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "customer_address, province, city, street, sub_street, alley, plaque, " +
           "unit, postal_code, address_note, total, shipping_cost, shipping_method_id, " +
           "shipping_method_name, shipping_is_cod, payable_amount, status, payment_status, " +
-          "postal_carrier, postal_tracking_code, created_at, updated_at, " +
+          "postal_carrier, postal_tracking_code, actual_shipping_cost, shipping_cost_variance, " +
+          "created_at, updated_at, " +
           "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id) AS ticket_count, " +
           "(SELECT COUNT(*) FROM tickets t WHERE t.order_id = orders.id AND t.status != 'closed') AS open_ticket_count " +
           "FROM orders " +
@@ -2475,7 +2489,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "customer_address, province, city, street, sub_street, alley, plaque, " +
           "unit, postal_code, address_note, total, shipping_cost, shipping_method_id, " +
           "shipping_method_name, shipping_is_cod, payable_amount, status, payment_status, " +
-          "payment_reference, postal_carrier, postal_tracking_code, created_at, updated_at " +
+          "payment_reference, postal_carrier, postal_tracking_code, " +
+          "actual_shipping_cost, shipping_cost_variance, shipping_cost_recorded_at, " +
+          "created_at, updated_at " +
           "FROM orders WHERE id = ? LIMIT 1"
         )
         .bind(orderId)
@@ -2760,6 +2776,25 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const widthCm = body.width_cm != null && body.width_cm !== "" ? Number(body.width_cm) : null;
       const heightCm = body.height_cm != null && body.height_cm !== "" ? Number(body.height_cm) : null;
 
+      // سیستم تخمین بسته‌بندی — همه اختیاری (بخش ۱۲/۱۳ دستور توسعه
+      // بسته‌بندی). packagingProfileId خالی یعنی Profile به‌صورت خودکار از
+      // Shipping Class تشخیص داده شود؛ package_* فقط وقتی مدیر ابعاد/وزن
+      // واقعی بسته را می‌داند پر می‌شود (Override، اولویت با تخمین خودکار).
+      const packagingProfileId =
+        body.packaging_profile_id != null && body.packaging_profile_id !== "" ? Number(body.packaging_profile_id) : null;
+      const packageLengthCm =
+        body.package_length_cm != null && body.package_length_cm !== "" ? Number(body.package_length_cm) : null;
+      const packageWidthCm =
+        body.package_width_cm != null && body.package_width_cm !== "" ? Number(body.package_width_cm) : null;
+      const packageHeightCm =
+        body.package_height_cm != null && body.package_height_cm !== "" ? Number(body.package_height_cm) : null;
+      const packageWeightGrams =
+        body.package_weight_grams != null && body.package_weight_grams !== "" ? Number(body.package_weight_grams) : null;
+      const packagingConfidence =
+        body.packaging_confidence != null && String(body.packaging_confidence).trim() !== ""
+          ? String(body.packaging_confidence).trim()
+          : null;
+
       // دسته‌بندی — کاملاً اختیاری (بخش دسته‌بندی محصولات). NULL یعنی
       // «بدون دسته»، دقیقاً همان رفتار محصولات فعلی قبل از این قابلیت.
       const categoryId =
@@ -2812,14 +2847,16 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "(name, slug, description, price, image, stock, active, brand, model, sku, compare_at_price, " +
           "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days, " +
           "shipping_class_id, weight_grams, length_cm, width_cm, height_cm, " +
+          "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, package_weight_grams, packaging_confidence, " +
           "category_id) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           name, slug, description, price, image, stock, active,
           brand, model, sku, compareAtPrice,
           shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
           shippingClassId, weightGrams, lengthCm, widthCm, heightCm,
+          packagingProfileId, packageLengthCm, packageWidthCm, packageHeightCm, packageWeightGrams, packagingConfidence,
           categoryId
         )
         .run();
@@ -2918,6 +2955,21 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const widthCm = body.width_cm != null && body.width_cm !== "" ? Number(body.width_cm) : null;
       const heightCm = body.height_cm != null && body.height_cm !== "" ? Number(body.height_cm) : null;
 
+      const packagingProfileId =
+        body.packaging_profile_id != null && body.packaging_profile_id !== "" ? Number(body.packaging_profile_id) : null;
+      const packageLengthCm =
+        body.package_length_cm != null && body.package_length_cm !== "" ? Number(body.package_length_cm) : null;
+      const packageWidthCm =
+        body.package_width_cm != null && body.package_width_cm !== "" ? Number(body.package_width_cm) : null;
+      const packageHeightCm =
+        body.package_height_cm != null && body.package_height_cm !== "" ? Number(body.package_height_cm) : null;
+      const packageWeightGrams =
+        body.package_weight_grams != null && body.package_weight_grams !== "" ? Number(body.package_weight_grams) : null;
+      const packagingConfidence =
+        body.packaging_confidence != null && String(body.packaging_confidence).trim() !== ""
+          ? String(body.packaging_confidence).trim()
+          : null;
+
       const categoryId =
         body.category_id != null && body.category_id !== "" ? Number(body.category_id) : null;
 
@@ -2985,6 +3037,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "shipping_cost = ?, shipping_method = ?, shipping_time = ?, " +
           "warranty_months = ?, warranty_provider = ?, return_days = ?, " +
           "shipping_class_id = ?, weight_grams = ?, length_cm = ?, width_cm = ?, height_cm = ?, " +
+          "packaging_profile_id = ?, package_length_cm = ?, package_width_cm = ?, package_height_cm = ?, " +
+          "package_weight_grams = ?, packaging_confidence = ?, " +
           "category_id = ? WHERE id = ?"
         )
         .bind(
@@ -2992,6 +3046,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           brand, model, sku, compareAtPrice,
           shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
           shippingClassId, weightGrams, lengthCm, widthCm, heightCm,
+          packagingProfileId, packageLengthCm, packageWidthCm, packageHeightCm, packageWeightGrams, packagingConfidence,
           categoryId,
           id
         )
@@ -3322,7 +3377,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     try {
       const result = await env.DB
         .prepare(
-          "SELECT id, name, cost, cost_type, active, scope, allowed_city, sort_order, created_at, updated_at " +
+          "SELECT id, name, cost, cost_type, active, scope, allowed_city, sort_order, " +
+          "volumetric_divisor, created_at, updated_at " +
           "FROM shipping_methods ORDER BY sort_order ASC, id ASC"
         )
         .all();
@@ -3358,6 +3414,12 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const scope = String(body.scope || "all").trim();
       const allowedCity = scope === "city" ? String(body.allowed_city || "").trim() : null;
       const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+      // ضریب وزن حجمی این روش ارسال — وابسته به Provider، نه عمومی (بخش ۹
+      // دستور تخمین بسته‌بندی). خالی/نامعتبر = از پیش‌فرض کد استفاده می‌شود.
+      const volumetricDivisor =
+        body.volumetric_divisor != null && body.volumetric_divisor !== "" && Number.isFinite(Number(body.volumetric_divisor))
+          ? Math.round(Number(body.volumetric_divisor))
+          : null;
 
       if (!name) {
         return Response.json({ ok: false, error: "INVALID_DATA", message: "نام روش ارسال الزامی است." }, { status: 400 });
@@ -3381,10 +3443,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const timestamp = nowIso();
       const result = await env.DB
         .prepare(
-          "INSERT INTO shipping_methods (name, cost, cost_type, active, scope, allowed_city, sort_order, created_at, updated_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO shipping_methods (name, cost, cost_type, active, scope, allowed_city, sort_order, volumetric_divisor, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(name, Math.round(cost), costType, active, scope, allowedCity, sortOrder, timestamp, timestamp)
+        .bind(name, Math.round(cost), costType, active, scope, allowedCity, sortOrder, volumetricDivisor, timestamp, timestamp)
         .run();
 
       return Response.json(
@@ -3412,6 +3474,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const scope = String(body.scope || "all").trim();
       const allowedCity = scope === "city" ? String(body.allowed_city || "").trim() : null;
       const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+      const volumetricDivisor =
+        body.volumetric_divisor != null && body.volumetric_divisor !== "" && Number.isFinite(Number(body.volumetric_divisor))
+          ? Math.round(Number(body.volumetric_divisor))
+          : null;
 
       if (!Number.isInteger(id) || id <= 0 || !name) {
         return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه و نام روش ارسال الزامی است." }, { status: 400 });
@@ -3435,9 +3501,9 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const result = await env.DB
         .prepare(
           "UPDATE shipping_methods SET name = ?, cost = ?, cost_type = ?, active = ?, scope = ?, " +
-          "allowed_city = ?, sort_order = ?, updated_at = ? WHERE id = ?"
+          "allowed_city = ?, sort_order = ?, volumetric_divisor = ?, updated_at = ? WHERE id = ?"
         )
-        .bind(name, Math.round(cost), costType, active, scope, allowedCity, sortOrder, nowIso(), id)
+        .bind(name, Math.round(cost), costType, active, scope, allowedCity, sortOrder, volumetricDivisor, nowIso(), id)
         .run();
 
       if (!result.meta?.changes) {
@@ -3629,7 +3695,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
     try {
       const result = await env.DB
-        .prepare("SELECT id, name, active, sort_order, created_at, updated_at FROM shipping_classes ORDER BY sort_order ASC, id ASC")
+        .prepare(
+          "SELECT id, name, active, sort_order, default_packaging_profile_id, created_at, updated_at " +
+          "FROM shipping_classes ORDER BY sort_order ASC, id ASC"
+        )
         .all();
       return Response.json({ ok: true, shipping_classes: result.results || [] });
     } catch (error) {
@@ -3654,6 +3723,13 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const name = String(body.name || "").trim();
       const active = body.active === false ? 0 : 1;
       const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+      // Packaging Profile پیش‌فرض این کلاس — خودکارسازی بخش ۲۳ دستور: با
+      // انتخاب این مقدار، همه محصولات این کلاس بدون انتخاب دستی، همین
+      // Profile را برای تخمین بسته‌بندی می‌گیرند (مگر Override اختصاصی داشته باشند).
+      const defaultPackagingProfileId =
+        body.default_packaging_profile_id != null && body.default_packaging_profile_id !== ""
+          ? Number(body.default_packaging_profile_id)
+          : null;
 
       if (!name) {
         return Response.json({ ok: false, error: "INVALID_DATA", message: "نام Shipping Class الزامی است." }, { status: 400 });
@@ -3662,9 +3738,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const timestamp = nowIso();
       const result = await env.DB
         .prepare(
-          "INSERT INTO shipping_classes (name, active, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+          "INSERT INTO shipping_classes (name, active, sort_order, default_packaging_profile_id, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?)"
         )
-        .bind(name, active, sortOrder, timestamp, timestamp)
+        .bind(name, active, sortOrder, defaultPackagingProfileId, timestamp, timestamp)
         .run();
 
       return Response.json(
@@ -3692,14 +3769,21 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const name = String(body.name || "").trim();
       const active = body.active === false ? 0 : 1;
       const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
+      const defaultPackagingProfileId =
+        body.default_packaging_profile_id != null && body.default_packaging_profile_id !== ""
+          ? Number(body.default_packaging_profile_id)
+          : null;
 
       if (!Number.isInteger(id) || id <= 0 || !name) {
         return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه و نام الزامی است." }, { status: 400 });
       }
 
       const result = await env.DB
-        .prepare("UPDATE shipping_classes SET name = ?, active = ?, sort_order = ?, updated_at = ? WHERE id = ?")
-        .bind(name, active, sortOrder, nowIso(), id)
+        .prepare(
+          "UPDATE shipping_classes SET name = ?, active = ?, sort_order = ?, " +
+          "default_packaging_profile_id = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(name, active, sortOrder, defaultPackagingProfileId, nowIso(), id)
         .run();
 
       if (!result.meta?.changes) {
@@ -3749,6 +3833,393 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       return Response.json({ ok: true, message: "Shipping Class حذف شد." });
     } catch (error) {
       return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // Packaging Profiles — دستور توسعه «سیستم هوشمند تخمین بسته‌بندی + تلرانس
+  // حمل». هر Profile شامل تلرانس ابعاد/وزن، حداقل ابعاد بسته، سطح محافظت،
+  // قابلیت تجمیع و الزام ارسال جداگانه است (بخش ۴ دستور). محاسبات واقعی در
+  // src/packaging-estimation.js انجام می‌شود؛ این بخش فقط CRUD پنل است.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/packaging-profiles" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const result = await env.DB
+        .prepare("SELECT * FROM packaging_profiles ORDER BY sort_order ASC, id ASC")
+        .all();
+      return Response.json({ ok: true, packaging_profiles: result.results || [] });
+    } catch (error) {
+      const isMissingTable = /no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingTable ? "PACKAGING_PROFILES_TABLE_MISSING" : "DATABASE_ERROR",
+          message: isMissingTable
+            ? "جدول Packaging Profile هنوز ایجاد نشده. ابتدا database/packaging-estimation.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  function parsePackagingProfileBody(body) {
+    const toNum = (v, fallback) => (v != null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : fallback);
+    return {
+      code: String(body.code || "").trim().toUpperCase().replace(/\s+/g, "_"),
+      name: String(body.name || "").trim(),
+      description: body.description != null ? String(body.description).trim() || null : null,
+      lengthToleranceCm: toNum(body.length_tolerance_cm, 0),
+      widthToleranceCm: toNum(body.width_tolerance_cm, 0),
+      heightToleranceCm: toNum(body.height_tolerance_cm, 0),
+      weightToleranceGrams: toNum(body.weight_tolerance_grams, 0),
+      weightTolerancePercent: toNum(body.weight_tolerance_percent, 0),
+      minPackageLengthCm: toNum(body.min_package_length_cm, 10),
+      minPackageWidthCm: toNum(body.min_package_width_cm, 10),
+      minPackageHeightCm: toNum(body.min_package_height_cm, 5),
+      minShippingWeightGrams: toNum(body.min_shipping_weight_grams, 200),
+      protectionLevel: body.protection_level === "fragile" ? "fragile" : "standard",
+      packagingGroup: body.packaging_group != null ? String(body.packaging_group).trim() || null : null,
+      allowCombine: body.allow_combine_with_other_items === false ? 0 : 1,
+      requireSeparateShipment: body.require_separate_shipment === true ? 1 : 0,
+      active: body.active === false ? 0 : 1,
+      sortOrder: Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0,
+    };
+  }
+
+  if (url.pathname === "/api/store/admin/packaging-profiles" && request.method === "POST") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const p = parsePackagingProfileBody(body);
+
+      if (!p.code || !p.name) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "کد و نام Packaging Profile الزامی است." }, { status: 400 });
+      }
+
+      const timestamp = nowIso();
+      const result = await env.DB
+        .prepare(
+          "INSERT INTO packaging_profiles " +
+          "(code, name, description, length_tolerance_cm, width_tolerance_cm, height_tolerance_cm, " +
+          "weight_tolerance_grams, weight_tolerance_percent, min_package_length_cm, min_package_width_cm, " +
+          "min_package_height_cm, min_shipping_weight_grams, protection_level, packaging_group, " +
+          "allow_combine_with_other_items, require_separate_shipment, active, sort_order, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(
+          p.code, p.name, p.description, p.lengthToleranceCm, p.widthToleranceCm, p.heightToleranceCm,
+          p.weightToleranceGrams, p.weightTolerancePercent, p.minPackageLengthCm, p.minPackageWidthCm,
+          p.minPackageHeightCm, p.minShippingWeightGrams, p.protectionLevel, p.packagingGroup,
+          p.allowCombine, p.requireSeparateShipment, p.active, p.sortOrder, timestamp, timestamp
+        )
+        .run();
+
+      return Response.json(
+        { ok: true, message: "Packaging Profile ایجاد شد.", id: result.meta?.last_row_id ?? null },
+        { status: 201 }
+      );
+    } catch (error) {
+      const isDuplicate = /unique/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isDuplicate ? "DUPLICATE_CODE" : "DATABASE_ERROR",
+          message: isDuplicate ? "این کد قبلاً برای یک Packaging Profile دیگر استفاده شده است." : error.message,
+        },
+        { status: isDuplicate ? 409 : 500 }
+      );
+    }
+  }
+
+  if (url.pathname === "/api/store/admin/packaging-profiles" && request.method === "PUT") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const id = Number(body.id);
+      const p = parsePackagingProfileBody(body);
+
+      if (!Number.isInteger(id) || id <= 0 || !p.code || !p.name) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه، کد و نام الزامی است." }, { status: 400 });
+      }
+
+      const result = await env.DB
+        .prepare(
+          "UPDATE packaging_profiles SET code = ?, name = ?, description = ?, " +
+          "length_tolerance_cm = ?, width_tolerance_cm = ?, height_tolerance_cm = ?, " +
+          "weight_tolerance_grams = ?, weight_tolerance_percent = ?, " +
+          "min_package_length_cm = ?, min_package_width_cm = ?, min_package_height_cm = ?, " +
+          "min_shipping_weight_grams = ?, protection_level = ?, packaging_group = ?, " +
+          "allow_combine_with_other_items = ?, require_separate_shipment = ?, " +
+          "active = ?, sort_order = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(
+          p.code, p.name, p.description,
+          p.lengthToleranceCm, p.widthToleranceCm, p.heightToleranceCm,
+          p.weightToleranceGrams, p.weightTolerancePercent,
+          p.minPackageLengthCm, p.minPackageWidthCm, p.minPackageHeightCm,
+          p.minShippingWeightGrams, p.protectionLevel, p.packagingGroup,
+          p.allowCombine, p.requireSeparateShipment,
+          p.active, p.sortOrder, nowIso(), id
+        )
+        .run();
+
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "Packaging Profile پیدا نشد." }, { status: 404 });
+      }
+      return Response.json({ ok: true, message: "Packaging Profile ویرایش شد." });
+    } catch (error) {
+      const isDuplicate = /unique/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isDuplicate ? "DUPLICATE_CODE" : "DATABASE_ERROR",
+          message: isDuplicate ? "این کد قبلاً برای یک Packaging Profile دیگر استفاده شده است." : error.message,
+        },
+        { status: isDuplicate ? 409 : 500 }
+      );
+    }
+  }
+
+  // DELETE فقط وقتی هیچ محصول/Shipping Classی از این Profile استفاده نکند
+  // و Profile عمومی سیستم (is_default=1) نباشد — حذف امن، مثل الگوی
+  // Shipping Class موجود.
+  if (url.pathname === "/api/store/admin/packaging-profiles" && request.method === "DELETE") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const id = Number(url.searchParams.get("id"));
+      if (!Number.isInteger(id) || id <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه نامعتبر است." }, { status: 400 });
+      }
+
+      const profileRow = await env.DB.prepare("SELECT is_default FROM packaging_profiles WHERE id = ?").bind(id).first();
+      if (!profileRow) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "Packaging Profile پیدا نشد." }, { status: 404 });
+      }
+      if (Number(profileRow.is_default) === 1) {
+        return Response.json(
+          { ok: false, error: "DEFAULT_PROFILE_CANNOT_BE_DELETED", message: "Profile عمومی پیش‌فرض سیستم قابل حذف نیست؛ فقط قابل ویرایش است." },
+          { status: 409 }
+        );
+      }
+
+      const usedByProducts = await env.DB.prepare("SELECT COUNT(*) AS c FROM products WHERE packaging_profile_id = ?").bind(id).first();
+      const usedByClasses = await env.DB.prepare("SELECT COUNT(*) AS c FROM shipping_classes WHERE default_packaging_profile_id = ?").bind(id).first();
+      const usedCount = (usedByProducts?.c || 0) + (usedByClasses?.c || 0);
+      if (usedCount > 0) {
+        return Response.json(
+          {
+            ok: false,
+            error: "PACKAGING_PROFILE_IN_USE",
+            message: `این Profile روی ${usedCount} محصول/Shipping Class تنظیم شده و قابل حذف نیست. به‌جای حذف، آن را غیرفعال کنید.`,
+          },
+          { status: 409 }
+        );
+      }
+
+      const result = await env.DB.prepare("DELETE FROM packaging_profiles WHERE id = ?").bind(id).run();
+      if (!result.meta?.changes) {
+        return Response.json({ ok: false, error: "NOT_FOUND", message: "Packaging Profile پیدا نشد." }, { status: 404 });
+      }
+      return Response.json({ ok: true, message: "Packaging Profile حذف شد." });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // پیش‌نمایش تخمین بسته‌بندی — ابزار شفافیت برای مدیر (بخش ۳۲ دستور:
+  // «قابل فهم برای مدیر»). هیچ سفارشی ثبت نمی‌کند؛ فقط نشان می‌دهد سیستم
+  // چه بسته‌ها/وزن قابل‌محاسبه‌ای برای یک سبد فرضی تخمین می‌زند و منبع هر
+  // تخمین (REAL/ESTIMATED/CONSERVATIVE) چیست.
+  // GET /api/store/admin/packaging-preview?product_ids=1,2,3&quantities=1,2,1&method_id=..
+  if (url.pathname === "/api/store/admin/packaging-preview" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const productIdsParam = url.searchParams.get("product_ids") || "";
+      const quantitiesParam = url.searchParams.get("quantities") || "";
+      const methodId = url.searchParams.get("method_id") ? Number(url.searchParams.get("method_id")) : null;
+
+      const productIds = productIdsParam
+        .split(",")
+        .map((v) => Number(v.trim()))
+        .filter((v) => Number.isInteger(v) && v > 0);
+      const quantities = quantitiesParam.split(",").map((v) => Number(v.trim()));
+
+      if (productIds.length === 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "حداقل یک product_id لازم است." }, { status: 400 });
+      }
+
+      const placeholders = productIds.map(() => "?").join(",");
+      const productRows = (
+        await env.DB
+          .prepare(
+            "SELECT id, name, shipping_class_id, weight_grams, length_cm, width_cm, height_cm, " +
+            "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, " +
+            "package_weight_grams, packaging_confidence " +
+            `FROM products WHERE id IN (${placeholders})`
+          )
+          .bind(...productIds)
+          .all()
+      ).results || [];
+
+      const cartItems = productIds.map((id, index) => ({
+        productId: id,
+        quantity: quantities[index] > 0 ? quantities[index] : 1,
+      }));
+
+      const { packages, hasIncompleteData } = await buildCartShipmentPackages(env, { cartItems, productRows });
+
+      let divisor = DEFAULT_VOLUMETRIC_DIVISOR;
+      if (methodId) {
+        const methodRow = await env.DB.prepare("SELECT volumetric_divisor FROM shipping_methods WHERE id = ?").bind(methodId).first();
+        if (methodRow?.volumetric_divisor) divisor = Number(methodRow.volumetric_divisor);
+      }
+
+      const packagesWithChargeable = packages.map((pkg) => ({
+        ...pkg,
+        volumetric_weight_grams: Math.round((pkg.volumeCm3 / divisor) * 1000),
+        chargeable_weight_grams: computeChargeableWeightGrams(pkg.weightGrams, Math.round((pkg.volumeCm3 / divisor) * 1000)),
+      }));
+
+      const totalChargeableWeightGrams = packagesWithChargeable.reduce((sum, pkg) => sum + pkg.chargeable_weight_grams, 0);
+
+      return Response.json({
+        ok: true,
+        volumetric_divisor_used: divisor,
+        packages: packagesWithChargeable,
+        total_chargeable_weight_grams: totalChargeableWeightGrams,
+        has_incomplete_data: hasIncompleteData,
+        products: productRows.map((p) => ({ id: p.id, name: p.name })),
+      });
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
+  // =========================================================================
+  // ثبت هزینه واقعی حمل + اختلاف با تخمین (بخش ۱۶ و ۱۷ دستور). این Endpoint
+  // مستقل از تغییر وضعیت سفارش است (که منطق/اعتبارسنجی خودش را دارد) تا
+  // ریسک تغییر رفتار فعلی PUT /api/store/orders/:id صفر بماند.
+  // =========================================================================
+
+  if (url.pathname === "/api/store/admin/orders/actual-shipping-cost" && request.method === "PUT") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const body = await request.json();
+      const orderId = Number(body.id);
+      const actualShippingCost = Number(body.actual_shipping_cost);
+
+      if (!Number.isInteger(orderId) || orderId <= 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه سفارش نامعتبر است." }, { status: 400 });
+      }
+      if (!Number.isFinite(actualShippingCost) || actualShippingCost < 0) {
+        return Response.json({ ok: false, error: "INVALID_DATA", message: "هزینه واقعی ارسال نامعتبر است." }, { status: 400 });
+      }
+
+      const order = await env.DB.prepare("SELECT id, shipping_cost FROM orders WHERE id = ?").bind(orderId).first();
+      if (!order) {
+        return Response.json({ ok: false, error: "ORDER_NOT_FOUND", message: "سفارش پیدا نشد." }, { status: 404 });
+      }
+
+      // اگر هزینه واقعی بیشتر باشد، اختلاف از سود فروشگاه پرداخت می‌شود
+      // و از مشتری مطالبه مجدد نمی‌شود — یعنی این عدد فقط برای تحلیل/
+      // گزارش داخلی است، هرگز روی payable_amount مشتری اثر نمی‌گذارد.
+      const estimated = Number(order.shipping_cost) || 0;
+      const variance = Math.round(actualShippingCost - estimated);
+
+      await env.DB
+        .prepare(
+          "UPDATE orders SET actual_shipping_cost = ?, shipping_cost_variance = ?, " +
+          "shipping_cost_recorded_at = ? WHERE id = ?"
+        )
+        .bind(Math.round(actualShippingCost), variance, nowIso(), orderId)
+        .run();
+
+      return Response.json({
+        ok: true,
+        message: "هزینه واقعی ارسال ثبت شد.",
+        estimated_shipping_cost: estimated,
+        actual_shipping_cost: Math.round(actualShippingCost),
+        shipping_cost_variance: variance,
+      });
+    } catch (error) {
+      const isMissingColumn = /no such column/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingColumn ? "PACKAGING_ESTIMATION_MIGRATION_MISSING" : "DATABASE_ERROR",
+          message: isMissingColumn
+            ? "ستون‌های ثبت هزینه واقعی هنوز ایجاد نشده. ابتدا database/packaging-estimation.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // گزارش اختلاف هزینه — بر اساس Shipping Class و محصول (بخش ۱۷ دستور).
+  // فقط سفارش‌هایی که هزینه واقعی برایشان ثبت شده در محاسبه شرکت می‌کنند؛
+  // این Endpoint هیچ قاعده‌ای را خودکار تغییر نمی‌دهد، فقط داده واقعی جمع‌شده
+  // را نشان می‌دهد (دقیقاً طبق تذکر بخش ۱۷: «ابتدا داده واقعی جمع شود»).
+  if (url.pathname === "/api/store/admin/shipping-cost-variance-report" && request.method === "GET") {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    try {
+      const summaryRow = await env.DB
+        .prepare(
+          "SELECT COUNT(*) AS orders_with_actual_cost, " +
+          "SUM(shipping_cost) AS total_estimated, SUM(actual_shipping_cost) AS total_actual, " +
+          "SUM(shipping_cost_variance) AS total_variance, AVG(shipping_cost_variance) AS avg_variance " +
+          "FROM orders WHERE actual_shipping_cost IS NOT NULL"
+        )
+        .first();
+
+      const byClassResult = await env.DB
+        .prepare(
+          "SELECT sc.id AS shipping_class_id, sc.name AS shipping_class_name, " +
+          "COUNT(DISTINCT o.id) AS order_count, " +
+          "SUM(o.shipping_cost_variance) AS total_variance, AVG(o.shipping_cost_variance) AS avg_variance " +
+          "FROM orders o " +
+          "JOIN order_items oi ON oi.order_id = o.id " +
+          "JOIN products p ON p.id = oi.product_id " +
+          "LEFT JOIN shipping_classes sc ON sc.id = p.shipping_class_id " +
+          "WHERE o.actual_shipping_cost IS NOT NULL " +
+          "GROUP BY sc.id ORDER BY total_variance DESC"
+        )
+        .all();
+
+      const byProductResult = await env.DB
+        .prepare(
+          "SELECT p.id AS product_id, p.name AS product_name, " +
+          "COUNT(DISTINCT o.id) AS order_count, " +
+          "SUM(o.shipping_cost_variance) AS total_variance, AVG(o.shipping_cost_variance) AS avg_variance " +
+          "FROM orders o " +
+          "JOIN order_items oi ON oi.order_id = o.id " +
+          "JOIN products p ON p.id = oi.product_id " +
+          "WHERE o.actual_shipping_cost IS NOT NULL " +
+          "GROUP BY p.id ORDER BY total_variance DESC LIMIT 50"
+        )
+        .all();
+
+      return Response.json({
+        ok: true,
+        summary: summaryRow || {},
+        by_shipping_class: byClassResult.results || [],
+        by_product: byProductResult.results || [],
+      });
+    } catch (error) {
+      const isMissingColumn = /no such column|no such table/i.test(error.message || "");
+      return Response.json(
+        {
+          ok: false,
+          error: isMissingColumn ? "PACKAGING_ESTIMATION_MIGRATION_MISSING" : "DATABASE_ERROR",
+          message: isMissingColumn
+            ? "ابتدا database/packaging-estimation.sql را روی D1 اجرا کنید."
+            : error.message,
+        },
+        { status: 500 }
+      );
     }
   }
 
@@ -4482,7 +4953,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
     const methodsResult = await env.DB
       .prepare(
-        "SELECT id, name, cost, cost_type, scope, allowed_city FROM shipping_methods " +
+        "SELECT id, name, cost, cost_type, scope, allowed_city, volumetric_divisor FROM shipping_methods " +
         "WHERE active = 1 ORDER BY sort_order ASC, id ASC"
       )
       .all();
@@ -4497,12 +4968,18 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       return destinationMethods.map((m) => ({ ...m, cost: Number(m.cost) }));
     }
 
-    // اطلاعات وزن/Shipping Class محصولات سبد (برای شرایط Table Rate)
+    // اطلاعات وزن/ابعاد/Shipping Class/Packaging Override محصولات سبد —
+    // برای شرایط Table Rate و برای لایه تخمین بسته‌بندی (packaging-estimation.js).
     let productRows = [];
     try {
       const placeholders = uniqueProductIds.map(() => "?").join(",");
       const productsResult = await env.DB
-        .prepare(`SELECT id, shipping_class_id, weight_grams FROM products WHERE id IN (${placeholders})`)
+        .prepare(
+          "SELECT id, shipping_class_id, weight_grams, length_cm, width_cm, height_cm, " +
+          "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, " +
+          "package_weight_grams, packaging_confidence " +
+          `FROM products WHERE id IN (${placeholders})`
+        )
         .bind(...uniqueProductIds)
         .all();
       productRows = productsResult.results || [];
@@ -4511,17 +4988,38 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     }
     const productInfoMap = new Map(productRows.map((p) => [p.id, p]));
 
-    // مجموع سبد — برای تطبیق شرایط Table Rate (وزن کل/تعداد کل/مبلغ کل)
-    let totalWeightGrams = 0;
+    // لایه تخمین بسته‌بندی (طبق دستور توسعه، بخش ۲۵): Product Data →
+    // Packaging Estimation → Chargeable Weight → همین موتور فعلی. این
+    // بخش موتور فعلی را جایگزین نمی‌کند، فقط «وزن قابل‌محاسبه» واقعی‌تری
+        // (به‌جای جمع خام weight_grams) به آن تحویل می‌دهد. اگر Migration
+    // packaging-estimation.sql هنوز اجرا نشده یا محصولی اطلاعات کافی
+    // ندارد، buildCartShipmentPackages/estimateProductPackage به‌صورت
+    // Fail-Safe به رفتار قدیمی (جمع وزن خام) نزدیک می‌مانند، نه صفر.
+    let packagingPackages = [];
+    try {
+      const result = await buildCartShipmentPackages(env, { cartItems: normalizedItems, productRows });
+      packagingPackages = result.packages;
+    } catch (error) {
+      packagingPackages = [];
+    }
+
+    // مجموع سبد — برای تطبیق شرایط Table Rate (تعداد کل/مبلغ کل) و به‌عنوان
+    // Fallback وزن اگر لایه تخمین بسته‌بندی به هر دلیلی نتیجه‌ای نداد.
+    let rawTotalWeightGrams = 0;
     let totalQuantity = 0;
     let cartValue = 0;
     for (const item of normalizedItems) {
       const info = productInfoMap.get(item.productId);
       const weight = info?.weight_grams != null ? Number(info.weight_grams) : 0;
-      totalWeightGrams += weight * item.quantity;
+      rawTotalWeightGrams += weight * item.quantity;
       totalQuantity += item.quantity;
       cartValue += item.price * item.quantity;
     }
+
+    // توجه: وزن قابل‌محاسبه واقعی (وابسته به ضریب وزن حجمی هر روش ارسال،
+    // بخش ۹ دستور) داخل حلقه پایین‌تر، به‌ازای هر method جداگانه محاسبه
+    // می‌شود؛ rawTotalWeightGrams فقط Fallback وقتی لایه تخمین بسته‌بندی
+    // نتیجه‌ای نداشت (مثلاً Migration هنوز اجرا نشده).
 
     let rateRows = [];
     try {
@@ -4557,12 +5055,16 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       tableRateRows = [];
     }
 
-    function findTableRate(methodId, classId) {
+    // weightGrams اکنون پارامتر است، نه closure ثابت: چون ضریب وزن حجمی
+    // (بخش ۹ دستور) به هر روش ارسال وابسته است، وزن قابل‌محاسبه سبد برای
+    // هر روش می‌تواند متفاوت باشد (پایین‌تر، به‌ازای هر method دوباره
+    // محاسبه می‌شود).
+    function findTableRate(methodId, classId, weightGrams) {
       for (const rate of tableRateRows) {
         if (rate.shipping_method_id !== methodId) continue;
         if (rate.shipping_class_id != null && rate.shipping_class_id !== classId) continue;
-        if (rate.min_weight_grams != null && totalWeightGrams < rate.min_weight_grams) continue;
-        if (rate.max_weight_grams != null && totalWeightGrams > rate.max_weight_grams) continue;
+        if (rate.min_weight_grams != null && weightGrams < rate.min_weight_grams) continue;
+        if (rate.max_weight_grams != null && weightGrams > rate.max_weight_grams) continue;
         if (rate.min_quantity != null && totalQuantity < rate.min_quantity) continue;
         if (rate.max_quantity != null && totalQuantity > rate.max_quantity) continue;
         if (rate.min_cart_value != null && cartValue < rate.min_cart_value) continue;
@@ -4578,6 +5080,13 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       let allowed = true;
       let effectiveCost = 0;
 
+      // وزن قابل‌محاسبه مخصوص همین روش ارسال (بخش ۹ دستور: ضریب وزن حجمی
+      // وابسته به Provider/روش، نه یک مقدار عمومی).
+      const methodWeightGrams =
+        packagingPackages.length > 0
+          ? chargeableWeightForDivisor(packagingPackages, method.volumetric_divisor || DEFAULT_VOLUMETRIC_DIVISOR)
+          : rawTotalWeightGrams;
+
       for (const productId of uniqueProductIds) {
         const rate = rateMap.get(`${productId}:${method.id}`);
         if (rate && Number(rate.is_allowed) === 0) {
@@ -4591,7 +5100,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         } else {
           const info = productInfoMap.get(productId);
           const classId = info?.shipping_class_id ?? null;
-          const tableRate = findTableRate(method.id, classId); // اولویت ۲
+          const tableRate = findTableRate(method.id, classId, methodWeightGrams); // اولویت ۲
           productCost = tableRate ? Number(tableRate.cost) : Number(method.cost); // اولویت ۳ (Fallback)
         }
 
