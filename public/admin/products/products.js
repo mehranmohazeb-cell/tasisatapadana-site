@@ -34,6 +34,22 @@ async function loadShippingClassesForSelect() {
   }
 }
 
+// Packaging Profile اختصاصی محصول — اختیاری (بخش ۱۲ دستور تخمین بسته‌بندی:
+// اگر خالی بماند، به‌صورت خودکار از Shipping Class تشخیص داده می‌شود).
+async function loadPackagingProfilesForSelect() {
+  const select = document.getElementById("product-packaging-profile");
+  if (!select) return;
+  try {
+    const data = await fetchAdmin("/admin/packaging-profiles");
+    const profiles = (data.packaging_profiles || []).filter((p) => Number(p.active) === 1);
+    select.innerHTML =
+      '<option value="">— خودکار از روی Shipping Class —</option>' +
+      profiles.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+  } catch (error) {
+    // اختیاری است؛ اگر Migration هنوز اجرا نشده، فرم محصول بدون این گزینه کار می‌کند.
+  }
+}
+
 async function loadCategoriesForSelect() {
   const select = document.getElementById("product-category");
   if (!select) return;
@@ -169,6 +185,21 @@ function clearForm() {
   const shippingRatesSection = document.getElementById("shipping-rates-section");
   if (shippingRatesSection) shippingRatesSection.style.display = "none";
   shippingRatesCache = [];
+  setPackagingOverrideVisible(false);
+}
+
+// نمایش/پنهان‌کردن بخش Override واقعی ابعاد/وزن بسته‌بندی (بخش ۱۲ دستور) —
+// پیش‌فرض بسته است تا فرم شلوغ نشود؛ فقط وقتی مدیر دکمه را بزند یا محصول
+// از قبل مقدار Override داشته باشد باز می‌شود.
+function setPackagingOverrideVisible(visible) {
+  const fields = document.getElementById("packaging-override-fields");
+  const toggleButton = document.getElementById("toggle-packaging-override");
+  if (fields) fields.style.display = visible ? "grid" : "none";
+  if (toggleButton) {
+    toggleButton.textContent = visible
+      ? "پنهان‌کردن ابعاد/وزن واقعی بسته‌بندی"
+      : "ابعاد/وزن واقعی بسته‌بندی را می‌دانم (Override)";
+  }
 }
 
 function editProduct(id) {
@@ -197,6 +228,18 @@ function editProduct(id) {
   document.getElementById("product-length").value = product.length_cm ?? "";
   document.getElementById("product-width").value = product.width_cm ?? "";
   document.getElementById("product-height").value = product.height_cm ?? "";
+  document.getElementById("product-packaging-profile").value =
+    product.packaging_profile_id != null ? String(product.packaging_profile_id) : "";
+  document.getElementById("product-packaging-confidence").value = product.packaging_confidence || "";
+  document.getElementById("product-package-length").value = product.package_length_cm ?? "";
+  document.getElementById("product-package-width").value = product.package_width_cm ?? "";
+  document.getElementById("product-package-height").value = product.package_height_cm ?? "";
+  document.getElementById("product-package-weight").value = product.package_weight_grams ?? "";
+  // اگر مدیر قبلاً Override واقعی بسته‌بندی ثبت کرده، بخش مربوطه باز نمایش داده شود.
+  const hasPackagingOverride =
+    product.package_length_cm != null || product.package_width_cm != null ||
+    product.package_height_cm != null || product.package_weight_grams != null;
+  setPackagingOverrideVisible(hasPackagingOverride);
   document.getElementById("product-warranty-months").value = product.warranty_months ?? "";
   document.getElementById("product-warranty-provider").value = product.warranty_provider || "";
   document.getElementById("product-return-days").value = product.return_days ?? "";
@@ -532,6 +575,12 @@ async function saveProduct(event) {
   const lengthRaw = document.getElementById("product-length")?.value;
   const widthRaw = document.getElementById("product-width")?.value;
   const heightRaw = document.getElementById("product-height")?.value;
+  const packagingProfileRaw = document.getElementById("product-packaging-profile")?.value;
+  const packagingConfidence = document.getElementById("product-packaging-confidence")?.value;
+  const packageLengthRaw = document.getElementById("product-package-length")?.value;
+  const packageWidthRaw = document.getElementById("product-package-width")?.value;
+  const packageHeightRaw = document.getElementById("product-package-height")?.value;
+  const packageWeightRaw = document.getElementById("product-package-weight")?.value;
   const warrantyMonthsRaw = document.getElementById("product-warranty-months")?.value;
   const warrantyProvider = document.getElementById("product-warranty-provider")?.value.trim();
   const returnDaysRaw = document.getElementById("product-return-days")?.value;
@@ -554,6 +603,12 @@ async function saveProduct(event) {
     length_cm: lengthRaw ? Number(lengthRaw) : null,
     width_cm: widthRaw ? Number(widthRaw) : null,
     height_cm: heightRaw ? Number(heightRaw) : null,
+    packaging_profile_id: packagingProfileRaw ? Number(packagingProfileRaw) : null,
+    packaging_confidence: packagingConfidence || null,
+    package_length_cm: packageLengthRaw ? Number(packageLengthRaw) : null,
+    package_width_cm: packageWidthRaw ? Number(packageWidthRaw) : null,
+    package_height_cm: packageHeightRaw ? Number(packageHeightRaw) : null,
+    package_weight_grams: packageWeightRaw ? Number(packageWeightRaw) : null,
     warranty_months: warrantyMonthsRaw ? Number(warrantyMonthsRaw) : null,
     warranty_provider: warrantyProvider || null,
     return_days: returnDaysRaw ? Number(returnDaysRaw) : null,
@@ -744,6 +799,13 @@ document.addEventListener("DOMContentLoaded", () => {
   setupRichTextToolbar();
   loadCategoriesForSelect();
   loadShippingClassesForSelect();
+  loadPackagingProfilesForSelect();
+
+  document.getElementById("toggle-packaging-override")?.addEventListener("click", () => {
+    const fields = document.getElementById("packaging-override-fields");
+    const isVisible = fields && fields.style.display !== "none";
+    setPackagingOverrideVisible(!isVisible);
+  });
 
   document.getElementById("refresh-products")?.addEventListener("click", () => loadProducts(currentPage));
   document.getElementById("cancel-edit")?.addEventListener("click", clearForm);

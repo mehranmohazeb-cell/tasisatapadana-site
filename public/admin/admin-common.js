@@ -318,6 +318,7 @@ function renderSmsSubNav(activeKey) {
 const SHIPPING_SUB_NAV_ITEMS = [
   { key: "shipping-methods", href: "/admin/shipping/", label: "روش‌های ارسال" },
   { key: "shipping-classes", href: "/admin/shipping/classes/", label: "Shipping Classes" },
+  { key: "shipping-packaging", href: "/admin/shipping/packaging/", label: "Packaging Profiles" },
   { key: "shipping-table-rates", href: "/admin/shipping/table-rates/", label: "Table Rates" },
   { key: "shipping-import", href: "/admin/shipping/import/", label: "Import تعرفه" },
   { key: "shipping-providers", href: "/admin/shipping/providers/", label: "Providers" },
@@ -372,4 +373,96 @@ async function loadAdminNavBadges() {
 function initAdminPage(activeKey) {
   renderAdminNav(activeKey);
   loadAdminNavBadges();
+  initHelpTooltips();
+}
+
+// =========================================================================
+// سیستم راهنمای ⓘ — قابل استفاده مجدد در کل پنل مدیریت (بخش ۱۸ تا ۲۲ دستور
+// تخمین بسته‌بندی). یک Component/Pattern مشترک تا در آینده هر صفحه
+// (محصولات، مشخصات فنی، سفارش‌ها، ارسال، تعرفه‌ها، تنظیمات، گزارش‌ها) از
+// همین سیستم استفاده کند، بدون نوشتن Tooltip جداگانه برای هر صفحه.
+//
+// نحوه استفاده در HTML (بدون نیاز به جاوااسکریپت اضافه در هر صفحه):
+//   <label>وزن (گرم) <span class="help-icon" data-help="توضیح کوتاه اینجا">ⓘ</span></label>
+// initAdminPage() این تابع را خودکار صدا می‌زند؛ صفحاتی که initAdminPage
+// را صدا نمی‌زنند (یا محتوای پویا بعداً اضافه می‌کنند) می‌توانند مستقیم
+// initHelpTooltips(container) را دوباره صدا بزنند.
+//
+// طراحی عمداً روی Tap متمرکز است، نه Hover (بخش ۱۸ دستور: در موبایل به
+// Hover وابسته نباشد) — یک Popover با کلیک/Tap باز می‌شود و با کلیک بیرون
+// از آن یا دوباره روی همان آیکون بسته می‌شود؛ روی دسکتاپ هم دقیقاً همین‌طور
+// کار می‌کند (رفتار یکسان، به‌جای دو مسیر جدا برای موبایل/دسکتاپ).
+// =========================================================================
+
+let _helpPopoverEl = null;
+
+function _closeHelpPopover() {
+  if (_helpPopoverEl) {
+    _helpPopoverEl.remove();
+    _helpPopoverEl = null;
+  }
+  document.removeEventListener("click", _onDocumentClickForHelp, true);
+  window.removeEventListener("scroll", _closeHelpPopover, true);
+  window.removeEventListener("resize", _closeHelpPopover);
+}
+
+function _onDocumentClickForHelp(event) {
+  if (_helpPopoverEl && !_helpPopoverEl.contains(event.target) && !event.target.classList?.contains("help-icon")) {
+    _closeHelpPopover();
+  }
+}
+
+function _openHelpPopover(iconEl) {
+  const wasOpenForThisIcon = _helpPopoverEl && _helpPopoverEl.dataset.forIcon === iconEl.dataset.helpId;
+  _closeHelpPopover();
+  if (wasOpenForThisIcon) return; // Toggle: دوباره Tap روی همان آیکون یعنی بستن
+
+  const text = iconEl.getAttribute("data-help") || "";
+  if (!text) return;
+
+  const popover = document.createElement("div");
+  popover.className = "help-popover";
+  popover.dataset.forIcon = iconEl.dataset.helpId;
+  popover.textContent = text;
+  document.body.appendChild(popover);
+
+  const rect = iconEl.getBoundingClientRect();
+  const popRect = popover.getBoundingClientRect();
+  let left = rect.left + window.scrollX - popRect.width / 2 + rect.width / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - popRect.width - 8));
+  const top = rect.bottom + window.scrollY + 6;
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+
+  _helpPopoverEl = popover;
+
+  // با تأخیر صفر تا همین رویداد click جاری، popover را بلافاصله نبندد.
+  setTimeout(() => {
+    document.addEventListener("click", _onDocumentClickForHelp, true);
+    window.addEventListener("scroll", _closeHelpPopover, true);
+    window.addEventListener("resize", _closeHelpPopover);
+  }, 0);
+}
+
+let _helpIconCounter = 0;
+
+function initHelpTooltips(container) {
+  const root = container || document;
+  const icons = root.querySelectorAll(".help-icon:not([data-help-id])");
+  icons.forEach((icon) => {
+    icon.dataset.helpId = `help-${++_helpIconCounter}`;
+    icon.setAttribute("role", "button");
+    icon.setAttribute("tabindex", "0");
+    icon.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      _openHelpPopover(icon);
+    });
+    icon.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        _openHelpPopover(icon);
+      }
+    });
+  });
 }

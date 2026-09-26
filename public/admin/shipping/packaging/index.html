@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Packaging Profiles | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="shipping-sub-nav"></div>
+
+    <section class="admin-card">
+      <h2 id="form-title">
+        افزودن Packaging Profile جدید
+        <span class="help-icon" data-help="Packaging Profile یعنی: هر محصولی که این Profile را بگیرد (مستقیم یا از طریق Shipping Class)، سیستم چه تلرانس ابعاد/وزنی روی وزن و ابعاد واقعی خودش اعمال کند تا ابعاد/وزن «بسته‌بندی‌شده» تخمین زده شود. این عدد جایگزین وارد کردن دستی ابعاد کارتن برای هر محصول می‌شود.">ⓘ</span>
+      </h2>
+      <p style="font-size:13px; color:#71817e; margin-top:-8px;">
+        این تلرانس‌ها حقیقت فنی/تجاری قطعی نیستند — نقطه شروع منطقی‌اند و هر زمان بخواهید از همین‌جا قابل تغییرند.
+      </p>
+
+      <form id="profile-form">
+        <input type="hidden" id="profile-id">
+
+        <div class="form-grid">
+
+          <div class="form-group">
+            <label for="profile-code">کد داخلی <span class="help-icon" data-help="یک شناسه پایدار انگلیسی و یکتا (مثلاً SMALL_PART). حروف بزرگ و زیرخط پیشنهاد می‌شود؛ بعداً تغییرش ریسک دارد چون ممکن است جای دیگری استفاده شود.">ⓘ</span></label>
+            <input id="profile-code" type="text" required placeholder="مثلاً: SMALL_PART">
+          </div>
+
+          <div class="form-group">
+            <label for="profile-name">نام قابل‌نمایش</label>
+            <input id="profile-name" type="text" required placeholder="مثلاً: قطعه کوچک بدون بسته‌بندی کارخانه‌ای">
+          </div>
+
+          <div class="form-group full">
+            <label for="profile-description">توضیح (اختیاری)</label>
+            <input id="profile-description" type="text" placeholder="یادداشت داخلی برای خودتان و مدیران بعدی">
+          </div>
+
+          <div class="form-group">
+            <label>تلرانس ابعاد (سانتی‌متر) <span class="help-icon" data-help="این مقدار به طول/عرض/ارتفاع واقعی محصول اضافه می‌شود تا ابعاد بسته تخمین زده شود. برای قطعات کوچک عدد کم، برای کالای حجیم عدد بیشتر بدهید.">ⓘ</span></label>
+            <div style="display:flex; gap:8px;">
+              <input id="profile-length-tolerance" type="number" step="0.1" min="0" placeholder="طول" style="flex:1;">
+              <input id="profile-width-tolerance" type="number" step="0.1" min="0" placeholder="عرض" style="flex:1;">
+              <input id="profile-height-tolerance" type="number" step="0.1" min="0" placeholder="ارتفاع" style="flex:1;">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>تلرانس وزن <span class="help-icon" data-help="افزایش ثابت (گرم) + درصد افزایش، هر دو هم‌زمان روی وزن واقعی محصول اعمال می‌شوند (وزن نهایی = وزن واقعی + مقدار ثابت + درصد از وزن واقعی).">ⓘ</span></label>
+            <div style="display:flex; gap:8px;">
+              <input id="profile-weight-tolerance-grams" type="number" min="0" placeholder="افزایش ثابت (گرم)" style="flex:1;">
+              <input id="profile-weight-tolerance-percent" type="number" step="0.1" min="0" placeholder="افزایش درصدی (%)" style="flex:1;">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>حداقل ابعاد بسته (سانتی‌متر) <span class="help-icon" data-help="کف محافظه‌کارانه: بسته هرگز کوچک‌تر از این عدد تخمین زده نمی‌شود، حتی برای قطعات خیلی کوچک یا محصولات بدون ابعاد ثبت‌شده.">ⓘ</span></label>
+            <div style="display:flex; gap:8px;">
+              <input id="profile-min-length" type="number" step="0.1" min="0" placeholder="حداقل طول" style="flex:1;">
+              <input id="profile-min-width" type="number" step="0.1" min="0" placeholder="حداقل عرض" style="flex:1;">
+              <input id="profile-min-height" type="number" step="0.1" min="0" placeholder="حداقل ارتفاع" style="flex:1;">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="profile-min-weight">حداقل وزن قابل‌حمل (گرم) <span class="help-icon" data-help="سیستم هرگز صفر یا وزن غیرمنطقی کوچک را به‌عنوان وزن حمل معتبر در نظر نمی‌گیرد؛ این عدد کف آن است.">ⓘ</span></label>
+            <input id="profile-min-weight" type="number" min="0">
+          </div>
+
+          <div class="form-group">
+            <label for="profile-protection-level">سطح محافظت <span class="help-icon" data-help="فقط برای گزارش/تفکیک داخلی است؛ روی محاسبه هزینه اثر مستقیم ندارد.">ⓘ</span></label>
+            <select id="profile-protection-level">
+              <option value="standard">استاندارد</option>
+              <option value="fragile">شکننده / حساس</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="profile-packaging-group">Packaging Group (اختیاری) <span class="help-icon" data-help="یک برچسب آزاد برای گزارش‌گیری آینده (مثلاً bulky برای کالای حجیم). خالی بگذارید اگر نیازی نیست.">ⓘ</span></label>
+            <input id="profile-packaging-group" type="text" placeholder="مثلاً: bulky">
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input id="profile-allow-combine" type="checkbox" checked>
+              با اقلام کوچک دیگر در یک بسته مشترک قابل تجمیع باشد
+              <span class="help-icon" data-help="اگر فعال باشد، وقتی این محصول همراه اقلام کوچک دیگری در یک سفارش خریداری شود، سیستم به‌جای بسته جداگانه برای هرکدام، همه را در یک بسته مشترک فرض می‌کند (مناسب شیرآلات، شلنگ، اتصالات). برای کالای بزرگ/کارتنی این را خاموش کنید.">ⓘ</span>
+            </label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input id="profile-require-separate" type="checkbox">
+              همیشه ارسال جداگانه لازم دارد
+              <span class="help-icon" data-help="برای کالای حجیم/سنگین که نباید با اقلام دیگر سفارش در یک بسته فرض شود (مثل پکیج، آبگرمکن، رادیاتور).">ⓘ</span>
+            </label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input id="profile-active" type="checkbox" checked>
+              فعال باشد
+            </label>
+          </div>
+
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-button">ذخیره Profile</button>
+          <button type="button" id="cancel-edit" class="secondary-button">لغو / پاک کردن فرم</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>Packaging Profileهای ثبت‌شده</h2>
+        <button id="refresh-profiles" class="secondary-button" type="button">بروزرسانی</button>
+      </div>
+      <div id="list-container">
+        <p class="loading">در حال بارگذاری...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="packaging.js"></script>
+</body>
+</html>

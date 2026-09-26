@@ -85,6 +85,14 @@
           <input id="method-sort" type="number" value="0">
         </div>
 
+        <div>
+          <label for="method-volumetric-divisor" style="display:flex; align-items:center; gap:4px;">
+            ضریب وزن حجمی
+            <span class="help-icon" data-help="برای محاسبه «وزن قابل‌محاسبه حمل»: (طول×عرض×ارتفاع بسته به سانتی‌متر) ÷ این عدد = وزن حجمی (کیلوگرم). هزینه نهایی بر اساس بزرگ‌تر از وزن واقعی و وزن حجمی تعیین می‌شود. هر سرویس حمل عدد خودش را دارد (مثلاً پست معمولاً ۵۰۰۰ یا ۶۰۰۰)؛ خالی بگذارید تا از پیش‌فرض سیستم (۵۰۰۰) استفاده شود.">ⓘ</span>
+          </label>
+          <input id="method-volumetric-divisor" type="number" min="1" placeholder="پیش‌فرض سیستم: 5000">
+        </div>
+
         <div class="full-row" style="display:flex; align-items:center; gap:8px;">
           <input type="checkbox" id="method-active" checked style="width:auto;">
           <label for="method-active" style="margin:0;">فعال (برای مشتری قابل انتخاب باشد)</label>

@@ -1106,3 +1106,67 @@ a {
 .co-purchased-row:last-child {
   border-bottom: none;
 }
+
+/* =========================================================================
+   سیستم راهنمای ⓘ — مشترک بین همه صفحات پنل (بخش ۱۸ تا ۲۲ دستور تخمین
+   بسته‌بندی). عمداً کم‌حجم و بدون تغییر ظاهر فعلی پنل: فقط یک دایره کوچک
+   کنار لیبل، و یک Popover ساده که با Tap/Click باز/بسته می‌شود (نه Hover).
+   ========================================================================= */
+
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-inline-start: 4px;
+  border-radius: 50%;
+  background: #e3ece9;
+  color: #3f6b63;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.help-icon:hover,
+.help-icon:focus-visible {
+  background: #c9dcd6;
+  outline: none;
+}
+
+.help-popover {
+  position: absolute;
+  z-index: 4000;
+  max-width: 280px;
+  background: #1f3733;
+  color: #f2f7f5;
+  font-size: 12.5px;
+  line-height: 1.7;
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  direction: rtl;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .help-popover {
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* جعبه تخمین بسته‌بندی در فرم محصول — فقط یک قاب کم‌رنگ، بدون تغییر در
+   ظاهر کلی فرم (بخش ۲۶ دستور: عدم تغییرات خارج از محدوده / بدون تغییر Theme). */
+.packaging-estimation-box {
+  border: 1px dashed #cbd6d3;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fbfdfc;
+}
+
+.packaging-override-toggle {
+  margin: 10px 0 0;
+}

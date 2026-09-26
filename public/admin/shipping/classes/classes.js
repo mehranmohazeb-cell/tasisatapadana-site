@@ -3,6 +3,21 @@
 // =========================
 
 let classesCache = [];
+let packagingProfilesCache = [];
+
+async function loadPackagingProfilesForClassSelect() {
+  const select = document.getElementById("class-packaging-profile");
+  if (!select) return;
+  try {
+    const data = await fetchAdmin("/admin/packaging-profiles");
+    packagingProfilesCache = (data.packaging_profiles || []).filter((p) => Number(p.active) === 1);
+    select.innerHTML =
+      '<option value="">— بدون Profile پیش‌فرض —</option>' +
+      packagingProfilesCache.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+  } catch (error) {
+    // اختیاری — اگر Migration هنوز اجرا نشده، صفحه بدون این گزینه کار می‌کند.
+  }
+}
 
 async function loadClasses() {
   const container = document.getElementById("list-container");
@@ -25,11 +40,18 @@ function renderClasses() {
     return;
   }
 
+  const profileName = (id) => {
+    if (id == null) return null;
+    const p = packagingProfilesCache.find((item) => Number(item.id) === Number(id));
+    return p ? p.name : null;
+  };
+
   container.innerHTML = classesCache.map((c) => `
     <div class="shipping-method-row">
       <div>
         <strong>${escapeHtml(c.name)}</strong>
         ${Number(c.active) === 0 ? '<span class="shipping-badge inactive">غیرفعال</span>' : ""}
+        ${profileName(c.default_packaging_profile_id) ? `<span class="shipping-badge">Packaging: ${escapeHtml(profileName(c.default_packaging_profile_id))}</span>` : ""}
       </div>
       <div style="display:flex; gap:8px;">
         <button type="button" class="secondary-button" onclick="editClass(${Number(c.id)})">ویرایش</button>
@@ -46,6 +68,7 @@ function resetClassForm() {
   document.getElementById("class-form").reset();
   document.getElementById("class-id").value = "";
   document.getElementById("class-active").checked = true;
+  document.getElementById("class-packaging-profile").value = "";
   document.getElementById("cancel-class-edit").style.display = "none";
 }
 
@@ -55,6 +78,8 @@ function editClass(id) {
   document.getElementById("class-id").value = item.id;
   document.getElementById("class-name").value = item.name;
   document.getElementById("class-active").checked = Number(item.active) !== 0;
+  document.getElementById("class-packaging-profile").value =
+    item.default_packaging_profile_id != null ? String(item.default_packaging_profile_id) : "";
   document.getElementById("cancel-class-edit").style.display = "inline-block";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -66,7 +91,10 @@ async function toggleClassActive(id, makeActive) {
     await fetchAdmin("/admin/shipping-classes", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, name: item.name, active: makeActive, sort_order: item.sort_order }),
+      body: JSON.stringify({
+        id, name: item.name, active: makeActive, sort_order: item.sort_order,
+        default_packaging_profile_id: item.default_packaging_profile_id ?? null,
+      }),
     });
     showToast(makeActive ? "فعال شد." : "غیرفعال شد.", "success");
     loadClasses();
@@ -89,6 +117,7 @@ async function deleteClass(id) {
 document.addEventListener("DOMContentLoaded", () => {
   initAdminPage("shipping");
   renderShippingSubNav("shipping-classes");
+  loadPackagingProfilesForClassSelect();
   loadClasses();
 
   document.getElementById("refresh-classes")?.addEventListener("click", loadClasses);
@@ -97,9 +126,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("class-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = document.getElementById("class-id").value;
+    const packagingProfileRaw = document.getElementById("class-packaging-profile").value;
     const payload = {
       name: document.getElementById("class-name").value.trim(),
       active: document.getElementById("class-active").checked,
+      default_packaging_profile_id: packagingProfileRaw ? Number(packagingProfileRaw) : null,
     };
 
     try {

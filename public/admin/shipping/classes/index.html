@@ -41,6 +41,15 @@
           <label for="class-name" style="display:block; font-size:13px; margin-bottom:4px;">نام</label>
           <input id="class-name" type="text" required placeholder="مثلاً: سنگین">
         </div>
+        <div style="flex:1; min-width:220px;">
+          <label for="class-packaging-profile" style="display:flex; align-items:center; gap:4px; font-size:13px; margin-bottom:4px;">
+            Packaging Profile پیش‌فرض
+            <span class="help-icon" data-help="محصولاتی که این Shipping Class را دارند و خودشان Packaging Profile اختصاصی انتخاب نکرده‌اند، به‌صورت خودکار همین Profile را می‌گیرند.">ⓘ</span>
+          </label>
+          <select id="class-packaging-profile">
+            <option value="">— بدون Profile پیش‌فرض —</option>
+          </select>
+        </div>
         <div>
           <label style="display:flex; align-items:center; gap:6px;">
             <input type="checkbox" id="class-active" checked style="width:auto;">

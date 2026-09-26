@@ -57,6 +57,7 @@ function resetForm() {
   document.getElementById("method-id").value = "";
   document.getElementById("method-active").checked = true;
   document.getElementById("method-city-wrapper").style.display = "none";
+  document.getElementById("method-volumetric-divisor").value = "";
   document.getElementById("form-title").textContent = "افزودن روش ارسال جدید";
   document.getElementById("cancel-edit").style.display = "none";
 }
@@ -73,6 +74,7 @@ function editMethod(id) {
   document.getElementById("method-city").value = method.allowed_city || "";
   document.getElementById("method-city-wrapper").style.display = method.scope === "city" ? "block" : "none";
   document.getElementById("method-sort").value = method.sort_order;
+  document.getElementById("method-volumetric-divisor").value = method.volumetric_divisor ?? "";
   document.getElementById("method-active").checked = Number(method.active) !== 0;
 
   document.getElementById("form-title").textContent = `ویرایش روش ارسال: ${method.name}`;
@@ -133,6 +135,9 @@ document.addEventListener("DOMContentLoaded", () => {
       scope: document.getElementById("method-scope").value,
       allowed_city: document.getElementById("method-city").value.trim(),
       sort_order: Number(document.getElementById("method-sort").value) || 0,
+      volumetric_divisor: document.getElementById("method-volumetric-divisor").value
+        ? Number(document.getElementById("method-volumetric-divisor").value)
+        : null,
       active: document.getElementById("method-active").checked,
     };
 

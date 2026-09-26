@@ -216,9 +216,27 @@ async function showOrderDetails(orderId) {
 
           ${
             Number(order.shipping_cost) > 0
-              ? `<div class="detail-row"><span>روش/هزینه ارسال</span><span>${escapeHtml(order.shipping_method_name || "-")} — ${formatPrice(order.shipping_cost)} تومان${order.shipping_is_cod ? " (پس‌کرایه)" : ""}</span></div>`
+              ? `<div class="detail-row"><span>روش/هزینه ارسال (تخمینی)</span><span>${escapeHtml(order.shipping_method_name || "-")} — ${formatPrice(order.shipping_cost)} تومان${order.shipping_is_cod ? " (پس‌کرایه)" : ""}</span></div>`
               : ""
           }
+
+          <div class="detail-row" style="align-items:flex-start;">
+            <span>
+              هزینه واقعی حمل
+              <span class="help-icon" data-help="وقتی فاکتور واقعی پست/باربری رسید، همین‌جا ثبت کنید. اگر هزینه واقعی بیشتر از تخمین باشد، اختلاف از سود فروشگاه کسر می‌شود و از مشتری چیزی مطالبه نمی‌شود — این عدد فقط برای گزارش داخلی/تحلیل آینده است، روی مبلغ فاکتور مشتری اثر ندارد.">ⓘ</span>
+            </span>
+            <span style="display:flex; align-items:center; gap:8px;">
+              ${
+                order.actual_shipping_cost != null
+                  ? `<span>${formatPrice(order.actual_shipping_cost)} تومان</span>
+                     <span class="shipping-badge ${Number(order.shipping_cost_variance) > 0 ? "inactive" : "prepaid"}">
+                       اختلاف: ${Number(order.shipping_cost_variance) > 0 ? "+" : ""}${formatPrice(order.shipping_cost_variance)} تومان
+                     </span>`
+                  : `<input type="number" min="0" id="actual-shipping-cost-input" placeholder="مبلغ واقعی (تومان)" style="width:150px;">
+                     <button type="button" class="secondary-button" onclick="saveActualShippingCost(${Number(order.id)})">ثبت</button>`
+              }
+            </span>
+          </div>
 
           <div class="detail-row" style="border-bottom:none; margin-top:10px; font-weight:800;">
             <span>مبلغ کل</span><span>${formatPrice(order.total)} تومان</span>
@@ -226,6 +244,7 @@ async function showOrderDetails(orderId) {
         </div>
       </div>
     `;
+    initHelpTooltips(root);
   } catch (error) {
     root.innerHTML = `
       <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
@@ -235,6 +254,30 @@ async function showOrderDetails(orderId) {
         </div>
       </div>
     `;
+  }
+}
+
+// ثبت هزینه واقعی حمل + محاسبه اختلاف با تخمین (بخش ۱۶ دستور تخمین
+// بسته‌بندی). فقط تحلیل داخلی است؛ payable_amount مشتری دست‌نخورده می‌ماند.
+async function saveActualShippingCost(orderId) {
+  const input = document.getElementById("actual-shipping-cost-input");
+  if (!input) return;
+  const value = Number(input.value);
+  if (!Number.isFinite(value) || value < 0) {
+    showToast("مبلغ واقعی نامعتبر است.", "error");
+    return;
+  }
+
+  try {
+    await fetchAdmin("/admin/orders/actual-shipping-cost", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: orderId, actual_shipping_cost: value }),
+    });
+    showToast("هزینه واقعی ارسال ثبت شد.", "success");
+    showOrderDetails(orderId);
+  } catch (error) {
+    showToast(error.message, "error");
   }
 }
 

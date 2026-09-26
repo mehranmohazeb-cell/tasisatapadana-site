@@ -38,12 +38,12 @@
         <div class="form-grid">
 
           <div class="form-group">
-            <label for="product-name">نام محصول</label>
+            <label for="product-name">نام محصول <span class="help-icon" data-help="نام محصول همان‌طور که در فروشگاه و فاکتور نمایش داده می‌شود.">ⓘ</span></label>
             <input id="product-name" type="text" required>
           </div>
 
           <div class="form-group">
-            <label for="product-slug">شناسه محصول (Slug)</label>
+            <label for="product-slug">شناسه محصول (Slug) <span class="help-icon" data-help="بخشی از آدرس صفحه محصول؛ فقط حروف انگلیسی کوچک، عدد و خط تیره. بعد از انتشار بهتر است تغییر نکند.">ⓘ</span></label>
             <input id="product-slug" type="text" required>
             <small>مثلاً: test-product</small>
           </div>
@@ -74,7 +74,7 @@
           </div>
 
           <div class="form-group full">
-            <label for="product-description-editor">معرفی محصول</label>
+            <label for="product-description-editor">معرفی محصول <span class="help-icon" data-help="متن کامل معرفی محصول با قالب‌بندی (تیتر، لیست، جدول). این متن برای مشتری نمایش داده می‌شود.">ⓘ</span></label>
             <div class="rte-toolbar">
               <button type="button" data-rte-cmd="formatBlock" data-rte-value="h2" title="تیتر بزرگ">H2</button>
               <button type="button" data-rte-cmd="formatBlock" data-rte-value="h3" title="تیتر">H3</button>
@@ -92,24 +92,24 @@
           </div>
 
           <div class="form-group full">
-            <label>مشخصات فنی</label>
+            <label>مشخصات فنی <span class="help-icon" data-help="هر ردیف یک ویژگی فنی است (مثلاً ظرفیت: 24 کیلووات). واحدها و علائم مهندسی (Qn، °C و...) به‌صورت خودکار توسط سیستم قالب‌بندی می‌شوند؛ نیازی به زیرنویس/بالانویس دستی نیست.">ⓘ</span></label>
             <div id="specs-list"></div>
             <button type="button" id="add-spec-row" class="secondary-button">+ افزودن ردیف مشخصات</button>
           </div>
 
           <div class="form-group">
-            <label for="product-price">قیمت (تومان)</label>
+            <label for="product-price">قیمت (تومان) <span class="help-icon" data-help="قیمت نهایی فروش به تومان که به مشتری نمایش داده می‌شود.">ⓘ</span></label>
             <input id="product-price" type="number" min="0" required>
           </div>
 
           <div class="form-group">
-            <label for="product-compare-price">قیمت قبل از تخفیف (اختیاری)</label>
+            <label for="product-compare-price">قیمت قبل از تخفیف (اختیاری) <span class="help-icon" data-help="اگر بزرگ‌تر از قیمت اصلی باشد، به‌صورت خط‌خورده و درصد تخفیف کنار قیمت اصلی نمایش داده می‌شود.">ⓘ</span></label>
             <input id="product-compare-price" type="number" min="0" placeholder="در صورت وجود تخفیف">
             <small>اگر بزرگ‌تر از قیمت اصلی باشد، به‌صورت خط‌خورده و درصد تخفیف نمایش داده می‌شود.</small>
           </div>
 
           <div class="form-group">
-            <label for="product-stock">موجودی</label>
+            <label for="product-stock">موجودی <span class="help-icon" data-help="تعداد قابل‌فروش این محصول در انبار. با هر خرید موفق، به‌صورت خودکار کم می‌شود.">ⓘ</span></label>
             <input id="product-stock" type="number" min="0" value="0" required>
           </div>
 
@@ -136,35 +136,35 @@
           </div>
 
           <div class="form-group">
-            <label for="product-shipping-cost">هزینه ارسال (تومان)</label>
+            <label for="product-shipping-cost">هزینه ارسال (تومان) <span class="help-icon" data-help="هزینه ارسال اختصاصی همین محصول، اگر خالی باشد از پیش‌فرض فروشگاه استفاده می‌شود. توجه: این هزینه نهایی است؛ محاسبه خودکار وزن/تعرفه گروهی جدا از این فیلد است.">ⓘ</span></label>
             <input id="product-shipping-cost" type="number" min="0" placeholder="پیش‌فرض فروشگاه: رایگان">
           </div>
 
           <div class="form-group">
-            <label for="product-shipping-method">روش ارسال</label>
+            <label for="product-shipping-method">روش ارسال <span class="help-icon" data-help="نام روش ارسال که به مشتری نمایش داده می‌شود (مثلاً پست پیشتاز). صرفاً برای نمایش است.">ⓘ</span></label>
             <input id="product-shipping-method" type="text" placeholder="پیش‌فرض فروشگاه: پست پیشتاز">
           </div>
 
           <div class="form-group">
-            <label for="product-shipping-time">زمان ارسال</label>
+            <label for="product-shipping-time">زمان ارسال <span class="help-icon" data-help="مدت زمان تقریبی تحویل که به مشتری نمایش داده می‌شود (مثلاً «حداکثر ۳ روز کاری»).">ⓘ</span></label>
             <input id="product-shipping-time" type="text" placeholder="پیش‌فرض فروشگاه: حداکثر ۳ روز کاری">
           </div>
 
           <div class="form-group">
-            <label for="product-shipping-class">Shipping Class (برای تعرفه گروهی)</label>
+            <label for="product-shipping-class">Shipping Class (برای تعرفه گروهی) <span class="help-icon" data-help="گروه حمل این محصول (مثلاً سبک/سنگین/حجیم). تعرفه‌های چندشرطی (Table Rate) بر اساس همین گروه اعمال می‌شوند. با انتخاب Shipping Class، Packaging Profile هم به‌صورت خودکار تشخیص داده می‌شود، مگر اینکه پایین‌تر برایش Override اختصاصی تعیین کنید.">ⓘ</span></label>
             <select id="product-shipping-class">
               <option value="">— بدون Shipping Class —</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label for="product-weight">وزن (گرم)</label>
+            <label for="product-weight">وزن (گرم) <span class="help-icon" data-help="وزن واقعی خودِ کالا، نه بسته‌بندی. سیستم تخمین بسته‌بندی از روی همین عدد، وزن قابل‌محاسبه حمل را خودکار محاسبه می‌کند.">ⓘ</span></label>
             <input id="product-weight" type="number" min="0" placeholder="مثلاً: 3500">
           </div>
 
           <div class="form-group" style="display:flex; gap:8px;">
             <div style="flex:1;">
-              <label for="product-length">طول (سانتی‌متر)</label>
+              <label for="product-length">طول (سانتی‌متر) <span class="help-icon" data-help="ابعاد واقعی خودِ کالا، نه بسته‌بندی.">ⓘ</span></label>
               <input id="product-length" type="number" min="0">
             </div>
             <div style="flex:1;">
@@ -177,8 +177,60 @@
             </div>
           </div>
 
+          <div class="form-group full packaging-estimation-box">
+            <label style="display:flex; align-items:center; gap:4px;">
+              تخمین بسته‌بندی و ارسال
+              <span class="help-icon" data-help="وزن و ابعاد بالا مربوط به خود محصول است، نه فضای بسته‌بندی. سیستم بسته‌بندی تخمینی (بر اساس Packaging Profile) را به‌صورت خودکار محاسبه می‌کند و همان را به موتور ارسال تحویل می‌دهد. این بخش فقط برای موارد استثنایی است.">ⓘ</span>
+            </label>
+
+            <div class="form-grid" style="margin-top:8px;">
+              <div class="form-group">
+                <label for="product-packaging-profile">Packaging Profile اختصاصی (اختیاری) <span class="help-icon" data-help="اگر خالی بماند، Profile به‌صورت خودکار از Shipping Class انتخاب‌شده بالا تشخیص داده می‌شود. فقط در موارد استثنایی این را دستی انتخاب کنید.">ⓘ</span></label>
+                <select id="product-packaging-profile">
+                  <option value="">— خودکار از روی Shipping Class —</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="product-packaging-confidence">سطح اطمینان (داخلی) <span class="help-icon" data-help="فقط برای گزارش/تحلیل داخلی مدیریت است؛ به مشتری نمایش داده نمی‌شود.">ⓘ</span></label>
+                <select id="product-packaging-confidence">
+                  <option value="">— خودکار —</option>
+                  <option value="REAL">REAL (اندازه‌گیری واقعی)</option>
+                  <option value="VERIFIED">VERIFIED (تأییدشده)</option>
+                </select>
+              </div>
+            </div>
+
+            <p class="packaging-override-toggle">
+              <button type="button" id="toggle-packaging-override" class="secondary-button">
+                ابعاد/وزن واقعی بسته‌بندی را می‌دانم (Override)
+              </button>
+            </p>
+
+            <div id="packaging-override-fields" class="form-grid" style="display:none; margin-top:8px;">
+              <div class="form-group" style="display:flex; gap:8px;">
+                <div style="flex:1;">
+                  <label for="product-package-length">طول بسته (سانتی‌متر) <span class="help-icon" data-help="ابعاد واقعی کارتن/بسته نهایی این محصول، اگر از قبل اندازه‌گیری شده. در صورت پرشدن هر ۴ فیلد، این مقادیر به‌جای تخمین خودکار استفاده می‌شوند.">ⓘ</span></label>
+                  <input id="product-package-length" type="number" min="0" step="0.1">
+                </div>
+                <div style="flex:1;">
+                  <label for="product-package-width">عرض بسته</label>
+                  <input id="product-package-width" type="number" min="0" step="0.1">
+                </div>
+                <div style="flex:1;">
+                  <label for="product-package-height">ارتفاع بسته</label>
+                  <input id="product-package-height" type="number" min="0" step="0.1">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="product-package-weight">وزن بسته (گرم)</label>
+                <input id="product-package-weight" type="number" min="0">
+              </div>
+            </div>
+          </div>
+
           <div class="form-group">
-            <label for="product-warranty-months">مدت گارانتی (ماه)</label>
+            <label for="product-warranty-months">مدت گارانتی (ماه) <span class="help-icon" data-help="اگر خالی بماند، محصول بدون گارانتی نمایش داده می‌شود.">ⓘ</span></label>
             <input id="product-warranty-months" type="number" min="0" placeholder="خالی = بدون گارانتی">
           </div>
 
@@ -188,7 +240,7 @@
           </div>
 
           <div class="form-group">
-            <label for="product-return-days">مهلت بازگشت کالا (روز)</label>
+            <label for="product-return-days">مهلت بازگشت کالا (روز) <span class="help-icon" data-help="اگر خالی بماند، محصول بدون امکان بازگشت نمایش داده می‌شود.">ⓘ</span></label>
             <input id="product-return-days" type="number" min="0" placeholder="خالی = بدون بازگشت">
           </div>
 
