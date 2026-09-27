@@ -42,11 +42,32 @@
 //     دستور صریح بخش ۲۱ — فعلاً فقط از Endpoint Admin «shipping-engine-preview»
 //     قابل تست است). resolveShippingOptionsForCart و shipping_table_rates
 //     به‌عنوان موتور داخلی واقعی سایت، کاملاً دست‌نخورده مانده‌اند.
-//   - shipping_calculation_mode در D1 واقعی مقدار قدیمی «table_rate» را دارد؛
-//     چون این مقدار در SHIPPING_CALCULATION_MODES نیست، getShippingCalculationMode
-//     به‌صورت Fail-Safe مقدار «internal» را برمی‌گرداند — یعنی رفتار امروز
-//     (فقط موتور داخلی) دقیقاً حفظ می‌شود. طبق دستور، این مغایرت در همین
-//     مرحله عمداً reconcile نشده.
+//   - shipping_calculation_mode: تست مستقیم روی D1 واقعی نشان داد ستون
+//     "site_settings.shipping_calculation_mode" یک CHECK constraint واقعی
+//     دارد که فقط مقادیر 'table_rate' و 'engine' را مجاز می‌دانست (خطای
+//     واقعی مشاهده‌شده: «CHECK constraint failed: shipping_calculation_mode
+//     IN (table_rate, 'engine)»)؛ یعنی نه 'internal' (پیش‌فرض قدیمی همین
+//     فایل) و نه 'online' هیچ‌کدام در D1 واقعی مجاز نبودند — دقیقاً همان
+//     چیزی که باعث شکست Save در پنل می‌شد. چون SQLite/D1 اجازه تغییر مستقیم
+//     CHECK یک ستون موجود را نمی‌دهد، جدول site_settings با migration جدید
+//     database/shipping-calculation-mode-v2.sql (الگوی همان بازسازی جدول
+//     استاندارد پروژه: ساخت جدول جدید → کپی داده → حذف قدیمی → تغییرنام،
+//     دقیقاً مثل technical-format-rules-v2.sql) بازسازی شد تا CHECK جدید
+//     'table_rate' و 'engine' قدیمی را حفظ کند و 'online' و
+//     'online_fallback_internal' جدید را هم اضافه کند — هیچ مقدار مجاز
+//     قبلی حذف نشده. واژگان سطح کد/UI («internal»، «online»،
+//     «online_fallback_internal») عمداً تغییر نکرده تا هیچ بخش دیگری
+//     (UI، تست‌های قبلی، ستون calculation_mode در shipping_quote_history)
+//     لمس نشود؛ ترجمه بین واژگان کد و مقدار واقعی ستون فقط در همین دو تابع
+//     (toStoredCalculationMode/fromStoredCalculationMode) انجام می‌شود:
+//     «internal» ↔ در D1 به‌صورت 'engine' نوشته می‌شود (مقدار مدرن)؛ مقدار
+//     قدیمی 'table_rate' که از قبل در D1 واقعی وجود دارد هم موقع خواندن
+//     دقیقاً به همان معنای «internal» تعبیر می‌شود (Fail-Safe قبلی که فقط
+//     تصادفاً درست کار می‌کرد، حالا صریح و آگاهانه است) — یعنی داده/رفتار
+//     قدیمی هرگز عوض نشده، فقط دیگر به یک «مقدار ناشناخته» شبیه نیست.
+//     «online»/«online_fallback_internal» چون هیچ معادل قدیمی در Production
+//     نداشتند، بدون تغییر نام مستقیماً به همان مقدار مجاز جدید در CHECK
+//     نگاشت می‌شوند.
 // =========================================================================
 
 
@@ -61,16 +82,36 @@ export const SHIPPING_CALCULATION_MODES = ["internal", "online", "online_fallbac
 export const TARIFF_SOURCES = ["manual", "tapin", "post", "tipax", "other"];
 
 // -------------------------------------------------------------------------
-// حالت محاسبه ارسال — روی همان رکورد تک site_settings (id=1) پروژه
-// -------------------------------------------------------------------------
+// حالت محاسبه ارسال — روی همان رکورد تک site_settings (id=1) پروژه.
+//
+// نگاشت بین واژگان سطح کد/UI (SHIPPING_CALCULATION_MODES بالا) و مقدار
+// واقعی ذخیره‌شده در ستون site_settings.shipping_calculation_mode که
+// CHECK constraint واقعی‌اش امروز فقط 'table_rate'/'engine'/'online'/
+// 'online_fallback_internal' را می‌پذیرد (بعد از
+// database/shipping-calculation-mode-v2.sql). این نگاشت تنها همین‌جا
+// انجام می‌شود؛ بقیه پروژه (UI، calculation_mode در shipping_quote_history،
+// getShippingOptionsViaEngine) همچنان از واژگان «internal»/«online»/
+// «online_fallback_internal» استفاده می‌کند و از این تفاوت بی‌خبر می‌ماند.
+function toStoredCalculationMode(mode) {
+  // «internal» همیشه با مقدار مدرن 'engine' نوشته می‌شود؛ هرگز 'table_rate'
+  // (که فقط یک مقدار قدیمی/Legacy برای خواندن سازگار به‌عقب است، نه چیزی
+  // که کد از این پس بنویسد).
+  return mode === "internal" ? "engine" : mode;
+}
+
+function fromStoredCalculationMode(stored) {
+  if (stored === "engine" || stored === "table_rate") return "internal";
+  if (SHIPPING_CALCULATION_MODES.includes(stored)) return stored;
+  return null; // مقدار ناشناخته → دنبال از Fail-Safe در getShippingCalculationMode
+}
 
 export async function getShippingCalculationMode(env) {
   try {
     const row = await env.DB
       .prepare("SELECT shipping_calculation_mode FROM site_settings WHERE id = 1 LIMIT 1")
       .first();
-    const mode = row?.shipping_calculation_mode;
-    return SHIPPING_CALCULATION_MODES.includes(mode) ? mode : "internal";
+    const mode = fromStoredCalculationMode(row?.shipping_calculation_mode);
+    return mode || "internal";
   } catch (error) {
     // Fail-Safe: اگر Migration جدید هنوز اجرا نشده، رفتار فعلی (فقط داخلی) حفظ می‌شود.
     return "internal";
@@ -86,7 +127,7 @@ export async function setShippingCalculationMode(env, mode) {
     .run();
   await env.DB
     .prepare("UPDATE site_settings SET shipping_calculation_mode = ? WHERE id = 1")
-    .bind(mode)
+    .bind(toStoredCalculationMode(mode))
     .run();
   return { ok: true, mode };
 }

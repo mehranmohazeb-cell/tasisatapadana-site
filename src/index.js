@@ -4641,13 +4641,37 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   // Body: { filename?, content_type?, csv_text, source, version_label }
   // یک نسخه تعرفه جدید می‌سازد و ردیف‌های معتبر را در همان تراکنش درج می‌کند.
   // ردیف‌های نامعتبر رد می‌شوند (نه کل Import). هیچ ردیف/نسخه قبلی حذف نمی‌شود.
+  //
+  // نکته Schema (تست مستقیم روی D1 Production): جدول واقعی
+  // shipping_tariff_versions ستون "version_label" ندارد؛ نام واقعی ستون
+  // "version_name" است. همچنین ستون‌های filename/content_type/checksum/
+  // row_count/valid_row_count/error_row_count/uploaded_at/activated_at/
+  // created_by که این کد قبلاً فرض می‌کرد، هیچ‌کدام در Production وجود
+  // ندارند؛ ستون‌های واقعی فقط: id, provider_code (NOT NULL), version_name
+  // (NOT NULL), status (NOT NULL, پیش‌فرض 'draft'), source, notes,
+  // raw_content, created_at, updated_at هستند. طبق تصمیم صریح («هیچ ستون
+  // جدیدی اضافه نشود، فقط کد با Schema واقعی هماهنگ شود»)، آمار Import
+  // (filename/content_type/checksum/row_count/valid_row_count/
+  // error_row_count) که جای فیزیکی مستقلی در Production ندارند، داخل ستون
+  // موجود "notes" به‌صورت JSON نگه‌داری می‌شوند (دقیقاً همان الگوی
+  // request_json/response_json در recordShippingQuote) — هیچ داده‌ای گم
+  // نمی‌شود، فقط دیگر ستون‌های Ghost درخواست نمی‌شوند. Timestamp هم به خود
+  // D1 سپرده می‌شود (created_at/updated_at پیش‌فرض CURRENT_TIMESTAMP دارند).
+  //
+  // provider_code (NOT NULL در Production) پیش‌تر در کد اصلاً استفاده
+  // نمی‌شد؛ چون این مرحله صراحتاً اجازه حدس/طراحی مفهوم جدید نمی‌دهد، از
+  // همان مقدار "source" (که از قبل در برابر TARIFF_SOURCES اعتبارسنجی
+  // می‌شود) استفاده شد — نزدیک‌ترین مقدار موجود به مفهوم «این تعرفه به کدام
+  // Provider تعلق دارد». اگر معنای دقیق‌تری برای provider_code در نظر
+  // دارید (مثلاً همیشه کد Provider واقعی ثبت‌شده در shipping_providers)،
+  // لطفاً در مرحله بعد مشخص کنید.
   if (url.pathname === "/api/store/admin/shipping-table-rates/import/commit" && request.method === "POST") {
     if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
     try {
       const body = await request.json();
       const csvText = String(body.csv_text || "");
       const source = TARIFF_SOURCES.includes(body.source) ? body.source : "manual";
-      const versionLabel = String(body.version_label || "").trim() || `Import ${nowIso()}`;
+      const versionName = String(body.version_label || "").trim() || `Import ${nowIso()}`;
 
       if (!csvText.trim()) {
         return Response.json({ ok: false, error: "EMPTY_FILE", message: "فایل خالی است." }, { status: 400 });
@@ -4662,16 +4686,23 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const checksum = await sha256Hex(csvText);
       const timestamp = nowIso();
 
+      const importNotes = JSON.stringify({
+        filename: body.filename || null,
+        content_type: body.content_type || "text/csv",
+        checksum,
+        row_count: rows.length,
+        valid_row_count: validRows.length,
+        error_row_count: invalidRows.length,
+        uploaded_at: timestamp,
+      });
+
       const versionInsert = await env.DB
         .prepare(
           "INSERT INTO shipping_tariff_versions " +
-          "(version_label, source, status, filename, content_type, checksum, row_count, valid_row_count, " +
-          "error_row_count, raw_content, uploaded_at) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)"
+          "(provider_code, version_name, status, source, notes, raw_content) " +
+          "VALUES (?, ?, 'active', ?, ?, ?)"
         )
-        .bind(
-          versionLabel, source, body.filename || null, body.content_type || "text/csv", checksum,
-          rows.length, validRows.length, invalidRows.length, csvText, timestamp
-        )
+        .bind(source, versionName, source, importNotes, csvText)
         .run();
 
       const tariffVersionId = versionInsert.meta?.last_row_id ?? null;
@@ -4711,17 +4742,47 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   }
 
   // GET /api/store/admin/shipping-tariff-versions — تاریخچه نسخه‌های تعرفه
+  //
+  // Query فقط از ستون‌های واقعی Production می‌خواند (version_name، نه
+  // version_label؛ created_at، نه uploaded_at). برای حفظ کامل سازگاری با
+  // UI موجود (public/admin/shipping/import/import.js که هنوز v.version_label/
+  // v.row_count/v.valid_row_count/v.uploaded_at را می‌خواند)، پاسخ API دقیقاً
+  // همان شکل قبلی را با map کردن از ستون‌های واقعی + باز کردن JSON ستون
+  // "notes" بازسازی می‌کند — یعنی مرز DB اصلاح شد بدون نیاز به تغییر UI.
   if (url.pathname === "/api/store/admin/shipping-tariff-versions" && request.method === "GET") {
     if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
     try {
       const result = await env.DB
         .prepare(
-          "SELECT id, version_label, source, status, filename, content_type, checksum, row_count, " +
-          "valid_row_count, error_row_count, uploaded_at, activated_at, created_by " +
-          "FROM shipping_tariff_versions ORDER BY uploaded_at DESC, id DESC"
+          "SELECT id, version_name, provider_code, source, status, notes, created_at, updated_at " +
+          "FROM shipping_tariff_versions ORDER BY created_at DESC, id DESC"
         )
         .all();
-      return Response.json({ ok: true, versions: result.results || [] });
+      const versions = (result.results || []).map((row) => {
+        let notes = {};
+        try {
+          notes = row.notes ? JSON.parse(row.notes) : {};
+        } catch {
+          notes = {};
+        }
+        return {
+          id: row.id,
+          version_label: row.version_name,
+          provider_code: row.provider_code,
+          source: row.source,
+          status: row.status,
+          filename: notes.filename ?? null,
+          content_type: notes.content_type ?? null,
+          checksum: notes.checksum ?? null,
+          row_count: notes.row_count ?? 0,
+          valid_row_count: notes.valid_row_count ?? 0,
+          error_row_count: notes.error_row_count ?? 0,
+          uploaded_at: notes.uploaded_at || row.created_at,
+          activated_at: null,
+          created_by: null,
+        };
+      });
+      return Response.json({ ok: true, versions });
     } catch (error) {
       const isMissingTable = /no such table/i.test(error.message || "");
       return Response.json(
