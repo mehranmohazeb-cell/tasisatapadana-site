@@ -130,32 +130,54 @@ function safeParseJson(value) {
 }
 
 // -------------------------------------------------------------------------
-// Tapin/Tipax Adapter — استعلام قیمت واقعی، طبق راهنمای رسمی PDF.
+// Tapin/Tipax Adapter — طبق ساختار واقعی VPS که در این مرحله توسط کاربر
+// توصیف شده (routers/tapin.py + integrations/tapin.py، prefix /api/v1/tapin،
+// Endpoint موجود POST /api/v1/tapin/quote).
 // -------------------------------------------------------------------------
-
-const TAPIN_API_BASE = "https://api.tapin.ir/api/v4";
-
-// -------------------------------------------------------------------------
-// Integration Proxy (VPS) — طبق دستور معماری این مرحله:
-//   Worker → Integration Proxy (روی VPS با IP ثابت) → Tapin API
-// چون Token واقعی Tapin به IP ثابت VPS محدود شده، Worker دیگر مستقیماً
-// api.tapin.ir را صدا نمی‌زند (TAPIN_API_BASE فقط برای مستندسازی/ارجاع
-// نگه داشته شده — مقصد واقعی درخواست، Proxy است، نه این آدرس).
 //
-// قرارداد فرضی این مرحله با Proxy (چون کد سمت VPS در این Sandbox قابل
-// مشاهده/تغییر نیست — بخش «C — Proxy» گزارش نهایی را ببینید):
-//   POST {INTEGRATION_PROXY_BASE_URL}{INTEGRATION_PROXY_TAPIN_PATH}
-//   Header: Authorization: Bearer <PROXY_API_KEY>
-//   Body:   { path: "<مسیر واقعی Tapin>", body: {...درخواست کامل شامل shop_id...}, authorization: "<مقدار کامل Header Authorization برای Tapin>" }
-//   Response (در حالت موفق Proxy، صرف‌نظر از موفق/ناموفق بودن خود Tapin):
-//     دقیقاً همان JSON خام پاسخ Tapin، بدون تغییر (Passthrough) — تا منطق
-//     تفسیر returns.status که از قبل در این فایل وجود دارد بدون تغییر کار کند.
-//   Response (در حالت خطای سطح Proxy — نه Tapin): بدنه‌ای با کلید
-//     proxy_error و پیام در message، یا صرفاً HTTP status غیر ۲xx.
-// مقصد Tapin در Proxy باید ثابت/Allowlisted باشد (فقط ۳ Endpoint مستندشده
-// همین پروژه)؛ هیچ URL دلخواهی از Worker/کاربر نباید توسط Proxy پذیرفته شود.
+// ⚠️ توجه صادقانه (باید در گزارش نهایی هم تکرار شود): در همین پیام، کاربر
+// ادعا کرده «ZIP پروژه پیوست است» ولی هیچ فایل جدیدی در این Sandbox آپلود
+// نشده — فقط همان ZIP قبلی از قبل این‌جا بود. هم‌چنین، کد واقعی VPS
+// (routers/tapin.py, integrations/tapin.py, main.py) هرگز در اختیار من قرار
+// نگرفته — نه در این مرحله و نه مرحله قبل. بنابراین قرارداد دقیق Request/
+// Response با POST /api/v1/tapin/quote در ادامه یک قرارداد *مستند و صریحاً
+// فرضی* است (نه چیزی که از کد واقعی VPS خوانده باشم)، دقیقاً روی همان الگویی
+// که خود دستور در بخش‌های ۸ تا ۱۱ توصیف کرده. تا وقتی محتوای واقعی آن دو
+// فایل Python در اختیارم نیست، امکان تولید یک Patch دقیق/غیر-حدسی برای
+// integrations/tapin.py وجود ندارد — این بخش در گزارش نهایی («کارهای
+// باقی‌مانده») صریحاً اعلام شده.
+//
+// تغییر معماری کلیدی نسبت به نسخه قبلی این فایل:
+//   ۱. Endpoint واقعی Proxy طبق ساختار موجود VPS همان مسیر ثابت و از‌پیش‌
+//      ثبت‌شده «/api/v1/tapin/quote» است — نه «/tapin/request» (که در تلاش
+//      قبلی، بدون دیدن کد واقعی VPS، به‌عنوان پیشنهاد فرضی ساخته شده بود و
+//      طبق این دستور صریحاً باید کنار گذاشته شود).
+//   ۲. طبق بخش ۱۵ دستور: «هیچ TAPIN_TOKEN نباید در Worker قرار بگیرد» —
+//      یعنی Credential واقعی Tapin (Token/Shop ID) دیگر در Cloudflare
+//      Secrets نیست؛ این دو روی خود VPS (.env) نگه‌داری و توسط
+//      integrations/tapin.py استفاده می‌شوند. Worker فقط با PROXY_API_KEY به
+//      Proxy احراز هویت می‌شود.
+//   ۳. طبق بخش ۷ دستور: «Worker نباید مستقیماً [هیچ‌کدام از ۳ Endpoint Tapin
+//      از جمله location] را فراخوانی کند» — یعنی Passthrough عمومی
+//      (path دلخواه) هم دیگر مجاز نیست (این خودش یک الگوی Generic Proxy/SSRF
+//      بود که بخش ۱۴ همین دستور صراحتاً منع کرده). بنابراین حل‌وفصل
+//      Province/City حالا باید سمت VPS (داخل integrations/tapin.py، هنگام
+//      get_quote) انجام شود؛ Worker فقط نام شهر مقصد را در بدنه Quote
+//      می‌فرستد، نه شناسه‌های از‌پیش‌حل‌شده.
+//   ۴. توابع fetchTapinLocations (که مستقیماً location endpoint های Tapin را
+//      از طریق Proxy صدا می‌زد) به همین دلیل حذف شدند — دیگر مسیر امنی برای
+//      اجرای آن‌ها وجود ندارد. توابع خالص findTapinCityMatch/normalizePersianText
+//      (که فقط منطق تطبیق را پیاده می‌کنند، نه تماس شبکه) به‌عنوان مرجع/Reuse
+//      احتمالی نگه داشته شده‌اند (بخش ۹ دستور: «منطق موجود Worker برای
+//      Province/City/City Mapping حفظ شود») — اما دیگر توسط quoteViaTapin
+//      صدا زده نمی‌شوند، چون آن منطق باید سمت VPS (به زبان Python، در
+//      integrations/tapin.py) بازتولید شود، نه سمت Worker.
+
 const INTEGRATION_PROXY_DEFAULT_BASE_URL = "https://proxy.tasisatapadanaesfahan.ir";
-const INTEGRATION_PROXY_DEFAULT_TAPIN_PATH = "/tapin/request";
+// مسیر واقعی موجود روی VPS طبق بخش ۲ دستور (routers/tapin.py با prefix
+// /api/v1/tapin) — قابل بازنویسی با env.INTEGRATION_PROXY_TAPIN_QUOTE_PATH
+// فقط برای مواقع اضطراری/تغییر آینده، نه چیزی که معمولاً باید عوض شود.
+const INTEGRATION_PROXY_DEFAULT_QUOTE_PATH = "/api/v1/tapin/quote";
 
 function getProxyCredentials(env) {
   const apiKey = env.PROXY_API_KEY;
@@ -170,7 +192,8 @@ const RIAL_PER_TOMAN = 10;
 // فیلدهای تنظیمات کسب‌وکار Tapin که PDF آن‌ها را به‌صورت enum مستند کرده اما
 // مقدار مناسب هرکدام برای این فروشگاه، تصمیمی تجاری/حساب‌کاربری است که در
 // سند مشخص نشده. عمداً حدس زده نمی‌شوند — باید از پنل «Providers» برای
-// Provider با code='tapin' در ستون config (JSON) تنظیم شوند.
+// Provider با code='tapin' در ستون config (JSON) تنظیم شوند. این بخش طبق
+// بخش ۸ دستور («همان منبع config_json حفظ شود») بدون تغییر مانده.
 const TAPIN_REQUIRED_CONFIG_FIELDS = [
   "product_type_id", // نوع کالا: ۱=بسته/عمومی، ۲=اوراق و اسناد بانکی(پاکت)/نامه، ۳=عمومی/نامه، ۴=مایعات-شکستنی/بسته
   "packing_type_id", // نوع بسته‌بندی (pk از جدول type_pack مستندشده در PDF — مثلاً ۲="نیاز به بسته‌بندی ندارد" برای کارتن)
@@ -180,15 +203,6 @@ const TAPIN_REQUIRED_CONFIG_FIELDS = [
   "type_pickup", // ۱۰=جمع‌آوری در محل مشتری، ۲۰=جمع‌آوری در نمایندگی
 ];
 
-function getTapinCredentials(env) {
-  const token = env.TAPIN_TOKEN;
-  const shopId = env.TAPIN_SHOP_ID;
-  const missing = [];
-  if (!token) missing.push("TAPIN_TOKEN");
-  if (!shopId) missing.push("TAPIN_SHOP_ID");
-  return { token, shopId, ok: missing.length === 0, missing };
-}
-
 async function getTapinBusinessConfig(env) {
   const row = await env.DB.prepare("SELECT config_json FROM shipping_providers WHERE code = 'tapin'").first();
   const config = safeParseJson(row?.config_json) || {};
@@ -196,26 +210,11 @@ async function getTapinBusinessConfig(env) {
   return { config, missing };
 }
 
-// Header Authorization: PDF فقط تنظیم Postman را توضیح داده («Auth Type =
-// OAuth 2.0»، «Token = <token>» بدون عبارت Jwt)، نه رشته دقیق Header خام
-// HTTP. طبق رفتار پیش‌فرض/استاندارد Postman برای OAuth 2.0 (که مقدار را با
-// پیشوند "Bearer" به Header اضافه می‌کند)، این پیش‌فرض گذاشته شده — اما این
-// یک استنباط است، نه چیزی که PDF به‌صراحت گفته باشد. با env.TAPIN_AUTH_HEADER_PREFIX
-// (اختیاری، در Worker Secrets/Vars) بدون تغییر کد قابل بازنویسی است.
-async function tapinRequest(env, path, body) {
-  const creds = getTapinCredentials(env);
-  if (!creds.ok) {
-    return {
-      ok: false,
-      error: "TAPIN_CREDENTIALS_MISSING",
-      message: `Credential تنظیم نشده در Worker Secrets: ${creds.missing.join(", ")}`,
-      missing: creds.missing,
-    };
-  }
-
-  // Credential مربوط به خود Proxy (نه Tapin) — بدون این، Worker اصلاً اجازه
-  // صدا زدن Integration Proxy را ندارد. این یک خطای جدا از TAPIN_CREDENTIALS_MISSING
-  // است چون علت/محل رفع آن فرق دارد (Secret پروژه، نه چیزی که از Tapin گرفته شود).
+// تک تماس Worker→Proxy برای کل Quote — نه تماس‌های جداگانه برای هر
+// Endpoint خام Tapin (طبق معماری جدید بخش ۴/۷/۱۴ دستور). Proxy مسئول انجام
+// کامل چرخه (حل‌وفصل شهر + check-price واقعی نزد Tapin) است و یک نتیجه
+// نهایی/نرمال‌شده برمی‌گرداند.
+async function requestTapinQuoteViaProxy(env, quotePayload) {
   const proxy = getProxyCredentials(env);
   if (!proxy.ok) {
     return {
@@ -226,18 +225,9 @@ async function tapinRequest(env, path, body) {
     };
   }
 
-  const prefix = env.TAPIN_AUTH_HEADER_PREFIX ?? "Bearer";
-  const authHeaderValue = prefix ? `${prefix} ${creds.token}` : creds.token;
-
   const proxyBaseUrl = env.INTEGRATION_PROXY_BASE_URL || INTEGRATION_PROXY_DEFAULT_BASE_URL;
-  const proxyPath = env.INTEGRATION_PROXY_TAPIN_PATH || INTEGRATION_PROXY_DEFAULT_TAPIN_PATH;
+  const proxyPath = env.INTEGRATION_PROXY_TAPIN_QUOTE_PATH || INTEGRATION_PROXY_DEFAULT_QUOTE_PATH;
 
-  // معماری اجباری این مرحله: Worker مستقیماً api.tapin.ir را صدا نمی‌زند.
-  // درخواست واقعی Tapin (path/body) به همراه Header Authorization لازم برای
-  // Tapin، در بدنه‌ی درخواست به Integration Proxy قرار می‌گیرد؛ خود Worker→Proxy
-  // با Bearer PROXY_API_KEY احراز هویت می‌شود. Proxy مسئول Forward امن این
-  // درخواست از IP ثابت VPS به Tapin است (مقصد Tapin در Proxy باید Allowlisted
-  // باشد — این بخش در Sandbox قابل پیاده‌سازی/تأیید نیست، به گزارش نهایی مراجعه کنید).
   let response;
   try {
     response = await fetch(`${proxyBaseUrl}${proxyPath}`, {
@@ -246,11 +236,7 @@ async function tapinRequest(env, path, body) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${proxy.apiKey}`,
       },
-      body: JSON.stringify({
-        path,
-        body: { shop_id: creds.shopId, ...body },
-        authorization: authHeaderValue,
-      }),
+      body: JSON.stringify(quotePayload),
     });
   } catch (error) {
     return { ok: false, error: "PROXY_NETWORK_ERROR", message: error.message };
@@ -268,92 +254,28 @@ async function tapinRequest(env, path, body) {
     };
   }
 
-  // خطای سطح Proxy (نه Tapin) — مثلاً رد شدن احراز هویت PROXY_API_KEY، مسیر
-  // خارج از Allowlist، یا خطای اتصال Proxy→Tapin که خودِ Proxy گزارش کرده.
-  // قرارداد فرضی: چنین خطایی با کلید proxy_error در بدنه مشخص می‌شود؛ بدون
-  // آن، بدنه دقیقاً همان پاسخ خام Tapin در نظر گرفته می‌شود (Passthrough).
-  if (!response.ok || data?.proxy_error) {
+  // خطای سطح HTTP/Proxy (نه خطای منطقی Tapin/City که Proxy با ok:false و یک
+  // کد مشخص گزارش می‌کند — آن حالت را quoteViaTapin پایین‌تر مدیریت می‌کند).
+  if (!response.ok) {
     return {
       ok: false,
-      error: data?.proxy_error ? "PROXY_ERROR" : "PROXY_HTTP_ERROR",
+      error: "PROXY_HTTP_ERROR",
       status: response.status,
       message: data?.message || null,
     };
   }
 
-  // از این نقطه به بعد، data دقیقاً همان پاسخ خام Tapin است (Passthrough از
-  // Proxy) — منطق تفسیر زیر بدون تغییر نسبت به تماس مستقیم قبلی حفظ شده:
-  //
-  // نکته صادقانه: PDF فقط status=20 ("موفق")، status=21 ("عملیات با موفقیت
-  // انجام شد" — برای متدهای changestatus) و یک نمونه خطا (status: "99125")
-  // را نشان داده؛ فهرست کامل کدهای خطای Tapin در سند مستند نشده. اینجا هر
-  // status غیر از ۲۰/۲۱ به‌عنوان ناموفق در نظر گرفته می‌شود، نه یک enum کامل.
-  const tapinStatus = data?.returns?.status;
-  if (tapinStatus !== 20 && tapinStatus !== 21) {
-    return {
-      ok: false,
-      error: "TAPIN_API_ERROR",
-      status: response.status,
-      tapin_status: tapinStatus ?? null,
-      message: data?.returns?.message || null,
-    };
-  }
-
-  return { ok: true, data };
+  return { ok: true, status: response.status, data };
 }
 
 // -------------------------------------------------------------------------
-// Cache لیست استان/شهر Tapin — In-Memory (Module-Scope)، چون در این مرحله
-// هیچ KV Binding اختصاصی برای این منظور در پروژه وجود ندارد و طبق دستور،
-// Binding جدید/Migration جدید در همین مرحله ایجاد نمی‌شود (VIEWERS_KV موجود
-// اختصاصاً برای شمارنده بازدید محصول طراحی شده و برای این منظور «مناسب» نیست).
-// محدودیت مهم (باید در تصمیم‌گیری مرحله بعد لحاظ شود): این Cache فقط در طول
-// عمر همان Isolate از Cloudflare Worker معتبر است؛ بین Cold Startها یا
-// Edge Locationهای مختلف Cloudflare مشترک/پایدار نیست — هر Isolate جدید
-// دوباره از Tapin می‌گیرد. برای Cache واقعی و پایدار در Production، افزودن
-// یک KV Binding اختصاصی لازم است (تصمیم با کاربر، در گزارش این مرحله اعلام شد).
+// City Mapping — توابع خالص (بدون تماس شبکه) که طبق بخش ۹ دستور به‌عنوان
+// مرجع/Reuse نگه داشته شده‌اند. دیگر توسط quoteViaTapin صدا زده نمی‌شوند
+// (حل‌وفصل شهر اکنون سمت VPS/integrations/tapin.py انجام می‌شود)، اما همان
+// الگوریتم normalize/تطبیق قبلی اینجا حفظ شده تا هنگام بازتولید این منطق به
+// Python، مرجع دقیقی موجود باشد.
 // -------------------------------------------------------------------------
-let _tapinLocationCache = { data: null, fetchedAt: 0 };
-const TAPIN_LOCATION_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // ۶ ساعت — عدد قابل‌تنظیم، نه مستندشده توسط Tapin
-
-export async function fetchTapinLocations(env, { forceRefresh = false } = {}) {
-  const isFresh = _tapinLocationCache.data && Date.now() - _tapinLocationCache.fetchedAt < TAPIN_LOCATION_CACHE_TTL_MS;
-  if (isFresh && !forceRefresh) {
-    return { ok: true, ..._tapinLocationCache.data, fromCache: true };
-  }
-
-  const provincesResult = await tapinRequest(env, "/location/public/all/province/filter/", {});
-  if (!provincesResult.ok) return provincesResult;
-
-  const citiesResult = await tapinRequest(env, "/location/public/all/city/filter/", {});
-  if (!citiesResult.ok) return citiesResult;
-
-  const cities = citiesResult.data?.entries?.cities || [];
-
-  // نکته صادقانه (Gap مستندسازی): PDF فقط ساختار Response برای «شهرها» را با
-  // کلید entries.cities نشان داده؛ ساختار Response برای «استان‌ها» به‌صراحت
-  // در سند نیامده. اگر entries.provinces در پاسخ واقعی موجود باشد از همان
-  // استفاده می‌شود؛ در غیر این صورت فهرست استان‌ها از روی province_pk/
-  // province_title موجود در خودِ آرایه cities استخراج می‌شود (چون هر شهر
-  // این دو فیلد را دارد) — این یک Fallback مشتق‌شده از داده واقعی است، نه
-  // یک حدس درباره Endpoint یا Schema.
-  let provinces = provincesResult.data?.entries?.provinces;
-  if (!Array.isArray(provinces)) {
-    const seen = new Map();
-    for (const city of cities) {
-      if (city.province_pk != null && !seen.has(city.province_pk)) {
-        seen.set(city.province_pk, { pk: city.province_pk, title: city.province_title });
-      }
-    }
-    provinces = [...seen.values()];
-  }
-
-  const data = { provinces, cities };
-  _tapinLocationCache = { data, fetchedAt: Date.now() };
-  return { ok: true, ...data, fromCache: false };
-}
-
-function normalizePersianText(value) {
+export function normalizePersianText(value) {
   return String(value || "")
     .replace(/\u200c/g, " ") // نیم‌فاصله → فاصله ساده، برای مقایسه پایدارتر
     .replace(/ك/g, "ک")
@@ -362,8 +284,6 @@ function normalizePersianText(value) {
     .toLowerCase();
 }
 
-// تطبیق نام شهر مقصد (از سبد/آدرس داخلی پروژه) با فهرست واقعی شهرهای Tapin —
-// هیچ فهرست دستی/ناقص شهر ساخته نشده؛ منبع فهرست همیشه خودِ API تاپین است.
 export function findTapinCityMatch(cities, cityName) {
   const target = normalizePersianText(cityName);
   if (!target) return { matched: false, reason: "EMPTY_CITY_NAME" };
@@ -383,17 +303,6 @@ export function findTapinCityMatch(cities, cityName) {
 }
 
 export async function quoteViaTapin(env, quoteRequest) {
-  const creds = getTapinCredentials(env);
-  if (!creds.ok) {
-    return {
-      ok: false,
-      provider: "tapin",
-      error: "TAPIN_CREDENTIALS_MISSING",
-      message: `Credential واقعی تنظیم نشده (باید در Worker Secrets قرار گیرد، نه در D1): ${creds.missing.join(", ")}`,
-      available: false,
-    };
-  }
-
   const { config, missing } = await getTapinBusinessConfig(env);
   if (missing.length > 0) {
     return {
@@ -403,28 +312,6 @@ export async function quoteViaTapin(env, quoteRequest) {
       message:
         `تنظیمات کسب‌وکار Tapin کامل نیست: ${missing.join(", ")}. این مقادیر باید طبق enumهای مستندشده در راهنمای رسمی Tapin، ` +
         `از پنل «Providers» برای Provider با کد tapin (فیلد config) تنظیم شوند — به‌صورت خودکار حدس زده نمی‌شوند.`,
-      available: false,
-    };
-  }
-
-  const locations = await fetchTapinLocations(env);
-  if (!locations.ok) {
-    return { ok: false, provider: "tapin", ...locations, available: false };
-  }
-
-  const cityMatch = findTapinCityMatch(locations.cities, quoteRequest.destinationCity);
-  if (!cityMatch.matched) {
-    return {
-      ok: false,
-      provider: "tapin",
-      error: cityMatch.reason,
-      message:
-        cityMatch.reason === "AMBIGUOUS_CITY_NAME"
-          ? "بیش از یک شهر با این نام در فهرست واقعی Tapin پیدا شد؛ برای رفع ابهام به استان مقصد نیاز است (در این مرحله پیاده نشده)."
-          : cityMatch.reason === "EMPTY_CITY_NAME"
-          ? "نام شهر مقصد خالی است."
-          : `شهر «${quoteRequest.destinationCity}» در فهرست واقعی شهرهای Tapin پیدا نشد.`,
-      candidates: cityMatch.candidates || null,
       available: false,
     };
   }
@@ -439,9 +326,11 @@ export async function quoteViaTapin(env, quoteRequest) {
 
   const packagingWeightGrams = Number(config.default_packaging_weight_grams) || 0;
 
-  const requestBody = {
-    receiver_province_id: cityMatch.provinceId,
-    receiver_city_id: cityMatch.cityId,
+  // بدنه Quote — طبق بخش ۸ دستور، شامل نام شهر مقصد (نه شناسه از‌پیش‌حل‌شده؛
+  // حل‌وفصل شهر اکنون سمت VPS انجام می‌شود) به‌همراه تنظیمات کسب‌وکار از
+  // shipping_providers.config_json و اطلاعات واقعی محصول/بسته:
+  const quotePayload = {
+    destination_city: quoteRequest.destinationCity,
     product_type_id: config.product_type_id,
     packing_type_id: config.packing_type_id,
     payment_type: config.payment_type,
@@ -458,20 +347,36 @@ export async function quoteViaTapin(env, quoteRequest) {
     weight_package: packagingWeightGrams,
   };
 
-  const result = await tapinRequest(env, "/tipax/public/user/order/check-price/", requestBody);
+  const result = await requestTapinQuoteViaProxy(env, quotePayload);
   if (!result.ok) {
     return { ok: false, provider: "tapin", ...result, available: false };
   }
 
-  const entries = result.data?.entries || {};
+  const responseData = result.data || {};
 
-  // واحد پول (صادقانه): PDF صراحتاً می‌گوید مقادیر ارزش کالا در Request «به
-  // ریال» هستند؛ برای فیلدهای Response (price_send_total و...) واحد به‌صراحت
-  // در متن تکرار نشده. چون کل اکوسیستم مستندات و مثال‌های عددی تیپاکس بر
-  // مبنای ریال است، همان واحد برای Response هم فرض و به تومان (واحد داخلی
-  // پروژه) تبدیل شده — این یک استنباط مستندات‌محور است، نه حدس دلبخواه؛
-  // توصیه می‌شود در اولین تماس واقعی، مبلغ با پنل Tapin مقایسه/تأیید شود.
-  const costToman = Math.round((Number(entries.price_send_total) || 0) / RIAL_PER_TOMAN);
+  // اگر Proxy سطح HTTP موفق بوده ولی خود Quote منطقاً ناموفق است (مثلاً شهر
+  // پیدا نشد/مبهم بود یا Tapin خطا داده) — این‌جا Proxy طبق قرارداد فرضی
+  // { ok: false, error, message, candidates? } را برمی‌گرداند و Worker فقط
+  // آن را بدون تفسیر اضافه Passthrough می‌کند (منطق تفسیر خطا اکنون سمت VPS
+  // است، نه اینجا).
+  if (responseData.ok === false) {
+    return {
+      ok: false,
+      provider: "tapin",
+      error: responseData.error || "TAPIN_API_ERROR",
+      message: responseData.message || null,
+      candidates: responseData.candidates || null,
+      available: false,
+    };
+  }
+
+  // واحد پول (صادقانه): همان ابهام قبلی هنوز حل‌نشده مانده — این مرحله هم
+  // بدون یک Real Quote واقعی اجرا نشده، پس این تبدیل هنوز یک استنباط
+  // مستندات‌محور است، نه چیزی که با پاسخ واقعی Tapin تأیید شده باشد.
+  const costToman =
+    responseData.cost != null
+      ? Math.round(Number(responseData.cost))
+      : Math.round((Number(responseData.price_send_total) || 0) / RIAL_PER_TOMAN);
 
   const estimatedDelivery =
     config.service_type === 7
@@ -489,16 +394,11 @@ export async function quoteViaTapin(env, quoteRequest) {
     currency: "IRT",
     estimated_delivery: estimatedDelivery,
     available: true,
-    tracking: null, // check-price سفارش ثبت نمی‌کند؛ کد رهگیری فقط بعد از ثبت سفارش واقعی وجود دارد (خارج از محدوده این مرحله)
-    quote_id: null, // برخلاف register، متد check-price هیچ uuid/شناسه‌ای برنمی‌گرداند
+    tracking: responseData.tracking ?? null,
+    quote_id: responseData.quote_id ?? null,
     metadata: {
-      raw_entries: entries,
-      matched_city: {
-        cityId: cityMatch.cityId,
-        provinceId: cityMatch.provinceId,
-        provinceTitle: cityMatch.provinceTitle,
-        cityTitle: cityMatch.cityTitle,
-      },
+      raw_response: responseData,
+      matched_city: responseData.matched_city || null,
     },
   };
 }
