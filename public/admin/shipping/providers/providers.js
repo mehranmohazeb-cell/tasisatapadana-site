@@ -86,8 +86,15 @@ async function loadProviders() {
   container.innerHTML = '<p class="loading">در حال بارگذاری...</p>';
   try {
     const data = await fetchAdmin("/admin/shipping-providers");
-    renderProviders(data.providers || []);
+
+    // مقدار «حالت محاسبه ارسال» همیشه از پاسخ واقعی Backend روی مقدار
+    // select ست می‌شود — قبل از renderProviders و مستقل از موفقیت آن، تا
+    // اگر رندر لیست Providerها (که ربطی به این مقدار ندارد) به هر دلیلی خطا
+    // بدهد، select همچنان به‌درستی مقدار واقعی ذخیره‌شده در D1 را نشان دهد
+    // و به‌صورت نامرئی به مقدار پیش‌فرض HTML («internal») برنگردد.
     document.getElementById("mode-select").value = data.shipping_calculation_mode || "internal";
+
+    renderProviders(data.providers || []);
 
     const tapin = (data.providers || []).find((p) => p.code === "tapin");
     const tapinCard = document.getElementById("tapin-config-card");
@@ -110,11 +117,16 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("save-mode")?.addEventListener("click", async () => {
     const mode = document.getElementById("mode-select").value;
     try {
-      await fetchAdmin("/admin/shipping-calculation-mode", {
+      const result = await fetchAdmin("/admin/shipping-calculation-mode", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
+      // select را دقیقاً روی مقداری که Backend تأیید کرده (result.mode) قرار
+      // بده، نه صرفاً آنچه قبل از ارسال روی صفحه انتخاب شده بود — تا اگر
+      // مقدار واقعاً ذخیره‌شده با انتخاب کاربر فرق داشت، بلافاصله در همان
+      // لحظه روی صفحه دیده شود، نه فقط بعد از یک Refresh بعدی.
+      document.getElementById("mode-select").value = result.mode || mode;
       showToast("حالت محاسبه ارسال ذخیره شد.", "success");
     } catch (error) {
       showToast(error.message, "error");
