@@ -135,6 +135,33 @@ function safeParseJson(value) {
 
 const TAPIN_API_BASE = "https://api.tapin.ir/api/v4";
 
+// -------------------------------------------------------------------------
+// Integration Proxy (VPS) — طبق دستور معماری این مرحله:
+//   Worker → Integration Proxy (روی VPS با IP ثابت) → Tapin API
+// چون Token واقعی Tapin به IP ثابت VPS محدود شده، Worker دیگر مستقیماً
+// api.tapin.ir را صدا نمی‌زند (TAPIN_API_BASE فقط برای مستندسازی/ارجاع
+// نگه داشته شده — مقصد واقعی درخواست، Proxy است، نه این آدرس).
+//
+// قرارداد فرضی این مرحله با Proxy (چون کد سمت VPS در این Sandbox قابل
+// مشاهده/تغییر نیست — بخش «C — Proxy» گزارش نهایی را ببینید):
+//   POST {INTEGRATION_PROXY_BASE_URL}{INTEGRATION_PROXY_TAPIN_PATH}
+//   Header: Authorization: Bearer <PROXY_API_KEY>
+//   Body:   { path: "<مسیر واقعی Tapin>", body: {...درخواست کامل شامل shop_id...}, authorization: "<مقدار کامل Header Authorization برای Tapin>" }
+//   Response (در حالت موفق Proxy، صرف‌نظر از موفق/ناموفق بودن خود Tapin):
+//     دقیقاً همان JSON خام پاسخ Tapin، بدون تغییر (Passthrough) — تا منطق
+//     تفسیر returns.status که از قبل در این فایل وجود دارد بدون تغییر کار کند.
+//   Response (در حالت خطای سطح Proxy — نه Tapin): بدنه‌ای با کلید
+//     proxy_error و پیام در message، یا صرفاً HTTP status غیر ۲xx.
+// مقصد Tapin در Proxy باید ثابت/Allowlisted باشد (فقط ۳ Endpoint مستندشده
+// همین پروژه)؛ هیچ URL دلخواهی از Worker/کاربر نباید توسط Proxy پذیرفته شود.
+const INTEGRATION_PROXY_DEFAULT_BASE_URL = "https://proxy.tasisatapadanaesfahan.ir";
+const INTEGRATION_PROXY_DEFAULT_TAPIN_PATH = "/tapin/request";
+
+function getProxyCredentials(env) {
+  const apiKey = env.PROXY_API_KEY;
+  return { apiKey, ok: !!apiKey, missing: apiKey ? [] : ["PROXY_API_KEY"] };
+}
+
 // واحد پول: طبق PDF، مقادیر ارزش کالا در Request صراحتاً «به ریال» هستند.
 // پروژه داخلاً بر مبنای «تومان» کار می‌کند (تأیید‌شده از public/store/*.js).
 // تبدیل فقط همین‌جا (در Adapter) انجام می‌شود، نه جای دیگر.
@@ -186,36 +213,83 @@ async function tapinRequest(env, path, body) {
     };
   }
 
+  // Credential مربوط به خود Proxy (نه Tapin) — بدون این، Worker اصلاً اجازه
+  // صدا زدن Integration Proxy را ندارد. این یک خطای جدا از TAPIN_CREDENTIALS_MISSING
+  // است چون علت/محل رفع آن فرق دارد (Secret پروژه، نه چیزی که از Tapin گرفته شود).
+  const proxy = getProxyCredentials(env);
+  if (!proxy.ok) {
+    return {
+      ok: false,
+      error: "PROXY_CREDENTIALS_MISSING",
+      message: `Credential Integration Proxy تنظیم نشده در Worker Secrets: ${proxy.missing.join(", ")}`,
+      missing: proxy.missing,
+    };
+  }
+
   const prefix = env.TAPIN_AUTH_HEADER_PREFIX ?? "Bearer";
   const authHeaderValue = prefix ? `${prefix} ${creds.token}` : creds.token;
 
+  const proxyBaseUrl = env.INTEGRATION_PROXY_BASE_URL || INTEGRATION_PROXY_DEFAULT_BASE_URL;
+  const proxyPath = env.INTEGRATION_PROXY_TAPIN_PATH || INTEGRATION_PROXY_DEFAULT_TAPIN_PATH;
+
+  // معماری اجباری این مرحله: Worker مستقیماً api.tapin.ir را صدا نمی‌زند.
+  // درخواست واقعی Tapin (path/body) به همراه Header Authorization لازم برای
+  // Tapin، در بدنه‌ی درخواست به Integration Proxy قرار می‌گیرد؛ خود Worker→Proxy
+  // با Bearer PROXY_API_KEY احراز هویت می‌شود. Proxy مسئول Forward امن این
+  // درخواست از IP ثابت VPS به Tapin است (مقصد Tapin در Proxy باید Allowlisted
+  // باشد — این بخش در Sandbox قابل پیاده‌سازی/تأیید نیست، به گزارش نهایی مراجعه کنید).
   let response;
   try {
-    response = await fetch(`${TAPIN_API_BASE}${path}`, {
+    response = await fetch(`${proxyBaseUrl}${proxyPath}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeaderValue,
+        Authorization: `Bearer ${proxy.apiKey}`,
       },
-      body: JSON.stringify({ shop_id: creds.shopId, ...body }),
+      body: JSON.stringify({
+        path,
+        body: { shop_id: creds.shopId, ...body },
+        authorization: authHeaderValue,
+      }),
     });
   } catch (error) {
-    return { ok: false, error: "TAPIN_NETWORK_ERROR", message: error.message };
+    return { ok: false, error: "PROXY_NETWORK_ERROR", message: error.message };
   }
 
   let data;
   try {
     data = await response.json();
   } catch (error) {
-    return { ok: false, error: "TAPIN_INVALID_RESPONSE", status: response.status, message: "پاسخ Tapin به‌صورت JSON قابل‌خواندن نبود." };
+    return {
+      ok: false,
+      error: "PROXY_INVALID_RESPONSE",
+      status: response.status,
+      message: "پاسخ Integration Proxy به‌صورت JSON قابل‌خواندن نبود.",
+    };
   }
 
+  // خطای سطح Proxy (نه Tapin) — مثلاً رد شدن احراز هویت PROXY_API_KEY، مسیر
+  // خارج از Allowlist، یا خطای اتصال Proxy→Tapin که خودِ Proxy گزارش کرده.
+  // قرارداد فرضی: چنین خطایی با کلید proxy_error در بدنه مشخص می‌شود؛ بدون
+  // آن، بدنه دقیقاً همان پاسخ خام Tapin در نظر گرفته می‌شود (Passthrough).
+  if (!response.ok || data?.proxy_error) {
+    return {
+      ok: false,
+      error: data?.proxy_error ? "PROXY_ERROR" : "PROXY_HTTP_ERROR",
+      status: response.status,
+      message: data?.message || null,
+    };
+  }
+
+  // از این نقطه به بعد، data دقیقاً همان پاسخ خام Tapin است (Passthrough از
+  // Proxy) — منطق تفسیر زیر بدون تغییر نسبت به تماس مستقیم قبلی حفظ شده:
+  //
   // نکته صادقانه: PDF فقط status=20 ("موفق")، status=21 ("عملیات با موفقیت
   // انجام شد" — برای متدهای changestatus) و یک نمونه خطا (status: "99125")
   // را نشان داده؛ فهرست کامل کدهای خطای Tapin در سند مستند نشده. اینجا هر
   // status غیر از ۲۰/۲۱ به‌عنوان ناموفق در نظر گرفته می‌شود، نه یک enum کامل.
   const tapinStatus = data?.returns?.status;
-  if (!response.ok || (tapinStatus !== 20 && tapinStatus !== 21)) {
+  if (tapinStatus !== 20 && tapinStatus !== 21) {
     return {
       ok: false,
       error: "TAPIN_API_ERROR",
