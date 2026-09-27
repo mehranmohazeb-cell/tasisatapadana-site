@@ -565,28 +565,42 @@ export async function quoteViaTapin(env, quoteRequest) {
 
 export async function recordShippingQuote(env, quote) {
   try {
+    // Schema واقعی shipping_quote_history در D1 فقط این ستون‌ها را دارد:
+    // id, provider_code, calculation_mode, request_json, response_json,
+    // status, error_code, error_message, created_at (auto). هیچ ستون
+    // جداگانه‌ای برای carrier/service/origin/destination_city/weight_grams/
+    // cart_value/quoted_cost/quote_id/ttl_seconds/quoted_at وجود ندارد؛ این
+    // داده‌ها (در صورت نیاز به Audit) داخل request_json/response_json
+    // نگهداری می‌شوند، نه به‌عنوان ستون فیزیکی جدید.
+    const requestPayload = {
+      destination_city: quote.destination_city ?? null,
+      destination_province: quote.destination_province ?? null,
+      weight_grams: quote.weight_grams ?? null,
+      cart_value: quote.cart_value ?? null,
+    };
+    // پاسخ خام Provider (raw) همان چیزی است که قبلاً داخل metadata.raw
+    // نگه‌داری می‌شد؛ همان ساختار موجود بدون تغییر در response_json ذخیره
+    // می‌شود.
+    const responsePayload = quote.metadata?.raw ?? quote.metadata ?? null;
+
+    const isAvailable = quote.available !== false;
+    const errorCode = !isAvailable ? responsePayload?.error ?? null : null;
+    const errorMessage = !isAvailable ? responsePayload?.message ?? null : null;
+
     await env.DB
       .prepare(
         "INSERT INTO shipping_quote_history " +
-        "(provider_code, carrier, service, origin, destination_city, destination_province, weight_grams, " +
-        "cart_value, quoted_cost, currency, available, quote_id, metadata_json, ttl_seconds) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "(provider_code, calculation_mode, request_json, response_json, status, error_code, error_message) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)"
       )
       .bind(
         quote.provider_code || null,
-        quote.carrier || null,
-        quote.service || null,
-        quote.origin || null,
-        quote.destination_city || null,
-        quote.destination_province || null,
-        quote.weight_grams ?? null,
-        quote.cart_value ?? null,
-        quote.quoted_cost ?? null,
-        quote.currency || "IRT",
-        quote.available === false ? 0 : 1,
-        quote.quote_id || null,
-        quote.metadata ? JSON.stringify(quote.metadata) : null,
-        Number.isInteger(quote.ttl_seconds) ? quote.ttl_seconds : 900
+        quote.calculation_mode || null,
+        JSON.stringify(requestPayload),
+        responsePayload != null ? JSON.stringify(responsePayload) : null,
+        isAvailable ? "success" : "error",
+        errorCode,
+        errorMessage
       )
       .run();
     return { ok: true };
@@ -599,7 +613,7 @@ export async function recordShippingQuote(env, quote) {
 export async function listShippingQuoteHistory(env, { limit = 50 } = {}) {
   const safeLimit = Number.isInteger(limit) && limit > 0 && limit <= 500 ? limit : 50;
   const result = await env.DB
-    .prepare(`SELECT * FROM shipping_quote_history ORDER BY quoted_at DESC, id DESC LIMIT ${safeLimit}`)
+    .prepare(`SELECT *, created_at AS quoted_at FROM shipping_quote_history ORDER BY created_at DESC, id DESC LIMIT ${safeLimit}`)
     .all();
   return (result.results || []).map((row) => ({ ...row, metadata: safeParseJson(row.metadata_json) }));
 }
@@ -656,6 +670,7 @@ export async function getShippingOptionsViaEngine(env, { cartItems, city, intern
     });
     await recordShippingQuote(env, {
       provider_code: "tapin",
+      calculation_mode: mode,
       destination_city: city,
       destination_province: onlineResult?.metadata?.matched_city?.provinceTitle || null,
       weight_grams: totalWeight,
