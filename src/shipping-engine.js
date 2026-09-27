@@ -10,19 +10,36 @@
 // اصل معماری (طبق دستور توسعه):
 //   Store / Cart / Checkout → Shipping Engine → { Internal Provider | Online Provider } → Standard Result
 //
-// وضعیت این مرحله (صادقانه، طبق قانون بخش ۴۳ / گزارش دوم Tapin):
-//   - رجیستری Provider، نسخه‌بندی/Import تعرفه، تاریخچه Quote: کامل پیاده و تست‌شده (مرحله قبل).
-//   - Tapin Adapter: «استعلام قیمت» (quoteViaTapin) اکنون یک پیاده‌سازی واقعی
-//     است که مطابق راهنمای رسمی PDF تیپاکس (follow-tapin-tipax-1.pdf) به
-//     Endpointهای واقعی api.tapin.ir متصل می‌شود — نه Skeleton قبلی.
-//     ثبت سفارش/لغو/حذف/Label/Tracking همچنان پیاده نشده‌اند (خارج از محدوده
-//     همین مرحله، طبق دستور صریح کاربر).
-//   - این Adapter بدون Credential واقعی (TAPIN_TOKEN/TAPIN_SHOP_ID) و بدون
-//     تنظیمات کسب‌وکار Tapin (در config_json پنل Providers) قابل تست زنده
-//     نیست؛ به‌جای حدس‌زدن این مقادیر، خطای صریح TAPIN_CREDENTIALS_MISSING /
-//     TAPIN_CONFIG_INCOMPLETE برگردانده می‌شود.
+// وضعیت این مرحله (صادقانه، طبق دستور «هماهنگ‌سازی کامل با Tapin/Tipax»):
+//   - رجیستری Provider، نسخه‌بندی/Import تعرفه، تاریخچه Quote: کامل پیاده و تست‌شده (مراحل قبل).
+//   - Tapin Adapter (quoteViaTapin) اکنون طبق قرارداد رسمی مستندشده در
+//     follow-tapin-tipax-1.pdf پیاده شده است، نه فرض نسخه قبلی: نام دقیق
+//     فیلدهای products[] (discount_per_count/amount_per_count/weight_per_count/
+//     count) و بدنه اصلی (length/width/height/package_weight/pickup_type)
+//     اصلاح شد؛ ابعاد/وزن واقعی بسته دیگر همیشه ۵×۵×۵ نیست — از D1 واقعی
+//     (Override بسته‌بندی محصول یا برآورد لایه packaging-estimation.js با
+//     تلرانس) خوانده می‌شود؛ service_type دیگر یک عدد ثابت در config نیست،
+//     بلکه بر اساس شهر مبدأ (config.origin_city) در برابر شهر مقصد به‌صورت
+//     پویا محاسبه می‌شود (بخش ۸ دستور).
+//   - محدودیت صادقانه و آگاهانه این مرحله (بخش ۱۶ دستور): چون Endpoint
+//     check-price فقط یک بسته (نه آرایه‌ای از بسته‌ها) می‌پذیرد، quoteViaTapin
+//     فقط برای سبدی با دقیقاً یک قلم کالای متفاوت کار می‌کند؛ در غیر این
+//     صورت خطای صریح TAPIN_MULTI_PACKAGE_UNSUPPORTED برمی‌گرداند (نه تبدیل
+//     زورکی چند کالا به یک بسته). داده ابعاد/وزن ناقص هم TAPIN_PACKAGE_DIMENSIONS_INCOMPLETE
+//     برمی‌گرداند، نه یک تخمین محافظه‌کارانهٔ بی‌صدا.
+//   - ثبت سفارش/لغو/حذف/Label/Tracking همچنان پیاده نشده‌اند (خارج از محدوده
+//     همین مرحله، طبق دستور صریح: «Register آماده ولی Disabled»).
+//   - این Adapter بدون Credential واقعی (که طبق تصمیم مرحله قبل، دیگر روی
+//     Worker نیست و فقط روی VPS/integrations/tapin.py نگه‌داری می‌شود) و
+//     بدون تنظیمات کسب‌وکار Tapin (در config_json پنل Providers) قابل تست
+//     زنده نیست؛ خطای صریح TAPIN_CONFIG_INCOMPLETE برگردانده می‌شود.
+//   - این Sandbox هیچ دسترسی شبکه/SSH به VPS واقعی یا به api.tapin.ir ندارد؛
+//     بنابراین Test A تا G سند («تست اجباری») با پاسخ واقعی Tapin در همین
+//     محیط قابل اجرا نیستند. آنچه واقعاً انجام شده: تست واحد/Contract روی
+//     منطق ساخت Request (فیلدها/ابعاد/service_type) با Proxy Mock — نه یک
+//     Round-trip واقعی. این محدودیت باید در گزارش نهایی هم تکرار شود.
 //   - اتصال زنده Cart/Checkout مشتری به این Engine: همچنان انجام نشده (طبق
-//     دستور صریح — فعلاً فقط از Endpoint Admin «shipping-engine-preview»
+//     دستور صریح بخش ۲۱ — فعلاً فقط از Endpoint Admin «shipping-engine-preview»
 //     قابل تست است). resolveShippingOptionsForCart و shipping_table_rates
 //     به‌عنوان موتور داخلی واقعی سایت، کاملاً دست‌نخورده مانده‌اند.
 //   - shipping_calculation_mode در D1 واقعی مقدار قدیمی «table_rate» را دارد؛
@@ -32,6 +49,12 @@
 //     مرحله عمداً reconcile نشده.
 // =========================================================================
 
+
+import {
+  estimateProductPackage,
+  resolveEffectiveProfile,
+  loadPackagingProfiles,
+} from "./packaging-estimation.js";
 
 export const SHIPPING_CALCULATION_MODES = ["internal", "online", "online_fallback_internal"];
 
@@ -194,13 +217,17 @@ const RIAL_PER_TOMAN = 10;
 // سند مشخص نشده. عمداً حدس زده نمی‌شوند — باید از پنل «Providers» برای
 // Provider با code='tapin' در ستون config (JSON) تنظیم شوند. این بخش طبق
 // بخش ۸ دستور («همان منبع config_json حفظ شود») بدون تغییر مانده.
+// این فیلدها مستقیماً طبق راهنمای رسمی PDF تیپاکس (follow-tapin-tipax-1.pdf)
+// مستندشده‌اند؛ هر enum دیگری که در نسخه قبلی این فایل حدس زده شده بود
+// (مثلاً product_type_id=2/3/4) حذف شد — طبق اصل «هیچ enum را حدس نزن».
+// service_type از این فهرست عمداً حذف شده: دیگر یک مقدار ثابت پیکربندی‌شده
+// نیست، بلکه پویا و بر اساس مبدأ/مقصد محاسبه می‌شود (پایین‌تر، getTapinServiceType).
 const TAPIN_REQUIRED_CONFIG_FIELDS = [
-  "product_type_id", // نوع کالا: ۱=بسته/عمومی، ۲=اوراق و اسناد بانکی(پاکت)/نامه، ۳=عمومی/نامه، ۴=مایعات-شکستنی/بسته
-  "packing_type_id", // نوع بسته‌بندی (pk از جدول type_pack مستندشده در PDF — مثلاً ۲="نیاز به بسته‌بندی ندارد" برای کارتن)
-  "payment_type", // طبق جدول enum سند: ۱۰=آنلاین، ۲۰=پس‌کرایه (توجه: متن توضیحی سند این دو را «نقدی»/«پس‌کرایه» نامیده — ناهماهنگی داخل خود سند؛ در گزارش نهایی تکرار شده)
-  "service_type", // ۲=اکسپرس ویژه بین‌شهری، ۷=اکسپرس درون‌شهری
-  "delivery_type", // ۱۰=تحویل در محل مشتری، ۲۰=تحویل در محل نمایندگی
-  "type_pickup", // ۱۰=جمع‌آوری در محل مشتری، ۲۰=جمع‌آوری در نمایندگی
+  "product_type_id", // ۱ = عمومی (تنها مقدار مستندشده در این مرحله)
+  "packing_type_id", // ۲ = نیاز به بسته‌بندی ندارد (تنها مقدار مستندشده در این مرحله)
+  "payment_type", // ۱۰ = سمت فرستنده/نقدی، ۲۰ = پس‌کرایه (بخش ۹ دستور: ۲۰ فعلاً نباید فعال شود مگر مسیر COD واقعی تکمیل شود)
+  "delivery_type", // ۱۰ = تحویل در محل مشتری، ۲۰ = تحویل در محل نمایندگی
+  "pickup_type", // ۱۰ = جمع‌آوری در محل مشتری، ۲۰ = جمع‌آوری در نمایندگی (نام قبلی نادرست «type_pickup» بود؛ این‌جا اصلاح شد)
 ];
 
 async function getTapinBusinessConfig(env) {
@@ -208,6 +235,107 @@ async function getTapinBusinessConfig(env) {
   const config = safeParseJson(row?.config_json) || {};
   const missing = TAPIN_REQUIRED_CONFIG_FIELDS.filter((f) => config[f] === undefined || config[f] === null);
   return { config, missing };
+}
+
+// service_type پویا (بخش ۸ دستور): ۷=اکسپرس درون‌شهری اگر مبدأ (شهر
+// فروشگاه، از config.origin_city) با شهر مقصد یکی باشد؛ در غیر این صورت
+// ۲=اکسپرس ویژه بین‌شهری. هر دو عدد و همچنین شهر مبدأ از پنل Providers قابل
+// تنظیم‌اند (config.service_type_local / service_type_domestic / origin_city)
+// — مقادیر ۷/۲ پیش‌فرض‌های مستندشده PDF هستند، نه چیزی که این تابع اختراع کند.
+// اگر شهر مبدأ در config تنظیم نشده باشد یا مقصد خالی باشد، به‌صورت محافظه‌کارانه
+// حالت بین‌شهری فرض می‌شود (چون فرض اشتباهِ «درون‌شهری» ریسک SLA/قیمت نادرست
+// بیشتری دارد).
+function getTapinServiceType(config, destinationCity) {
+  const localType = Number(config.service_type_local) || 7;
+  const domesticType = Number(config.service_type_domestic) || 2;
+  const origin = normalizePersianText(config.origin_city || "");
+  const destination = normalizePersianText(destinationCity || "");
+  if (!origin || !destination) return domesticType;
+  return origin === destination ? localType : domesticType;
+}
+
+function isPositiveNumber(value) {
+  return value != null && Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
+// -------------------------------------------------------------------------
+// تعیین بسته واقعی Quote (بخش ۴/۵/۱۶/۱۷ دستور).
+//
+// محدودیت مستندشده و صادقانه: Endpoint استعلام قیمت Tapin فقط یک مجموعه
+// length/width/height/package_weight برای کل درخواست می‌پذیرد (نه یک آرایه
+// از بسته‌ها). به همین دلیل، تا وقتی قرارداد چندبسته‌ای Tapin به‌طور قطعی
+// مستند نشده (بخش ۱۶ دستور)، این تابع فقط سبدی را پشتیبانی می‌کند که دقیقاً
+// یک قلم کالای متفاوت داشته باشد (با هر تعداد از همان یک کالا) — و به‌جای
+// تبدیل زورکی چند کالای متفاوت به یک بسته، خطای صریح TAPIN_MULTI_PACKAGE_UNSUPPORTED
+// برمی‌گرداند.
+// -------------------------------------------------------------------------
+async function resolveTapinPackageSpec(env, { cartItems, productRows }) {
+  const productMap = new Map((productRows || []).map((p) => [p.id, p]));
+  const uniqueProductIds = [...new Set((cartItems || []).map((i) => i.productId))];
+
+  if (uniqueProductIds.length !== 1) {
+    return {
+      ok: false,
+      error: "TAPIN_MULTI_PACKAGE_UNSUPPORTED",
+      message:
+        "استعلام آنلاین Tapin در این مرحله فقط برای سبدی با یک قلم کالای متفاوت پشتیبانی می‌شود؛ Endpoint رسمی check-price تیپاکس فقط یک مجموعه ابعاد/وزن بسته می‌پذیرد و قرارداد چندبسته‌ای هنوز مستند نشده — طبق دستور، بدون حدس زدن غیرفعال ماند.",
+    };
+  }
+
+  const productId = uniqueProductIds[0];
+  const product = productMap.get(productId);
+  if (!product) {
+    return { ok: false, error: "PRODUCT_NOT_FOUND", message: "اطلاعات محصول برای استعلام Tapin در سیستم پیدا نشد." };
+  }
+
+  let classDefaultProfileId = null;
+  try {
+    if (product.shipping_class_id != null) {
+      const row = await env.DB
+        .prepare("SELECT default_packaging_profile_id FROM shipping_classes WHERE id = ?")
+        .bind(product.shipping_class_id)
+        .first();
+      classDefaultProfileId = row?.default_packaging_profile_id ?? null;
+    }
+  } catch (error) {
+    classDefaultProfileId = null;
+  }
+
+  const { byId: profilesById } = await loadPackagingProfiles(env);
+  const profile = resolveEffectiveProfile(product, profilesById, classDefaultProfileId);
+  const estimate = estimateProductPackage(product, profile);
+
+  // بخش ۱۷ دستور: داده ناقص → به‌جای حدس بی‌صدا (که تخمین Conservative داخلی
+  // برای موتور داخلی مجاز است)، برای Tapin به‌صراحت غیرفعال می‌شود.
+  if (estimate.incomplete) {
+    return {
+      ok: false,
+      error: "TAPIN_PACKAGE_DIMENSIONS_INCOMPLETE",
+      message:
+        "ابعاد و وزن واقعی بسته این محصول در سیستم ثبت نشده (نه Override بسته‌بندی و نه ابعاد/وزن پایه محصول کامل است)؛ Tapin بدون این اطلاعات واقعی استعلام نمی‌گیرد.",
+    };
+  }
+
+  // weight_per_count = وزن خود کالا (بخش ۵ دستور)، مستقل از وزن بسته‌بندی.
+  // اگر وزن پایه محصول ثبت نشده ولی Override کامل بسته‌بندی موجود است، از
+  // وزن تخمینی بسته به‌عنوان Fallback صریح (نه صفر) استفاده می‌شود — این
+  // مورد در متادیتای Quote (source) قابل ردیابی است.
+  const weightPerCountGrams = isPositiveNumber(product.weight_grams)
+    ? Math.round(Number(product.weight_grams))
+    : Math.round(estimate.weightGrams);
+
+  return {
+    ok: true,
+    productId,
+    weightPerCountGrams,
+    package: {
+      lengthCm: Math.round(estimate.lengthCm),
+      widthCm: Math.round(estimate.widthCm),
+      heightCm: Math.round(estimate.heightCm),
+      weightGrams: Math.round(estimate.weightGrams),
+      source: estimate.source,
+    },
+  };
 }
 
 // تک تماس Worker→Proxy برای کل Quote — نه تماس‌های جداگانه برای هر
@@ -316,35 +444,56 @@ export async function quoteViaTapin(env, quoteRequest) {
     };
   }
 
-  const items = quoteRequest.items || [];
-  const products = items.map((item) => ({
-    count_per_discount: 0,
-    count_per_amount: Math.round((Number(item.price) || 0) * RIAL_PER_TOMAN),
-    weight_per_count: Number(item.weightGrams) || 0,
-    count: Number(item.quantity) || 1,
+  const cartItems = (quoteRequest.items || []).map((item) => ({
+    productId: Number(item.productId),
+    quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
+    price: Number(item.price) || 0,
+    discount: Number(item.discount) || 0,
   }));
 
-  const packagingWeightGrams = Number(config.default_packaging_weight_grams) || 0;
+  // بخش ۴/۱۶/۱۷ دستور: اطلاعات واقعی بسته/وزن از D1 (productRows، از پیش
+  // توسط فراخواننده واکشی‌شده — طبق الگوی بدون منبع موازی همین پروژه)،
+  // نه هیچ مقدار حدسی/ثابت.
+  const packageSpec = await resolveTapinPackageSpec(env, {
+    cartItems,
+    productRows: quoteRequest.productRows || [],
+  });
+  if (!packageSpec.ok) {
+    return { ok: false, provider: "tapin", error: packageSpec.error, message: packageSpec.message, available: false };
+  }
 
-  // بدنه Quote — طبق بخش ۸ دستور، شامل نام شهر مقصد (نه شناسه از‌پیش‌حل‌شده؛
-  // حل‌وفصل شهر اکنون سمت VPS انجام می‌شود) به‌همراه تنظیمات کسب‌وکار از
-  // shipping_providers.config_json و اطلاعات واقعی محصول/بسته:
+  const item = cartItems.find((i) => i.productId === packageSpec.productId);
+
+  // بخش ۶ دستور: تبدیل تومان→ریال فقط همین یک‌بار، فقط این‌جا.
+  const products = [
+    {
+      discount_per_count: Math.round(item.discount * RIAL_PER_TOMAN),
+      amount_per_count: Math.round(item.price * RIAL_PER_TOMAN),
+      weight_per_count: packageSpec.weightPerCountGrams,
+      count: item.quantity,
+    },
+  ];
+
+  const serviceType = getTapinServiceType(config, quoteRequest.destinationCity);
+
+  // بدنه Quote — طبق بخش ۳ دستور، دقیقاً با نام فیلدهای رسمی Tapin (نه
+  // نام‌های نادرست نسخه قبلی این فایل: count_per_discount/count_per_amount/
+  // weight_package/type_pickup). شهر مقصد به‌صورت نام خام ارسال می‌شود؛
+  // حل‌وفصل province/city همچنان سمت VPS/Proxy انجام می‌شود (بخش ۱۲ دستور:
+  // Worker لیست/Endpoint شهر Tapin را مستقیماً صدا نمی‌زند).
   const quotePayload = {
     destination_city: quoteRequest.destinationCity,
     product_type_id: config.product_type_id,
     packing_type_id: config.packing_type_id,
     payment_type: config.payment_type,
-    service_type: config.service_type,
+    service_type: serviceType,
     delivery_type: config.delivery_type,
-    type_pickup: config.type_pickup,
+    pickup_type: config.pickup_type,
     products,
-    // طبق توافق مستندشده با تیپاکس در PDF («برای ساده‌سازی روند ثبت سفارش،
-    // طی توافقات انجام‌شده با تیپاکس، طول و عرض و ارتفاع بسته، عدد پنج وارد
-    // شود») — این یک مقدار ثابتِ مستندشده است، نه فرض من:
-    length: 5,
-    width: 5,
-    height: 5,
-    weight_package: packagingWeightGrams,
+    length: packageSpec.package.lengthCm,
+    width: packageSpec.package.widthCm,
+    height: packageSpec.package.heightCm,
+    package_weight: packageSpec.package.weightGrams,
   };
 
   const result = await requestTapinQuoteViaProxy(env, quotePayload);
@@ -370,26 +519,30 @@ export async function quoteViaTapin(env, quoteRequest) {
     };
   }
 
-  // واحد پول (صادقانه): همان ابهام قبلی هنوز حل‌نشده مانده — این مرحله هم
-  // بدون یک Real Quote واقعی اجرا نشده، پس این تبدیل هنوز یک استنباط
-  // مستندات‌محور است، نه چیزی که با پاسخ واقعی Tapin تأیید شده باشد.
+  // بخش ۷/۲۷ دستور: مسیر اصلی Parse همان entries.total_send_price مستندشده
+  // است. مسیرهای دیگر (cost/price_send_total) فقط Fallback عقب‌گرد برای
+  // سازگاری با پاسخ فرضی نسخه قبلی این فایل‌اند و هرگز با یک Response واقعی
+  // Tapin تأیید نشده‌اند — این هنوز هم صادقانه باید در گزارش تکرار شود، چون
+  // این Sandbox امکان تماس شبکه واقعی با Proxy/Tapin را ندارد.
+  const entries = responseData.entries || responseData;
+  const totalSendPriceRial = entries?.total_send_price;
   const costToman =
-    responseData.cost != null
+    totalSendPriceRial != null
+      ? Math.round(Number(totalSendPriceRial) / RIAL_PER_TOMAN)
+      : responseData.cost != null
       ? Math.round(Number(responseData.cost))
       : Math.round((Number(responseData.price_send_total) || 0) / RIAL_PER_TOMAN);
 
   const estimatedDelivery =
-    config.service_type === 7
+    serviceType === Number(config.service_type_local) || (serviceType === 7 && config.service_type_local == null)
       ? "۱ تا ۲ روز کاری (SLA مستندشده سرویس اکسپرس درون‌شهری تیپاکس)"
-      : config.service_type === 2
-      ? "۲ تا ۳ روز کاری (SLA مستندشده سرویس اکسپرس ویژه بین‌شهری تیپاکس)"
-      : null;
+      : "۲ تا ۳ روز کاری (SLA مستندشده سرویس اکسپرس ویژه بین‌شهری تیپاکس)";
 
   return {
     ok: true,
     provider: "tapin",
     carrier: "tipax",
-    service: config.service_type === 7 ? "اکسپرس درون‌شهری" : "اکسپرس ویژه بین‌شهری",
+    service: serviceType === 7 ? "اکسپرس درون‌شهری" : "اکسپرس ویژه بین‌شهری",
     cost: costToman,
     currency: "IRT",
     estimated_delivery: estimatedDelivery,
@@ -399,6 +552,8 @@ export async function quoteViaTapin(env, quoteRequest) {
     metadata: {
       raw_response: responseData,
       matched_city: responseData.matched_city || null,
+      package: packageSpec.package,
+      service_type: serviceType,
     },
   };
 }
@@ -456,7 +611,7 @@ export async function listShippingQuoteHistory(env, { limit = 50 } = {}) {
 // (تزریق‌شده از index.js تا این ماژول به آن تابع خصوصی وابسته/کپی نشود).
 // -------------------------------------------------------------------------
 
-export async function getShippingOptionsViaEngine(env, { cartItems, city, internalOptionsFn }) {
+export async function getShippingOptionsViaEngine(env, { cartItems, city, internalOptionsFn, productRows }) {
   const mode = await getShippingCalculationMode(env);
 
   const internalToStandard = (methods) =>
@@ -484,19 +639,20 @@ export async function getShippingOptionsViaEngine(env, { cartItems, city, intern
 
   let onlineResult = null;
   if (tapin && tapin.status === "active" && tapin.mode === "quote") {
-    const totalWeight = (cartItems || []).reduce(
-      (sum, item) => sum + (Number(item.weightGrams) || 0) * (Number(item.quantity) || 1),
-      0
-    );
+    const productMap = new Map((productRows || []).map((p) => [p.id, p]));
+    const totalWeight = (cartItems || []).reduce((sum, item) => {
+      const fromRow = productMap.get(item.productId)?.weight_grams;
+      const weight = fromRow != null ? Number(fromRow) : Number(item.weightGrams) || 0;
+      return sum + weight * (Number(item.quantity) || 1);
+    }, 0);
     const totalValue = (cartItems || []).reduce(
       (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
       0
     );
     onlineResult = await quoteViaTapin(env, {
       destinationCity: city,
-      weightGrams: totalWeight,
-      cartValue: totalValue,
       items: cartItems || [],
+      productRows: productRows || [],
     });
     await recordShippingQuote(env, {
       provider_code: "tapin",

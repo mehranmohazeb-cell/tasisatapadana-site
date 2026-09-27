@@ -4865,13 +4865,24 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       // (بخش ۴۰ دستور: بدون ساخت منبع موازی). این اطلاعات برای Tapin Adapter
       // (که به وزن/قیمت هر قلم برای products[] نیاز دارد) هم لازم است.
       let productsById = new Map();
+      let productRows = [];
       if (productIds.length > 0) {
         const placeholders = productIds.map(() => "?").join(",");
+        // ستون‌های کامل بسته‌بندی (نه فقط weight_grams) — چون quoteViaTapin
+        // برای ساخت length/width/height/package_weight واقعی (بخش ۴/۱۷ دستور)
+        // به همین اطلاعات نیاز دارد، دقیقاً همان‌طور که resolveShippingOptionsForCart
+        // برای موتور داخلی می‌خواند (بدون منبع موازی).
         const productsResult = await env.DB
-          .prepare(`SELECT id, name, price, weight_grams FROM products WHERE id IN (${placeholders})`)
+          .prepare(
+            "SELECT id, name, price, weight_grams, shipping_class_id, length_cm, width_cm, height_cm, " +
+            "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, " +
+            "package_weight_grams, packaging_confidence " +
+            `FROM products WHERE id IN (${placeholders})`
+          )
           .bind(...productIds)
           .all();
-        productsById = new Map((productsResult.results || []).map((p) => [p.id, p]));
+        productRows = productsResult.results || [];
+        productsById = new Map(productRows.map((p) => [p.id, p]));
       }
 
       const cartItems = productIds.map((id, index) => {
@@ -4889,6 +4900,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         cartItems,
         city,
         internalOptionsFn: resolveShippingOptionsForCart,
+        productRows,
       });
 
       return Response.json({ ok: true, ...engineResult });
