@@ -38,10 +38,11 @@
 //     محیط قابل اجرا نیستند. آنچه واقعاً انجام شده: تست واحد/Contract روی
 //     منطق ساخت Request (فیلدها/ابعاد/service_type) با Proxy Mock — نه یک
 //     Round-trip واقعی. این محدودیت باید در گزارش نهایی هم تکرار شود.
-//   - اتصال زنده Cart/Checkout مشتری به این Engine: همچنان انجام نشده (طبق
-//     دستور صریح بخش ۲۱ — فعلاً فقط از Endpoint Admin «shipping-engine-preview»
-//     قابل تست است). resolveShippingOptionsForCart و shipping_table_rates
-//     به‌عنوان موتور داخلی واقعی سایت، کاملاً دست‌نخورده مانده‌اند.
+//   - اتصال زنده مشتری (مرحله «اصلاح نهایی Quote/Tapin»): Estimate صفحه محصول،
+//     Cart و Checkout (هم Preview روش‌ها، هم ثبت نهایی سفارش) اکنون همگی از
+//     resolveCustomerShipping در همین فایل می‌گذرند؛ موتور داخلی
+//     (resolveShippingOptionsForCart) همچنان دست‌نخورده و به‌عنوان
+//     internalOptionsFn/Fallback تزریق می‌شود. Register سفارش Tapin همچنان Disabled است.
 //   - shipping_calculation_mode: تست مستقیم روی D1 واقعی نشان داد ستون
 //     "site_settings.shipping_calculation_mode" یک CHECK constraint واقعی
 //     دارد که فقط مقادیر 'table_rate' و 'engine' را مجاز می‌دانست (خطای
@@ -243,6 +244,14 @@ const INTEGRATION_PROXY_DEFAULT_BASE_URL = "https://proxy.tasisatapadanaesfahan.
 // فقط برای مواقع اضطراری/تغییر آینده، نه چیزی که معمولاً باید عوض شود.
 const INTEGRATION_PROXY_DEFAULT_QUOTE_PATH = "/api/v1/tapin/quote";
 
+// destination_province جزو قرارداد شناخته‌شدهٔ Worker → VPS نیست و کد VPS در
+// اختیار ما نیست؛ اگر Proxy فیلد اضافه را رد کند (Pydantic extra=forbid → 422)
+// هر Quote می‌شکند. بنابراین فقط وقتی ارسال می‌شود که پس از اصلاح واقعی VPS،
+// Worker Variable با نام TAPIN_PROXY_SEND_PROVINCE=true صریحاً تنظیم شده باشد.
+function isProvinceForwardingEnabled(env) {
+  return String(env?.TAPIN_PROXY_SEND_PROVINCE || "").trim().toLowerCase() === "true";
+}
+
 function getProxyCredentials(env) {
   const apiKey = env.PROXY_API_KEY;
   return { apiKey, ok: !!apiKey, missing: apiKey ? [] : ["PROXY_API_KEY"] };
@@ -357,13 +366,26 @@ async function resolveTapinPackageSpec(env, { cartItems, productRows }) {
     };
   }
 
-  // weight_per_count = وزن خود کالا (بخش ۵ دستور)، مستقل از وزن بسته‌بندی.
-  // اگر وزن پایه محصول ثبت نشده ولی Override کامل بسته‌بندی موجود است، از
-  // وزن تخمینی بسته به‌عنوان Fallback صریح (نه صفر) استفاده می‌شود — این
-  // مورد در متادیتای Quote (source) قابل ردیابی است.
-  const weightPerCountGrams = isPositiveNumber(product.weight_grams)
-    ? Math.round(Number(product.weight_grams))
-    : Math.round(estimate.weightGrams);
+  // بخش ۵ دستور: weight_per_count = وزن خود کالا و package_weight = وزن
+  // بسته‌بندی؛ این دو هرگز با هم قاطی نمی‌شوند.
+  //   - وزن کالا فقط از product.weight_grams (داده واقعی) می‌آید. اگر ثبت
+  //     نشده باشد، وزن جعلی/جایگزین (مثلاً وزن بسته) ساخته نمی‌شود.
+  //   - وزن بسته‌بندی: اگر Override واقعی بسته‌بندی محصول موجود است
+  //     (source ≠ ESTIMATED) همان package_weight_grams است؛ اگر برآورد با
+  //     تلرانس بوده، فقط «سهم بسته‌بندی/تلرانس» = وزن برآوردی − وزن کالا،
+  //     تا وزن کالا دوبار شمرده نشود.
+  if (!isPositiveNumber(product.weight_grams)) {
+    return {
+      ok: false,
+      error: "TAPIN_PACKAGE_DIMENSIONS_INCOMPLETE",
+      message: "وزن واقعی کالا (weight_grams) برای این محصول ثبت نشده؛ Tapin بدون وزن واقعی کالا استعلام نمی‌گیرد و وزن جایگزین ساخته نمی‌شود.",
+    };
+  }
+  const weightPerCountGrams = Math.round(Number(product.weight_grams));
+  const packagingWeightGrams =
+    estimate.source === "ESTIMATED"
+      ? Math.max(Math.round(estimate.weightGrams) - weightPerCountGrams, 0)
+      : Math.round(estimate.weightGrams);
 
   return {
     ok: true,
@@ -373,7 +395,7 @@ async function resolveTapinPackageSpec(env, { cartItems, productRows }) {
       lengthCm: Math.round(estimate.lengthCm),
       widthCm: Math.round(estimate.widthCm),
       heightCm: Math.round(estimate.heightCm),
-      weightGrams: Math.round(estimate.weightGrams),
+      weightGrams: packagingWeightGrams,
       source: estimate.source,
     },
   };
@@ -517,13 +539,14 @@ export async function quoteViaTapin(env, quoteRequest) {
 
   const serviceType = getTapinServiceType(config, quoteRequest.destinationCity);
 
-  // بدنه Quote — طبق بخش ۳ دستور، دقیقاً با نام فیلدهای رسمی Tapin (نه
-  // نام‌های نادرست نسخه قبلی این فایل: count_per_discount/count_per_amount/
-  // weight_package/type_pickup). شهر مقصد به‌صورت نام خام ارسال می‌شود؛
-  // حل‌وفصل province/city همچنان سمت VPS/Proxy انجام می‌شود (بخش ۱۲ دستور:
-  // Worker لیست/Endpoint شهر Tapin را مستقیماً صدا نمی‌زند).
+  // بدنه Quote — دقیقاً با نام فیلدهای رسمی Tapin (بخش ۳ دستور). شهر مقصد
+  // به‌صورت نام خام ارسال می‌شود؛ حل‌وفصل province/city سمت VPS/Proxy انجام
+  // می‌شود (Worker لیست/Endpoint شهر Tapin را مستقیماً صدا نمی‌زند).
   const quotePayload = {
     destination_city: quoteRequest.destinationCity,
+    ...(quoteRequest.destinationProvince && isProvinceForwardingEnabled(env)
+      ? { destination_province: quoteRequest.destinationProvince }
+      : {}),
     product_type_id: config.product_type_id,
     packing_type_id: config.packing_type_id,
     payment_type: config.payment_type,
@@ -560,19 +583,26 @@ export async function quoteViaTapin(env, quoteRequest) {
     };
   }
 
-  // بخش ۷/۲۷ دستور: مسیر اصلی Parse همان entries.total_send_price مستندشده
-  // است. مسیرهای دیگر (cost/price_send_total) فقط Fallback عقب‌گرد برای
-  // سازگاری با پاسخ فرضی نسخه قبلی این فایل‌اند و هرگز با یک Response واقعی
-  // Tapin تأیید نشده‌اند — این هنوز هم صادقانه باید در گزارش تکرار شود، چون
-  // این Sandbox امکان تماس شبکه واقعی با Proxy/Tapin را ندارد.
-  const entries = responseData.entries || responseData;
+  // فقط فیلد مستندشدهٔ Tapin پذیرفته می‌شود: entries.total_send_price (ریال).
+  // فیلدهای حدسی (مثل cost که واحدش معلوم نیست) عمداً پذیرفته نمی‌شوند تا
+  // تبدیل واحد دوباره/اشتباه رخ ندهد؛ تبدیل ریال→تومان فقط همین یک‌بار است.
+  const entries = responseData.entries || null;
   const totalSendPriceRial = entries?.total_send_price;
-  const costToman =
-    totalSendPriceRial != null
-      ? Math.round(Number(totalSendPriceRial) / RIAL_PER_TOMAN)
-      : responseData.cost != null
-      ? Math.round(Number(responseData.cost))
-      : Math.round((Number(responseData.price_send_total) || 0) / RIAL_PER_TOMAN);
+  let costToman = null;
+  if (totalSendPriceRial != null && totalSendPriceRial !== "") {
+    costToman = Math.round(Number(totalSendPriceRial) / RIAL_PER_TOMAN);
+  }
+  // Fail-Safe (بخش ۲۵ دستور): پاسخ بدون مبلغ قابل‌اتکا هرگز «ارسال رایگان»
+  // یا موفقیت نمایش داده نمی‌شود.
+  if (!Number.isFinite(costToman) || costToman <= 0) {
+    return {
+      ok: false,
+      provider: "tapin",
+      error: "TAPIN_RESPONSE_UNRECOGNIZED",
+      message: "پاسخ Tapin مبلغ معتبر ارسال نداشت (entries.total_send_price).",
+      available: false,
+    };
+  }
 
   const estimatedDelivery =
     serviceType === Number(config.service_type_local) || (serviceType === 7 && config.service_type_local == null)
@@ -618,6 +648,7 @@ export async function recordShippingQuote(env, quote) {
       destination_province: quote.destination_province ?? null,
       weight_grams: quote.weight_grams ?? null,
       cart_value: quote.cart_value ?? null,
+      ...(quote.request_extra || {}),
     };
     // پاسخ خام Provider (raw) همان چیزی است که قبلاً داخل metadata.raw
     // نگه‌داری می‌شد؛ همان ساختار موجود بدون تغییر در response_json ذخیره
@@ -660,77 +691,223 @@ export async function listShippingQuoteHistory(env, { limit = 50 } = {}) {
 }
 
 // -------------------------------------------------------------------------
-// Orchestration — هنوز به Endpoint عمومی Cart/Checkout وصل نشده (بالا
-// توضیح داده شد چرا)؛ فقط برای Endpoint پیش‌نمایش Admin استفاده می‌شود.
-// internalOptionsFn باید دقیقاً resolveShippingOptionsForCart موجود باشد
-// (تزریق‌شده از index.js تا این ماژول به آن تابع خصوصی وابسته/کپی نشود).
+// مسیر مشترک Quote مشتری (Shared Shipping Quote) — بخش ۶/۲۸ دستور.
+//
+//   Estimate صفحه محصول / Cart / Checkout (Preview و ثبت نهایی سفارش) /
+//   پیش‌نمایش Admin → همه فقط از همین یک تابع می‌گذرند:
+//
+//     resolveCustomerShipping → { internal | Tapin (via VPS Proxy) }
+//
+// رفتار حالت‌ها:
+//   internal (engine/table_rate در D1) → فقط موتور داخلی (internalOptionsFn).
+//   online                              → فقط Tapin؛ اگر شکست/غیرفعال بود
+//                                         هیچ Fallback بی‌صدایی وجود ندارد
+//                                         (shipping_methods=[] + unavailable).
+//   online_fallback_internal            → Tapin؛ فقط در صورت شکست، موتور
+//                                         داخلی با fell_back=true و
+//                                         source='internal' (هیچ‌وقت به اسم Tapin).
+//
+// قیمت/وزن/ابعاد همیشه از D1 خوانده می‌شود (نه ورودی مرورگر) تا Estimate و
+// Checkout برای شرایط یکسان دقیقاً یک Quote یکسان بسازند.
+// internalOptionsFn باید دقیقاً resolveShippingOptionsForCart موجود باشد.
 // -------------------------------------------------------------------------
 
-export async function getShippingOptionsViaEngine(env, { cartItems, city, internalOptionsFn, productRows }) {
-  const mode = await getShippingCalculationMode(env);
+export const TAPIN_OPTION_ID = "tapin";
 
-  const internalToStandard = (methods) =>
-    (methods || []).map((m) => ({
-      provider: "internal",
-      carrier: null,
-      service: m.name,
-      cost: Number(m.cost) || 0,
-      currency: "IRT",
-      estimated_delivery: null,
-      available: true,
-      tracking: null,
-      quote_id: null,
-      metadata: { shipping_method_id: m.id, cost_type: m.cost_type, scope: m.scope },
-    }));
+const ONLINE_UNAVAILABLE_MESSAGES = {
+  TAPIN_MULTI_PACKAGE_UNSUPPORTED:
+    "برآورد آنلاین ارسال برای سبد شامل چند کالای متفاوت فعلاً ممکن نیست. لطفاً با پشتیبانی تماس بگیرید.",
+  TAPIN_PACKAGE_DIMENSIONS_INCOMPLETE:
+    "اطلاعات ابعاد/وزن بسته این کالا برای برآورد آنلاین کامل نیست. لطفاً با پشتیبانی تماس بگیرید.",
+  TAPIN_CONFIG_INCOMPLETE: "امکان برآورد آنلاین ارسال در حال حاضر وجود ندارد.",
+  TAPIN_PROVIDER_INACTIVE: "امکان برآورد آنلاین ارسال در حال حاضر وجود ندارد.",
+  AMBIGUOUS_CITY_NAME: "شهر انتخاب‌شده برای ارسال آنلاین مبهم است؛ لطفاً استان و شهر را دقیق‌تر انتخاب کنید.",
+  CITY_NOT_FOUND: "برای این شهر امکان ارسال آنلاین پیدا نشد. لطفاً با پشتیبانی تماس بگیرید.",
+};
+const ONLINE_UNAVAILABLE_DEFAULT_MESSAGE =
+  "امکان برآورد آنلاین هزینه ارسال در حال حاضر وجود ندارد. لطفاً کمی بعد دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.";
+
+const PRODUCT_SHIPPING_COLUMNS =
+  "id, name, price, weight_grams, shipping_class_id, length_cm, width_cm, height_cm, " +
+  "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, " +
+  "package_weight_grams, packaging_confidence";
+
+export function normalizeShippingCartItems(cartItems) {
+  const merged = new Map();
+  for (const item of cartItems || []) {
+    const productId = Number(typeof item === "object" && item !== null ? item.productId ?? item.id : item);
+    if (!Number.isInteger(productId) || productId <= 0) continue;
+    const quantity = typeof item === "object" && item !== null && Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+    merged.set(productId, (merged.get(productId) || 0) + quantity);
+  }
+  return [...merged.entries()].map(([productId, quantity]) => ({ productId, quantity }));
+}
+
+async function loadShippingProductRows(env, productIds) {
+  if (!productIds.length) return [];
+  const placeholders = productIds.map(() => "?").join(",");
+  const result = await env.DB
+    .prepare(`SELECT ${PRODUCT_SHIPPING_COLUMNS} FROM products WHERE id IN (${placeholders})`)
+    .bind(...productIds)
+    .all();
+  return result.results || [];
+}
+
+export async function resolveCustomerShipping(env, { cartItems, city, province, internalOptionsFn, productRows } = {}) {
+  const mode = await getShippingCalculationMode(env);
+  const normalized = normalizeShippingCartItems(cartItems);
+
+  // قیمت و مشخصات واقعی از D1 (هرگز از مرورگر).
+  let rows = productRows;
+  if (!rows) {
+    try {
+      rows = await loadShippingProductRows(env, normalized.map((i) => i.productId));
+    } catch (error) {
+      rows = [];
+    }
+  }
+  const rowMap = new Map((rows || []).map((r) => [Number(r.id), r]));
+  const items = normalized.map((item) => ({
+    productId: item.productId,
+    quantity: item.quantity,
+    price: Number(rowMap.get(item.productId)?.price) || 0,
+    discount: 0,
+  }));
+
+  const asInternal = (methods) =>
+    (methods || []).map((m) => ({ ...m, cost: Number(m.cost) || 0, source: "internal" }));
 
   if (mode === "internal") {
-    const internal = await internalOptionsFn(env, cartItems, city);
-    return { mode, results: internalToStandard(internal) };
+    const internal = await internalOptionsFn(env, items, city);
+    return { mode, source: "internal", shipping_methods: asInternal(internal), fell_back: false, unavailable: null };
   }
 
-  // mode === 'online' یا 'online_fallback_internal'
-  const providers = await listShippingProviders(env);
-  const tapin = providers.find((p) => p.code === "tapin");
+  // mode === 'online' | 'online_fallback_internal'
+  let onlineResult;
+  let tapinProvider = null;
+  try {
+    const providers = await listShippingProviders(env);
+    tapinProvider = providers.find((p) => p.code === "tapin") || null;
+  } catch (error) {
+    tapinProvider = null;
+  }
 
-  let onlineResult = null;
-  if (tapin && tapin.status === "active" && tapin.mode === "quote") {
-    const productMap = new Map((productRows || []).map((p) => [p.id, p]));
-    const totalWeight = (cartItems || []).reduce((sum, item) => {
-      const fromRow = productMap.get(item.productId)?.weight_grams;
-      const weight = fromRow != null ? Number(fromRow) : Number(item.weightGrams) || 0;
-      return sum + weight * (Number(item.quantity) || 1);
-    }, 0);
-    const totalValue = (cartItems || []).reduce(
-      (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
-      0
-    );
+  if (!tapinProvider || tapinProvider.status !== "active" || tapinProvider.mode !== "quote") {
+    onlineResult = {
+      ok: false,
+      provider: "tapin",
+      available: false,
+      error: "TAPIN_PROVIDER_INACTIVE",
+      message: "Provider تیپاکس فعال نیست یا در حالت quote نیست.",
+    };
+  } else {
     onlineResult = await quoteViaTapin(env, {
       destinationCity: city,
-      items: cartItems || [],
-      productRows: productRows || [],
+      destinationProvince: province || null,
+      items,
+      productRows: rows || [],
     });
+    const totalWeight = items.reduce(
+      (sum, i) => sum + (Number(rowMap.get(i.productId)?.weight_grams) || 0) * i.quantity,
+      0
+    );
+    const totalValue = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     await recordShippingQuote(env, {
       provider_code: "tapin",
       calculation_mode: mode,
-      destination_city: city,
-      destination_province: onlineResult?.metadata?.matched_city?.provinceTitle || null,
+      destination_city: city || null,
+      destination_province: province || onlineResult?.metadata?.matched_city?.provinceTitle || null,
       weight_grams: totalWeight,
       cart_value: totalValue,
       quoted_cost: onlineResult?.cost ?? null,
       available: !!onlineResult?.ok,
+      request_extra: {
+        items: items.map((i) => ({ product_id: i.productId, quantity: i.quantity, price_toman: i.price })),
+        service_type: onlineResult?.metadata?.service_type ?? null,
+        package: onlineResult?.metadata?.package ?? null,
+        quoted_cost_toman: onlineResult?.cost ?? null,
+      },
       metadata: { raw: onlineResult },
     });
   }
 
   if (onlineResult?.ok) {
-    return { mode, results: [onlineResult] };
+    return {
+      mode,
+      source: "tapin",
+      fell_back: false,
+      unavailable: null,
+      shipping_methods: [
+        {
+          id: TAPIN_OPTION_ID,
+          name: "ارسال با تیپاکس",
+          cost: onlineResult.cost,
+          cost_type: "prepaid",
+          scope: "online",
+          source: "tapin",
+          carrier: onlineResult.carrier || "tipax",
+          service: onlineResult.service || null,
+          estimated_delivery: onlineResult.estimated_delivery || null,
+          quote_id: onlineResult.quote_id || null,
+        },
+      ],
+    };
   }
 
-  if (mode === "online_fallback_internal" || !tapin || tapin.status !== "active") {
-    const internal = await internalOptionsFn(env, cartItems, city);
-    return { mode, results: internalToStandard(internal), fell_back: true };
+  if (mode === "online_fallback_internal") {
+    const internal = await internalOptionsFn(env, items, city);
+    return {
+      mode,
+      source: "internal",
+      shipping_methods: asInternal(internal),
+      fell_back: true,
+      unavailable: null,
+      online_error: onlineResult?.error || "TAPIN_UNAVAILABLE",
+    };
   }
 
-  // mode === 'online' بدون Fallback و بدون Quote موفق
-  return { mode, results: [], fell_back: false };
+  // mode === 'online' (فقط آنلاین): شکست = «در دسترس نیست»، نه Fallback بی‌صدا.
+  const code = onlineResult?.error || "TAPIN_UNAVAILABLE";
+  return {
+    mode,
+    source: "tapin",
+    shipping_methods: [],
+    fell_back: false,
+    unavailable: { code, message: ONLINE_UNAVAILABLE_MESSAGES[code] || ONLINE_UNAVAILABLE_DEFAULT_MESSAGE },
+  };
+}
+
+// سازگاری عقب‌گرد Endpoint پیش‌نمایش Admin: همان مسیر مشترک، با قالب خروجی قبلی.
+export async function getShippingOptionsViaEngine(env, { cartItems, city, province, internalOptionsFn, productRows }) {
+  const shared = await resolveCustomerShipping(env, { cartItems, city, province, internalOptionsFn, productRows });
+  const results = shared.shipping_methods.map((m) =>
+    m.source === "tapin"
+      ? {
+          provider: "tapin",
+          carrier: m.carrier,
+          service: m.service,
+          cost: m.cost,
+          currency: "IRT",
+          estimated_delivery: m.estimated_delivery,
+          available: true,
+          tracking: null,
+          quote_id: m.quote_id,
+          metadata: { option_id: m.id },
+        }
+      : {
+          provider: "internal",
+          carrier: null,
+          service: m.name,
+          cost: Number(m.cost) || 0,
+          currency: "IRT",
+          estimated_delivery: null,
+          available: true,
+          tracking: null,
+          quote_id: null,
+          metadata: { shipping_method_id: m.id, cost_type: m.cost_type, scope: m.scope },
+        }
+  );
+  const out = { mode: shared.mode, results, fell_back: shared.fell_back };
+  if (shared.unavailable) out.unavailable = shared.unavailable;
+  return out;
 }

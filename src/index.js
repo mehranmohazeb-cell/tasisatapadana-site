@@ -10,6 +10,8 @@ import {
   updateShippingProvider,
   listShippingQuoteHistory,
   getShippingOptionsViaEngine,
+  resolveCustomerShipping,
+  TAPIN_OPTION_ID,
   TARIFF_SOURCES,
 } from "./shipping-engine.js";
 
@@ -4910,12 +4912,13 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   // GET /api/store/admin/shipping-engine-preview?city=...&product_ids=1,2&quantities=1,2
   // Admin-only — Orchestration کامل Engine (Provider آنلاین + Fallback طبق
   // shipping_calculation_mode) را بدون هیچ اثر روی Checkout/Cart واقعی مشتری
-  // تست می‌کند. اتصال زنده مشتری هنوز به resolveShippingOptionsForCart است
-  // (بخش «وضعیت این مرحله» در src/shipping-engine.js را ببینید).
+  // تست می‌کند. همین مسیر مشترک (resolveCustomerShipping) اکنون توسط
+  // Estimate/Cart/Checkout مشتری هم استفاده می‌شود.
   if (url.pathname === "/api/store/admin/shipping-engine-preview" && request.method === "GET") {
     if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
     try {
       const city = String(url.searchParams.get("city") || "").trim();
+      const province = String(url.searchParams.get("province") || "").trim();
       const productIdsParam = url.searchParams.get("product_ids");
       const quantitiesParam = url.searchParams.get("quantities");
       const productIds = productIdsParam ? productIdsParam.split(",").map((v) => Number(v.trim())) : [];
@@ -4960,6 +4963,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const engineResult = await getShippingOptionsViaEngine(env, {
         cartItems,
         city,
+        province,
         internalOptionsFn: resolveShippingOptionsForCart,
         productRows,
       });
@@ -5217,9 +5221,24 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         quantity: quantities[index] > 0 ? quantities[index] : 1,
       }));
 
-      const methods = await resolveShippingOptionsForCart(env, cartItems, city);
+      // مسیر مشترک Quote (Estimate صفحه محصول/Cart/Checkout) — بسته به
+      // shipping_calculation_mode: موتور داخلی یا Tapin آنلاین (resolveCustomerShipping).
+      const province = String(url.searchParams.get("province") || "").trim();
+      const shared = await resolveCustomerShipping(env, {
+        cartItems,
+        city,
+        province,
+        internalOptionsFn: resolveShippingOptionsForCart,
+      });
 
-      return Response.json({ ok: true, shipping_methods: methods });
+      return Response.json({
+        ok: true,
+        shipping_methods: shared.shipping_methods,
+        mode: shared.mode,
+        source: shared.source,
+        fell_back: shared.fell_back,
+        unavailable: shared.unavailable,
+      });
     } catch (error) {
       const isMissingTable = /no such table/i.test(error.message || "");
       // Fail-Safe: اگر جدول هنوز Migrate نشده، فهرست خالی برمی‌گردد (نه
@@ -5800,8 +5819,10 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       // آدرس واقعی سفارش و قواعد ارسال واقعی محصولات سبد (نه از داده مرورگر
       // و نه از برآورد قبلی صفحه محصول/سبد) دوباره محاسبه می‌شود. ---
 
-      const shippingMethodId = Number(body.shipping_method_id);
-      if (!Number.isInteger(shippingMethodId) || shippingMethodId <= 0) {
+      // شناسه روش ارسال: عدد (روش داخلی) یا "tapin" (Quote آنلاین Tapin).
+      const isTapinChoice = String(body.shipping_method_id) === TAPIN_OPTION_ID;
+      const shippingMethodId = isTapinChoice ? TAPIN_OPTION_ID : Number(body.shipping_method_id);
+      if (!isTapinChoice && (!Number.isInteger(shippingMethodId) || shippingMethodId <= 0)) {
         return Response.json(
           { ok: false, error: "SHIPPING_METHOD_REQUIRED", message: "لطفاً یک روش ارسال انتخاب کنید." },
           { status: 400 }
@@ -5813,10 +5834,29 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         quantity: item.quantity,
         price: item.price,
       }));
-      const availableShippingOptions = await resolveShippingOptionsForCart(env, cartItemsForShipping, address.city);
+      // همان مسیر مشترک Quote که Estimate/Cart استفاده می‌کنند (نه موتور
+      // موازی). Checkout همیشه Quote تازه می‌گیرد، نه مبلغ قبلی مرورگر.
+      const sharedShipping = await resolveCustomerShipping(env, {
+        cartItems: cartItemsForShipping,
+        city: address.city,
+        province: address.province,
+        internalOptionsFn: resolveShippingOptionsForCart,
+      });
+      const availableShippingOptions = sharedShipping.shipping_methods;
       const shippingMethod = availableShippingOptions.find((m) => m.id === shippingMethodId);
 
       if (!shippingMethod) {
+        if (sharedShipping.unavailable) {
+          return Response.json(
+            {
+              ok: false,
+              error: "SHIPPING_QUOTE_UNAVAILABLE",
+              message: sharedShipping.unavailable.message,
+              reason: sharedShipping.unavailable.code,
+            },
+            { status: 503 }
+          );
+        }
         return Response.json(
           {
             ok: false,
@@ -5825,6 +5865,26 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           },
           { status: 400 }
         );
+      }
+
+      // اگر مبلغ Quote تازه Tapin با مبلغی که مشتری در صفحه دیده تفاوت دارد،
+      // سفارش بدون اطلاع مشتری با مبلغ دیگری ثبت نمی‌شود.
+      // برای Tapin ارسال هزینهٔ دیده‌شده الزامی است (بدون آن، مشتری مبلغ را
+      // تأیید نکرده)؛ برای سایر منابع فقط اگر ارسال شده باشد مقایسه می‌شود.
+      const expectedProvided = body.expected_shipping_cost != null && body.expected_shipping_cost !== "";
+      if (shippingMethod.source === "tapin" || expectedProvided) {
+        const expected = expectedProvided ? Number(body.expected_shipping_cost) : NaN;
+        if (!Number.isFinite(expected) || expected !== Number(shippingMethod.cost)) {
+          return Response.json(
+            {
+              ok: false,
+              error: "SHIPPING_COST_CHANGED",
+              message: "هزینه ارسال نسبت به مبلغ نمایش‌داده‌شده تغییر کرده است. لطفاً مبلغ جدید را بررسی و دوباره ثبت کنید.",
+              new_shipping_cost: Number(shippingMethod.cost),
+            },
+            { status: 409 }
+          );
+        }
       }
 
       const shippingCost = Number(shippingMethod.cost) || 0;
@@ -5928,7 +5988,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
             address.longitude,
             total,
             shippingCost,
-            shippingMethod.id,
+            shippingMethod.source === "tapin" ? null : shippingMethod.id,
             shippingMethod.name,
             shippingIsCod ? 1 : 0,
             payableAmount,

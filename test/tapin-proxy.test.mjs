@@ -391,15 +391,28 @@ await test("موفقیت: entries.total_send_price (ریال، مستند PDF) �
   }
 });
 
-await test("سازگاری عقب‌گرد: اگر Response ساختار entries نداشت، cost/price_send_total خام همچنان Fallback است", async () => {
-  const mock = installMockFetch(() => jsonResponse({ ok: true, price_send_total: 150000 }));
-  try {
-    const result = await quoteViaTapin(baseEnv(), { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows });
-    assert.equal(result.ok, true);
-    assert.equal(result.cost, 15000);
-  } finally {
-    mock.restore();
+await test("پاسخ بدون entries.total_send_price (مثلاً فقط cost/price_send_total حدسی) → TAPIN_RESPONSE_UNRECOGNIZED، نه قیمت/رایگان", async () => {
+  for (const payload of [{ ok: true, price_send_total: 150000 }, { ok: true, cost: 15000 }]) {
+    const mock = installMockFetch(() => jsonResponse(payload));
+    try {
+      const result = await quoteViaTapin(baseEnv(), { destinationCity: "", items: sampleItems, productRows: sampleProductRows });
+      assert.equal(result.ok, false);
+      assert.equal(result.error, "TAPIN_RESPONSE_UNRECOGNIZED");
+    } finally {
+      mock.restore();
+    }
   }
+});
+
+await test("destination_province فقط با TAPIN_PROXY_SEND_PROVINCE=true به Proxy فرستاده می‌شود", async () => {
+  const req = { destinationCity: "ورامین", destinationProvince: "تهران", items: sampleItems, productRows: sampleProductRows };
+  let mock = installMockFetch((url, opts) => { globalThis.__body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  try {
+    await quoteViaTapin(baseEnv(), req);
+    assert.equal("destination_province" in globalThis.__body, false);
+    await quoteViaTapin({ ...baseEnv(), TAPIN_PROXY_SEND_PROVINCE: "true" }, req);
+    assert.equal(globalThis.__body.destination_province, "تهران");
+  } finally { mock.restore(); }
 });
 
 await test("Secret (PROXY_API_KEY) در نتیجه برگشتی نشت نمی‌کند", async () => {
