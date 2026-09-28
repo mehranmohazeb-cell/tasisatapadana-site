@@ -253,8 +253,50 @@ function isProvinceForwardingEnabled(env) {
 }
 
 function getProxyCredentials(env) {
-  const apiKey = env.PROXY_API_KEY;
+  // trim: Secret که با Copy/Paste در داشبورد ذخیره شود ممکن است \n یا فاصلهٔ
+  // انتهایی داشته باشد؛ در این حالت هدر نامعتبر می‌شود یا با کلید .env روی VPS
+  // نمی‌خواند (401) در حالی که «همان کلید» به نظر می‌رسد.
+  const apiKey = typeof env.PROXY_API_KEY === "string" ? env.PROXY_API_KEY.trim() : env.PROXY_API_KEY;
   return { apiKey, ok: !!apiKey, missing: apiKey ? [] : ["PROXY_API_KEY"] };
+}
+
+// -------------------------------------------------------------------------
+// پاک‌سازی Secret از هر چیزی که وارد Audit/Log می‌شود (بخش «محدودیت‌های مهم»:
+// PROXY_API_KEY و Token تیپاکس نباید در log یا response دیده شوند).
+// -------------------------------------------------------------------------
+function redactSecrets(value, env) {
+  if (value == null) return value;
+  let text;
+  try {
+    text = typeof value === "string" ? value : JSON.stringify(value);
+  } catch (error) {
+    return null;
+  }
+  if (typeof text !== "string") return null;
+  const key = typeof env?.PROXY_API_KEY === "string" ? env.PROXY_API_KEY.trim() : "";
+  if (key.length >= 6) text = text.split(key).join("[REDACTED]");
+  text = text.replace(/(Bearer|Basic)\s+[A-Za-z0-9._~+\/=-]{6,}/gi, "$1 [REDACTED]");
+  if (typeof value === "string") return text;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return text;
+  }
+}
+
+// علت واقعی خطای Proxy (FastAPI: detail | Proxy ما: message/error) را کوتاه و
+// بدون Secret استخراج می‌کند تا در shipping_quote_history.error_message ثبت شود.
+function describeProxyFailure(data, rawText, env) {
+  let detail = null;
+  if (data && typeof data === "object") {
+    detail = data.message ?? data.detail ?? data.error ?? null;
+    if (detail && typeof detail === "object") {
+      try { detail = JSON.stringify(detail); } catch (error) { detail = null; }
+    }
+  }
+  if (!detail && typeof rawText === "string" && rawText.trim()) detail = rawText.trim();
+  if (!detail) return null;
+  return String(redactSecrets(String(detail), env)).slice(0, 500);
 }
 
 // واحد پول: طبق PDF، مقادیر ارزش کالا در Request صراحتاً «به ریال» هستند.
@@ -405,6 +447,8 @@ async function resolveTapinPackageSpec(env, { cartItems, productRows }) {
 // Endpoint خام Tapin (طبق معماری جدید بخش ۴/۷/۱۴ دستور). Proxy مسئول انجام
 // کامل چرخه (حل‌وفصل شهر + check-price واقعی نزد Tapin) است و یک نتیجه
 // نهایی/نرمال‌شده برمی‌گرداند.
+const PROXY_TIMEOUT_MS = 15000;
+
 async function requestTapinQuoteViaProxy(env, quotePayload) {
   const proxy = getProxyCredentials(env);
   if (!proxy.ok) {
@@ -419,6 +463,11 @@ async function requestTapinQuoteViaProxy(env, quotePayload) {
   const proxyBaseUrl = env.INTEGRATION_PROXY_BASE_URL || INTEGRATION_PROXY_DEFAULT_BASE_URL;
   const proxyPath = env.INTEGRATION_PROXY_TAPIN_QUOTE_PATH || INTEGRATION_PROXY_DEFAULT_QUOTE_PATH;
 
+  // Timeout صریح: بدون آن، اگر VPS پاسخ ندهد Worker منتظر می‌ماند، هیچ
+  // نتیجه/Audit ثبت نمی‌شود و مشتری خطای مبهم می‌بیند.
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS) : null;
+
   let response;
   try {
     response = await fetch(`${proxyBaseUrl}${proxyPath}`, {
@@ -428,31 +477,56 @@ async function requestTapinQuoteViaProxy(env, quotePayload) {
         Authorization: `Bearer ${proxy.apiKey}`,
       },
       body: JSON.stringify(quotePayload),
+      ...(controller ? { signal: controller.signal } : {}),
     });
   } catch (error) {
-    return { ok: false, error: "PROXY_NETWORK_ERROR", message: error.message };
+    if (timer) clearTimeout(timer);
+    const aborted = error?.name === "AbortError";
+    return {
+      ok: false,
+      error: aborted ? "PROXY_TIMEOUT" : "PROXY_NETWORK_ERROR",
+      message: aborted
+        ? `Integration Proxy تا ${PROXY_TIMEOUT_MS / 1000} ثانیه پاسخ نداد.`
+        : String(redactSecrets(error?.message || "fetch failed", env)).slice(0, 300),
+    };
   }
 
-  let data;
+  // بدنه را یک‌بار می‌خوانیم؛ اگر JSON نبود، متن خام (کوتاه‌شده) علت واقعی است
+  // (مثلاً صفحهٔ HTML خطای Cloudflare/nginx).
+  let data = null;
+  let rawText = null;
   try {
-    data = await response.json();
+    if (typeof response.text === "function") {
+      rawText = await response.text();
+      try { data = JSON.parse(rawText); } catch (error) { data = null; }
+    } else {
+      data = await response.json();
+    }
   } catch (error) {
+    data = null;
+  }
+  if (timer) clearTimeout(timer);
+
+  if (data === null) {
     return {
       ok: false,
       error: "PROXY_INVALID_RESPONSE",
       status: response.status,
-      message: "پاسخ Integration Proxy به‌صورت JSON قابل‌خواندن نبود.",
+      message:
+        `HTTP ${response.status}: پاسخ Integration Proxy JSON قابل‌خواندن نبود` +
+        (rawText ? ` — ${describeProxyFailure(null, rawText.slice(0, 200), env)}` : "."),
     };
   }
 
   // خطای سطح HTTP/Proxy (نه خطای منطقی Tapin/City که Proxy با ok:false و یک
   // کد مشخص گزارش می‌کند — آن حالت را quoteViaTapin پایین‌تر مدیریت می‌کند).
   if (!response.ok) {
+    const reason = describeProxyFailure(data, null, env);
     return {
       ok: false,
       error: "PROXY_HTTP_ERROR",
       status: response.status,
-      message: data?.message || null,
+      message: `HTTP ${response.status}${reason ? `: ${reason}` : ""}`,
     };
   }
 
@@ -652,12 +726,13 @@ export async function recordShippingQuote(env, quote) {
     };
     // پاسخ خام Provider (raw) همان چیزی است که قبلاً داخل metadata.raw
     // نگه‌داری می‌شد؛ همان ساختار موجود بدون تغییر در response_json ذخیره
-    // می‌شود.
-    const responsePayload = quote.metadata?.raw ?? quote.metadata ?? null;
+    // می‌شود. هر Secret احتمالی قبل از ثبت پاک می‌شود.
+    const responsePayload = redactSecrets(quote.metadata?.raw ?? quote.metadata ?? null, env);
 
     const isAvailable = quote.available !== false;
     const errorCode = !isAvailable ? responsePayload?.error ?? null : null;
-    const errorMessage = !isAvailable ? responsePayload?.message ?? null : null;
+    const rawErrorMessage = !isAvailable ? responsePayload?.message ?? null : null;
+    const errorMessage = rawErrorMessage != null ? String(rawErrorMessage).slice(0, 500) : null;
 
     await env.DB
       .prepare(
@@ -678,7 +753,22 @@ export async function recordShippingQuote(env, quote) {
     return { ok: true };
   } catch (error) {
     // Fail-Safe: ثبت تاریخچه هرگز نباید مسیر اصلی برآورد/Checkout را بشکند.
-    return { ok: false, error: error.message };
+    // اما دیگر «بی‌صدا» هم نیست: علت واقعی شکست INSERT (مثلاً CHECK constraint
+    // پنهان در Schema واقعی Production) در Log ثبت می‌شود و به فراخواننده
+    // برمی‌گردد (فقط Admin Preview آن را می‌بیند، نه پاسخ عمومی مشتری).
+    // Schema واقعی جدول (شامل CHECKها) هم برای تشخیص خوانده و لاگ می‌شود.
+    let tableSql = null;
+    try {
+      const row = await env.DB
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'shipping_quote_history'")
+        .first();
+      tableSql = row?.sql || null;
+    } catch (schemaError) {
+      tableSql = null;
+    }
+    const message = String(redactSecrets(error?.message || "unknown error", env)).slice(0, 500);
+    console.error("[shipping_quote_history] INSERT failed:", message, tableSql ? `| table DDL: ${tableSql}` : "");
+    return { ok: false, error: message };
   }
 }
 
@@ -801,35 +891,51 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
       message: "Provider تیپاکس فعال نیست یا در حالت quote نیست.",
     };
   } else {
-    onlineResult = await quoteViaTapin(env, {
-      destinationCity: city,
-      destinationProvince: province || null,
-      items,
-      productRows: rows || [],
-    });
-    const totalWeight = items.reduce(
-      (sum, i) => sum + (Number(rowMap.get(i.productId)?.weight_grams) || 0) * i.quantity,
-      0
-    );
-    const totalValue = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    await recordShippingQuote(env, {
-      provider_code: "tapin",
-      calculation_mode: mode,
-      destination_city: city || null,
-      destination_province: province || onlineResult?.metadata?.matched_city?.provinceTitle || null,
-      weight_grams: totalWeight,
-      cart_value: totalValue,
-      quoted_cost: onlineResult?.cost ?? null,
-      available: !!onlineResult?.ok,
-      request_extra: {
-        items: items.map((i) => ({ product_id: i.productId, quantity: i.quantity, price_toman: i.price })),
-        service_type: onlineResult?.metadata?.service_type ?? null,
-        package: onlineResult?.metadata?.package ?? null,
-        quoted_cost_toman: onlineResult?.cost ?? null,
-      },
-      metadata: { raw: onlineResult },
-    });
+    // هر استثنای غیرمنتظره داخل Adapter به یک نتیجهٔ ناموفق «با علت واقعی»
+    // تبدیل می‌شود، نه خطای ۵۰۰ که پیش از ثبت Audit مسیر را می‌شکند.
+    try {
+      onlineResult = await quoteViaTapin(env, {
+        destinationCity: city,
+        destinationProvince: province || null,
+        items,
+        productRows: rows || [],
+      });
+    } catch (error) {
+      onlineResult = {
+        ok: false,
+        provider: "tapin",
+        available: false,
+        error: "TAPIN_ADAPTER_EXCEPTION",
+        message: String(redactSecrets(error?.message || "unknown error", env)).slice(0, 300),
+      };
+    }
   }
+
+  // Audit برای هر استعلام آنلاین (موفق یا ناموفق) — طبق معماری فعلی:
+  // فقط گزارش/Cache است و هیچ‌وقت به Table Rate تبدیل نمی‌شود.
+  const totalWeight = items.reduce(
+    (sum, i) => sum + (Number(rowMap.get(i.productId)?.weight_grams) || 0) * i.quantity,
+    0
+  );
+  const totalValue = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const audit = await recordShippingQuote(env, {
+    provider_code: "tapin",
+    calculation_mode: mode,
+    destination_city: city || null,
+    destination_province: province || onlineResult?.metadata?.matched_city?.provinceTitle || null,
+    weight_grams: totalWeight,
+    cart_value: totalValue,
+    quoted_cost: onlineResult?.cost ?? null,
+    available: !!onlineResult?.ok,
+    request_extra: {
+      items: items.map((i) => ({ product_id: i.productId, quantity: i.quantity, price_toman: i.price })),
+      service_type: onlineResult?.metadata?.service_type ?? null,
+      package: onlineResult?.metadata?.package ?? null,
+      quoted_cost_toman: onlineResult?.cost ?? null,
+      http_status: onlineResult?.status ?? null,
+    },
+    metadata: { raw: onlineResult },
+  });
 
   if (onlineResult?.ok) {
     return {
@@ -837,6 +943,7 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
       source: "tapin",
       fell_back: false,
       unavailable: null,
+      audit,
       shipping_methods: [
         {
           id: TAPIN_OPTION_ID,
@@ -863,6 +970,7 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
       fell_back: true,
       unavailable: null,
       online_error: onlineResult?.error || "TAPIN_UNAVAILABLE",
+      audit,
     };
   }
 
@@ -874,6 +982,7 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
     shipping_methods: [],
     fell_back: false,
     unavailable: { code, message: ONLINE_UNAVAILABLE_MESSAGES[code] || ONLINE_UNAVAILABLE_DEFAULT_MESSAGE },
+    audit,
   };
 }
 
@@ -909,5 +1018,6 @@ export async function getShippingOptionsViaEngine(env, { cartItems, city, provin
   );
   const out = { mode: shared.mode, results, fell_back: shared.fell_back };
   if (shared.unavailable) out.unavailable = shared.unavailable;
+  if (shared.audit) out.audit = shared.audit; // فقط Admin Preview: نتیجهٔ ثبت Audit (موفق/علت شکست)
   return out;
 }
