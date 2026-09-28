@@ -252,8 +252,22 @@ function updateGrandTotal() {
   totalEl.textContent = formatPrice(itemsTotal + cost);
 }
 
+let shippingRequestSeq = 0; // جلوگیری از نمایش پاسخ قدیمی (مقصد/سبد قبلی) به‌جای Quote جدید
+
+function selectedMethodFromInput(input) {
+  const rawId = input.value;
+  return {
+    id: rawId === "tapin" ? "tapin" : Number(rawId),
+    name: input.dataset.name,
+    cost: Number(input.dataset.cost),
+    cost_type: input.dataset.costType,
+    source: input.dataset.source || "internal",
+  };
+}
+
 async function loadShippingMethods(city) {
   const container = document.getElementById("shipping-methods-container");
+  const requestId = ++shippingRequestSeq;
   selectedShippingMethod = null;
   updateGrandTotal();
 
@@ -265,18 +279,29 @@ async function loadShippingMethods(city) {
   container.innerHTML = '<p style="font-size:13px; color:#71817e;">در حال دریافت روش‌های ارسال...</p>';
 
   try {
-    const response = await fetch(`${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}`);
+    // Quote بر اساس سبد واقعی (کالا + تعداد) و مقصد (استان + شهر) — همان مسیر
+    // مشترک Estimate/Cart؛ قیمت و وزن سمت سرور از D1 خوانده می‌شود.
+    const cart = getCart();
+    const productIds = cart.map((item) => item.id).filter(Boolean);
+    const quantities = cart.map((item) => Number(item.quantity) || 1);
+    const province = document.getElementById("province").value.trim();
+    const params =
+      `city=${encodeURIComponent(city)}&province=${encodeURIComponent(province)}` +
+      `&product_ids=${encodeURIComponent(productIds.join(","))}&quantities=${encodeURIComponent(quantities.join(","))}`;
+    const response = await fetch(`${API_BASE}/shipping-methods?${params}`);
     const data = await response.json();
+    if (requestId !== shippingRequestSeq) return; // مقصد/سبد عوض شده؛ پاسخ قدیمی نادیده گرفته می‌شود
     const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
 
     if (methods.length === 0) {
-      container.innerHTML = '<p style="font-size:13px; color:#a23b3b;">برای این مقصد روش ارسالی در دسترس نیست. لطفاً با پشتیبانی تماس بگیرید.</p>';
+      const message = data.unavailable?.message || "برای این مقصد روش ارسالی در دسترس نیست. لطفاً با پشتیبانی تماس بگیرید.";
+      container.innerHTML = `<p style="font-size:13px; color:#a23b3b;">${escapeHtml(message)}</p>`;
       return;
     }
 
     container.innerHTML = methods.map((m, index) => `
       <label class="field-checkbox" style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px;">
-        <input type="radio" name="shipping_method" value="${m.id}" ${index === 0 ? "checked" : ""} data-cost="${m.cost}" data-cost-type="${m.cost_type}" data-name="${escapeHtml(m.name)}">
+        <input type="radio" name="shipping_method" value="${escapeHtml(m.id)}" ${index === 0 ? "checked" : ""} data-cost="${m.cost}" data-cost-type="${m.cost_type}" data-name="${escapeHtml(m.name)}" data-source="${escapeHtml(m.source || "internal")}">
         <span>
           ${escapeHtml(m.name)} — ${formatPrice(m.cost)}
           ${m.cost_type === "cod" ? '<em style="color:#8a6100; font-style:normal;"> (پس‌کرایه)</em>' : ""}
@@ -286,27 +311,18 @@ async function loadShippingMethods(city) {
 
     container.querySelectorAll('input[name="shipping_method"]').forEach((input) => {
       input.addEventListener("change", () => {
-        selectedShippingMethod = {
-          id: Number(input.value),
-          name: input.dataset.name,
-          cost: Number(input.dataset.cost),
-          cost_type: input.dataset.costType,
-        };
+        selectedShippingMethod = selectedMethodFromInput(input);
         updateGrandTotal();
       });
     });
 
     const firstInput = container.querySelector('input[name="shipping_method"]');
     if (firstInput) {
-      selectedShippingMethod = {
-        id: Number(firstInput.value),
-        name: firstInput.dataset.name,
-        cost: Number(firstInput.dataset.cost),
-        cost_type: firstInput.dataset.costType,
-      };
+      selectedShippingMethod = selectedMethodFromInput(firstInput);
       updateGrandTotal();
     }
   } catch (error) {
+    if (requestId !== shippingRequestSeq) return;
     container.innerHTML = '<p style="font-size:13px; color:#a23b3b;">دریافت روش‌های ارسال ممکن نشد. لطفاً صفحه را دوباره بارگذاری کنید.</p>';
   }
 }
@@ -412,6 +428,8 @@ async function submitOrder(event) {
     },
     items: cart.map((item) => ({ id: item.id, quantity: item.quantity })),
     shipping_method_id: selectedShippingMethod?.id,
+    // مبلغ نمایش‌داده‌شده به مشتری؛ اگر Quote تازه Tapin فرق کند سرور سفارش را ثبت نمی‌کند.
+    expected_shipping_cost: selectedShippingMethod?.source === "tapin" ? selectedShippingMethod.cost : undefined,
     save_address: document.getElementById("save_address")?.checked || false,
   };
 
@@ -426,6 +444,10 @@ async function submitOrder(event) {
     const data = await response.json();
 
     if (!response.ok || !data.ok) {
+      if (data.error === "SHIPPING_COST_CHANGED" || data.error === "SHIPPING_QUOTE_UNAVAILABLE") {
+        // Quote قدیمی نباید بماند؛ روش‌ها/مبلغ جدید دوباره دریافت می‌شود.
+        loadShippingMethods(document.getElementById("city").value.trim());
+      }
       throw new Error(data.message || "خطا در ثبت سفارش. لطفاً دوباره تلاش کنید.");
     }
 
@@ -462,7 +484,10 @@ document.addEventListener("DOMContentLoaded", () => {
   renderSummary();
   checkSession();
 
-  document.getElementById("province").addEventListener("change", (e) => fillCities(e.target.value, ""));
+  document.getElementById("province").addEventListener("change", (e) => {
+    fillCities(e.target.value, "");
+    loadShippingMethods(""); // شهر ریست شده؛ Quote/روش ارسال قبلی نامعتبر است
+  });
   document.getElementById("city").addEventListener("change", (e) => loadShippingMethods(e.target.value.trim()));
   document.getElementById("checkout-form").addEventListener("submit", submitOrder);
 });

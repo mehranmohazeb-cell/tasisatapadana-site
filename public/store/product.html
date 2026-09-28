@@ -296,9 +296,18 @@ function renderShippingEstimatorBlock() {
   `;
 }
 
+let productEstimatorSeq = 0; // پاسخ قدیمی هرگز جای Quote جدید نمی‌نشیند
+
+function findProvinceForCity(city) {
+  const locations = window.IRAN_LOCATIONS || {};
+  const provinces = Object.keys(locations).filter((province) => (locations[province] || []).includes(city));
+  return provinces.length === 1 ? provinces[0] : "";
+}
+
 async function loadShippingEstimatorMethods(city, productId) {
   const methodSelect = document.getElementById("estimator-method");
   const resultBox = document.getElementById("estimator-result");
+  const requestId = ++productEstimatorSeq;
   resultBox.style.display = "none";
 
   if (!city) {
@@ -311,21 +320,33 @@ async function loadShippingEstimatorMethods(city, productId) {
   methodSelect.disabled = true;
 
   try {
-    const response = await fetch(`${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&product_id=${encodeURIComponent(productId)}`);
+    const province = findProvinceForCity(city);
+    const response = await fetch(
+      `${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&province=${encodeURIComponent(province)}&product_id=${encodeURIComponent(productId)}`
+    );
     const data = await response.json();
+    if (requestId !== productEstimatorSeq) return;
     const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
 
     if (methods.length === 0) {
-      methodSelect.innerHTML = '<option value="">برای این شهر روشی در دسترس نیست</option>';
+      const message = data.unavailable?.message || "برای این شهر روشی در دسترس نیست";
+      methodSelect.innerHTML = `<option value="">${escapeHtml(message)}</option>`;
       methodSelect.disabled = true;
       return;
     }
 
     methodSelect.innerHTML =
       '<option value="">روش ارسال را انتخاب کنید</option>' +
-      methods.map((m) => `<option value="${m.id}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
+      methods.map((m) => `<option value="${escapeHtml(m.id)}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
     methodSelect.disabled = false;
+
+    // فقط یک گزینه (مثلاً Quote آنلاین) → مستقیم نمایش داده شود.
+    if (methods.length === 1) {
+      methodSelect.selectedIndex = 1;
+      methodSelect.dispatchEvent(new Event("change"));
+    }
   } catch (error) {
+    if (requestId !== productEstimatorSeq) return;
     methodSelect.innerHTML = '<option value="">خطا در دریافت روش‌های ارسال</option>';
     methodSelect.disabled = true;
   }

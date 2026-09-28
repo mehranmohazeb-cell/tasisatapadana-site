@@ -307,9 +307,21 @@ function renderCartShippingEstimatorBlock() {
   `;
 }
 
+let cartEstimatorSeq = 0; // پاسخ قدیمی (شهر/سبد قبلی) هرگز جای Quote جدید نمی‌نشیند
+let cartEstimatorLastCity = "";
+
+// استان از روی IRAN_LOCATIONS؛ فقط وقتی شهر در دقیقاً یک استان باشد (برای رفع ابهام Tapin).
+function findProvinceForCity(city) {
+  const locations = window.IRAN_LOCATIONS || {};
+  const provinces = Object.keys(locations).filter((province) => (locations[province] || []).includes(city));
+  return provinces.length === 1 ? provinces[0] : "";
+}
+
 async function loadCartShippingEstimatorMethods(city, productIds, quantities, itemsTotal) {
   const methodSelect = document.getElementById("cart-estimator-method");
   const resultBox = document.getElementById("cart-estimator-result");
+  const requestId = ++cartEstimatorSeq;
+  cartEstimatorLastCity = city || "";
   resultBox.style.display = "none";
 
   if (!city) {
@@ -322,24 +334,28 @@ async function loadCartShippingEstimatorMethods(city, productIds, quantities, it
   methodSelect.disabled = true;
 
   try {
+    const province = findProvinceForCity(city);
     const response = await fetch(
-      `${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&product_ids=${encodeURIComponent(productIds.join(","))}&quantities=${encodeURIComponent(quantities.join(","))}`
+      `${API_BASE}/shipping-methods?city=${encodeURIComponent(city)}&province=${encodeURIComponent(province)}` +
+      `&product_ids=${encodeURIComponent(productIds.join(","))}&quantities=${encodeURIComponent(quantities.join(","))}`
     );
     const data = await response.json();
+    if (requestId !== cartEstimatorSeq) return;
     const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
 
     if (methods.length === 0) {
-      methodSelect.innerHTML = '<option value="">برای این شهر روشی در دسترس نیست</option>';
+      const message = data.unavailable?.message || "برای این شهر روشی در دسترس نیست";
+      methodSelect.innerHTML = `<option value="">${escapeHtml(message)}</option>`;
       methodSelect.disabled = true;
       return;
     }
 
     methodSelect.innerHTML =
       '<option value="">روش ارسال را انتخاب کنید</option>' +
-      methods.map((m) => `<option value="${m.id}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
+      methods.map((m) => `<option value="${escapeHtml(m.id)}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
     methodSelect.disabled = false;
 
-    methodSelect.onchange = () => {
+    const showSelected = () => {
       const option = methodSelect.selectedOptions[0];
       if (!option || !option.value) {
         resultBox.style.display = "none";
@@ -352,7 +368,15 @@ async function loadCartShippingEstimatorMethods(city, productIds, quantities, it
         `مجموع تقریبی کالا + ارسال: ${formatPrice(itemsTotal + shippingCost)}`;
       resultBox.style.display = "block";
     };
+    methodSelect.onchange = showSelected;
+
+    // فقط یک گزینه (مثلاً Quote آنلاین) → مستقیم نمایش داده شود.
+    if (methods.length === 1) {
+      methodSelect.selectedIndex = 1;
+      showSelected();
+    }
   } catch (error) {
+    if (requestId !== cartEstimatorSeq) return;
     methodSelect.innerHTML = '<option value="">خطا در دریافت روش‌های ارسال</option>';
     methodSelect.disabled = true;
   }
@@ -370,6 +394,13 @@ function initCartShippingEstimator(cart, itemsTotal) {
   citySelect.addEventListener("change", () => {
     loadCartShippingEstimatorMethods(citySelect.value, productIds, quantities, itemsTotal);
   });
+
+  // سبد (تعداد/محتویات) تغییر کرده و صفحه دوباره رندر شده: مقصد قبلی حفظ
+  // می‌شود ولی Quote از نو و با سبد جدید گرفته می‌شود (نه مبلغ قدیمی).
+  if (cartEstimatorLastCity && Array.from(citySelect.options).some((o) => o.value === cartEstimatorLastCity)) {
+    citySelect.value = cartEstimatorLastCity;
+    loadCartShippingEstimatorMethods(cartEstimatorLastCity, productIds, quantities, itemsTotal);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
