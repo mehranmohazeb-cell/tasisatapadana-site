@@ -67,62 +67,21 @@
     </section>
 
     <section class="admin-card" id="tapin-config-card" style="display:none;">
-      <h2>تنظیمات کسب‌وکار Tapin</h2>
+      <h2>تنظیمات Tapin (Post v2)</h2>
       <p style="font-size:13px; color:#71817e; margin-top:-8px;">
-        این مقادیر دقیقاً طبق enumهای مستندشده در راهنمای رسمی تیپاکس (follow-tapin-tipax-1.pdf) هستند و
-        باید متناسب با قرارداد/حساب واقعی فروشگاه نزد Tapin تنظیم شوند — تا وقتی این بخش تکمیل نشود،
-        استعلام Tapin با خطای «تنظیمات کسب‌وکار Tapin کامل نیست» متوقف می‌ماند.
+        مقادیر پیش‌فرض طبق نمونهٔ رسمی Check Price: نوع پرداخت = ۱ و نوع سفارش = ۰.
+        فیلدهای قدیمی Tipax (نوع کالا، بسته‌بندی، توزیع، جمع‌آوری، service_type) دیگر استفاده نمی‌شوند.
       </p>
       <div class="form-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
         <div>
-          <label>نوع کالا</label>
-          <select id="tapin-product-type-id">
-            <option value="1">عمومی (1)</option>
-          </select>
+          <label>pay_type</label>
+          <input type="number" id="tapin-pay-type" min="0" step="1" value="1">
         </div>
         <div>
-          <label>نوع بسته‌بندی</label>
-          <select id="tapin-packing-type-id">
-            <option value="2">نیاز به بسته‌بندی ندارد (2)</option>
-          </select>
-        </div>
-        <div>
-          <label>نوع پرداخت</label>
-          <select id="tapin-payment-type">
-            <option value="10">سمت فرستنده / نقدی (10)</option>
-            <option value="20">پس‌کرایه (20) — غیرفعال تا مسیر COD کامل شود</option>
-          </select>
-        </div>
-        <div>
-          <label>نوع توزیع</label>
-          <select id="tapin-delivery-type">
-            <option value="10">تحویل در محل مشتری (10)</option>
-          </select>
-        </div>
-        <div>
-          <label>نوع جمع‌آوری</label>
-          <select id="tapin-pickup-type">
-            <option value="20">جمع‌آوری در نمایندگی (20) — امن‌تر تا سرویس محل مشتری فعال شود</option>
-            <option value="10">جمع‌آوری در محل مشتری (10) — فقط اگر این سرویس روی حساب فعال است</option>
-          </select>
-        </div>
-        <div>
-          <label>شهر مبدأ (فروشگاه)</label>
-          <input type="text" id="tapin-origin-city" placeholder="مثلاً اصفهان">
-        </div>
-        <div>
-          <label>service_type — اکسپرس درون‌شهری (مبدأ = مقصد)</label>
-          <input type="number" id="tapin-service-type-local" value="7">
-        </div>
-        <div>
-          <label>service_type — اکسپرس ویژه بین‌شهری (مبدأ ≠ مقصد)</label>
-          <input type="number" id="tapin-service-type-domestic" value="2">
+          <label>order_type</label>
+          <input type="number" id="tapin-order-type" min="0" step="1" value="0">
         </div>
       </div>
-      <p style="font-size:12px; color:#a23b3b; margin-top:10px;">
-        نوع پرداخت «پس‌کرایه» و نوع توزیع «تحویل در محل نمایندگی» طبق دستور فعلی هنوز مسیر واقعی‌شان
-        (COD/تحویل نمایندگی) در سایت تکمیل نشده؛ فقط پس از تکمیل و تست آن مسیر انتخاب شوند.
-      </p>
       <button id="save-tapin-config" class="primary-button" type="button">ذخیره تنظیمات Tapin</button>
     </section>
 

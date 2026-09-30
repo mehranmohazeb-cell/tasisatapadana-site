@@ -58,26 +58,19 @@ function fillTapinConfigForm(config) {
     const el = document.getElementById(id);
     if (el) el.value = value != null ? String(value) : fallback;
   };
-  setVal("tapin-product-type-id", c.product_type_id, "1");
-  setVal("tapin-packing-type-id", c.packing_type_id, "2");
-  setVal("tapin-payment-type", c.payment_type, "10");
-  setVal("tapin-delivery-type", c.delivery_type, "10");
-  setVal("tapin-pickup-type", c.pickup_type, "20");
-  setVal("tapin-origin-city", c.origin_city, "اصفهان");
-  setVal("tapin-service-type-local", c.service_type_local, "7");
-  setVal("tapin-service-type-domestic", c.service_type_domestic, "2");
+  setVal("tapin-pay-type", c.pay_type, "1");
+  setVal("tapin-order-type", c.order_type, "0");
 }
 
 function readTapinConfigForm() {
+  const readInt = (id, fallback) => {
+    const raw = document.getElementById(id).value.trim();
+    const n = Number(raw);
+    return raw !== "" && Number.isInteger(n) && n >= 0 ? n : fallback;
+  };
   return {
-    product_type_id: Number(document.getElementById("tapin-product-type-id").value),
-    packing_type_id: Number(document.getElementById("tapin-packing-type-id").value),
-    payment_type: Number(document.getElementById("tapin-payment-type").value),
-    delivery_type: Number(document.getElementById("tapin-delivery-type").value),
-    pickup_type: Number(document.getElementById("tapin-pickup-type").value),
-    origin_city: document.getElementById("tapin-origin-city").value.trim(),
-    service_type_local: Number(document.getElementById("tapin-service-type-local").value) || 7,
-    service_type_domestic: Number(document.getElementById("tapin-service-type-domestic").value) || 2,
+    pay_type: readInt("tapin-pay-type", 1),
+    order_type: readInt("tapin-order-type", 0),
   };
 }
 
