@@ -12,15 +12,16 @@
 //
 // وضعیت این مرحله (صادقانه، طبق دستور «هماهنگ‌سازی کامل با Tapin/Tipax»):
 //   - رجیستری Provider، نسخه‌بندی/Import تعرفه، تاریخچه Quote: کامل پیاده و تست‌شده (مراحل قبل).
-//   - Tapin Adapter (quoteViaTapin) اکنون طبق قرارداد رسمی مستندشده در
-//     follow-tapin-tipax-1.pdf پیاده شده است، نه فرض نسخه قبلی: نام دقیق
-//     فیلدهای products[] (discount_per_count/amount_per_count/weight_per_count/
-//     count) و بدنه اصلی (length/width/height/package_weight/pickup_type)
-//     اصلاح شد؛ ابعاد/وزن واقعی بسته دیگر همیشه ۵×۵×۵ نیست — از D1 واقعی
-//     (Override بسته‌بندی محصول یا برآورد لایه packaging-estimation.js با
-//     تلرانس) خوانده می‌شود؛ service_type دیگر یک عدد ثابت در config نیست،
-//     بلکه بر اساس شهر مبدأ (config.origin_city) در برابر شهر مقصد به‌صورت
-//     پویا محاسبه می‌شود (بخش ۸ دستور).
+//   - Tapin Adapter (quoteViaTapin) اکنون فقط قرارداد Tapin Post v2 را می‌سازد:
+//       Worker → VPS  POST /api/v1/tapin/quote
+//         destination_city, destination_province?, pay_type (پیش‌فرض ۱), order_type (پیش‌فرض ۰),
+//         packet_type? (فقط اگر در config_json/TAPIN_PACKET_TYPE واقعاً تنظیم شده باشد؛ وگرنه VPS از .env می‌خواند),
+//         products[{count, discount, price(ریال), title, weight(گرم)}]  (product_id عمداً ارسال نمی‌شود),
+//         length/width/height (سانتی‌متر؛ فقط برای انتخاب box_id سمت VPS), package_weight (گرم)
+//       VPS → Tapin   POST /api/v2/public/order/post/check-price/
+//       و قیمت اصلی از entries.total_send_price (ریال ← تومان یک‌بار).
+//     هیچ endpoint/فیلد Tipax یا v4 (product_type_id, packing_type_id, service_type,
+//     receiver_*_id ...) در مسیر Quote باقی نمانده است.
 //   - محدودیت صادقانه و آگاهانه این مرحله (بخش ۱۶ دستور): چون Endpoint
 //     check-price فقط یک بسته (نه آرایه‌ای از بسته‌ها) می‌پذیرد، quoteViaTapin
 //     فقط برای سبدی با دقیقاً یک قلم کالای متفاوت کار می‌کند؛ در غیر این
@@ -195,48 +196,13 @@ function safeParseJson(value) {
 }
 
 // -------------------------------------------------------------------------
-// Tapin/Tipax Adapter — طبق ساختار واقعی VPS که در این مرحله توسط کاربر
-// توصیف شده (routers/tapin.py + integrations/tapin.py، prefix /api/v1/tapin،
-// Endpoint موجود POST /api/v1/tapin/quote).
+// Tapin Post v2 Adapter — Worker فقط با Proxy (VPS) صحبت می‌کند
 // -------------------------------------------------------------------------
-//
-// ⚠️ توجه صادقانه (باید در گزارش نهایی هم تکرار شود): در همین پیام، کاربر
-// ادعا کرده «ZIP پروژه پیوست است» ولی هیچ فایل جدیدی در این Sandbox آپلود
-// نشده — فقط همان ZIP قبلی از قبل این‌جا بود. هم‌چنین، کد واقعی VPS
-// (routers/tapin.py, integrations/tapin.py, main.py) هرگز در اختیار من قرار
-// نگرفته — نه در این مرحله و نه مرحله قبل. بنابراین قرارداد دقیق Request/
-// Response با POST /api/v1/tapin/quote در ادامه یک قرارداد *مستند و صریحاً
-// فرضی* است (نه چیزی که از کد واقعی VPS خوانده باشم)، دقیقاً روی همان الگویی
-// که خود دستور در بخش‌های ۸ تا ۱۱ توصیف کرده. تا وقتی محتوای واقعی آن دو
-// فایل Python در اختیارم نیست، امکان تولید یک Patch دقیق/غیر-حدسی برای
-// integrations/tapin.py وجود ندارد — این بخش در گزارش نهایی («کارهای
-// باقی‌مانده») صریحاً اعلام شده.
-//
-// تغییر معماری کلیدی نسبت به نسخه قبلی این فایل:
-//   ۱. Endpoint واقعی Proxy طبق ساختار موجود VPS همان مسیر ثابت و از‌پیش‌
-//      ثبت‌شده «/api/v1/tapin/quote» است — نه «/tapin/request» (که در تلاش
-//      قبلی، بدون دیدن کد واقعی VPS، به‌عنوان پیشنهاد فرضی ساخته شده بود و
-//      طبق این دستور صریحاً باید کنار گذاشته شود).
-//   ۲. طبق بخش ۱۵ دستور: «هیچ TAPIN_TOKEN نباید در Worker قرار بگیرد» —
-//      یعنی Credential واقعی Tapin (Token/Shop ID) دیگر در Cloudflare
-//      Secrets نیست؛ این دو روی خود VPS (.env) نگه‌داری و توسط
-//      integrations/tapin.py استفاده می‌شوند. Worker فقط با PROXY_API_KEY به
-//      Proxy احراز هویت می‌شود.
-//   ۳. طبق بخش ۷ دستور: «Worker نباید مستقیماً [هیچ‌کدام از ۳ Endpoint Tapin
-//      از جمله location] را فراخوانی کند» — یعنی Passthrough عمومی
-//      (path دلخواه) هم دیگر مجاز نیست (این خودش یک الگوی Generic Proxy/SSRF
-//      بود که بخش ۱۴ همین دستور صراحتاً منع کرده). بنابراین حل‌وفصل
-//      Province/City حالا باید سمت VPS (داخل integrations/tapin.py، هنگام
-//      get_quote) انجام شود؛ Worker فقط نام شهر مقصد را در بدنه Quote
-//      می‌فرستد، نه شناسه‌های از‌پیش‌حل‌شده.
-//   ۴. توابع fetchTapinLocations (که مستقیماً location endpoint های Tapin را
-//      از طریق Proxy صدا می‌زد) به همین دلیل حذف شدند — دیگر مسیر امنی برای
-//      اجرای آن‌ها وجود ندارد. توابع خالص findTapinCityMatch/normalizePersianText
-//      (که فقط منطق تطبیق را پیاده می‌کنند، نه تماس شبکه) به‌عنوان مرجع/Reuse
-//      احتمالی نگه داشته شده‌اند (بخش ۹ دستور: «منطق موجود Worker برای
-//      Province/City/City Mapping حفظ شود») — اما دیگر توسط quoteViaTapin
-//      صدا زده نمی‌شوند، چون آن منطق باید سمت VPS (به زبان Python، در
-//      integrations/tapin.py) بازتولید شود، نه سمت Worker.
+// - مسیر ثابت Proxy: POST /api/v1/tapin/quote با Authorization: Bearer PROXY_API_KEY.
+// - Token و Shop ID واقعی Tapin هرگز در Worker نیست؛ فقط روی VPS (.env).
+// - تبدیل نام استان/شهر به province_code/city_code و انتخاب box_id فقط سمت VPS
+//   انجام می‌شود؛ Worker هیچ endpoint خام Tapin (Location و ...) را صدا نمی‌زند.
+// - findTapinCityMatch/normalizePersianText پایین‌تر صرفاً توابع خالص مرجع/تست‌اند.
 
 const INTEGRATION_PROXY_DEFAULT_BASE_URL = "https://proxy.tasisatapadanaesfahan.ir";
 // مسیر واقعی موجود روی VPS طبق بخش ۲ دستور (routers/tapin.py با prefix
@@ -244,13 +210,9 @@ const INTEGRATION_PROXY_DEFAULT_BASE_URL = "https://proxy.tasisatapadanaesfahan.
 // فقط برای مواقع اضطراری/تغییر آینده، نه چیزی که معمولاً باید عوض شود.
 const INTEGRATION_PROXY_DEFAULT_QUOTE_PATH = "/api/v1/tapin/quote";
 
-// destination_province جزو قرارداد شناخته‌شدهٔ Worker → VPS نیست و کد VPS در
-// اختیار ما نیست؛ اگر Proxy فیلد اضافه را رد کند (Pydantic extra=forbid → 422)
-// هر Quote می‌شکند. بنابراین فقط وقتی ارسال می‌شود که پس از اصلاح واقعی VPS،
-// Worker Variable با نام TAPIN_PROXY_SEND_PROVINCE=true صریحاً تنظیم شده باشد.
-function isProvinceForwardingEnabled(env) {
-  return String(env?.TAPIN_PROXY_SEND_PROVINCE || "").trim().toLowerCase() === "true";
-}
+// قرارداد Worker → VPS (Tapin Post v2): destination_city و destination_province
+// (در صورت وجود) همیشه ارسال می‌شوند؛ تبدیل نام به province_code/city_code فقط
+// سمت VPS انجام می‌شود (Worker هرگز Location خام Tapin را صدا نمی‌زند).
 
 function getProxyCredentials(env) {
   // trim: Secret که با Copy/Paste در داشبورد ذخیره شود ممکن است \n یا فاصلهٔ
@@ -304,46 +266,48 @@ function describeProxyFailure(data, rawText, env) {
 // تبدیل فقط همین‌جا (در Adapter) انجام می‌شود، نه جای دیگر.
 const RIAL_PER_TOMAN = 10;
 
-// فیلدهای تنظیمات کسب‌وکار Tapin که PDF آن‌ها را به‌صورت enum مستند کرده اما
-// مقدار مناسب هرکدام برای این فروشگاه، تصمیمی تجاری/حساب‌کاربری است که در
-// سند مشخص نشده. عمداً حدس زده نمی‌شوند — باید از پنل «Providers» برای
-// Provider با code='tapin' در ستون config (JSON) تنظیم شوند. این بخش طبق
-// بخش ۸ دستور («همان منبع config_json حفظ شود») بدون تغییر مانده.
-// این فیلدها مستقیماً طبق راهنمای رسمی PDF تیپاکس (follow-tapin-tipax-1.pdf)
-// مستندشده‌اند؛ هر enum دیگری که در نسخه قبلی این فایل حدس زده شده بود
-// (مثلاً product_type_id=2/3/4) حذف شد — طبق اصل «هیچ enum را حدس نزن».
-// service_type از این فهرست عمداً حذف شده: دیگر یک مقدار ثابت پیکربندی‌شده
-// نیست، بلکه پویا و بر اساس مبدأ/مقصد محاسبه می‌شود (پایین‌تر، getTapinServiceType).
-const TAPIN_REQUIRED_CONFIG_FIELDS = [
-  "product_type_id", // ۱ = عمومی (تنها مقدار مستندشده در این مرحله)
-  "packing_type_id", // ۲ = نیاز به بسته‌بندی ندارد (تنها مقدار مستندشده در این مرحله)
-  "payment_type", // ۱۰ = سمت فرستنده/نقدی، ۲۰ = پس‌کرایه (بخش ۹ دستور: ۲۰ فعلاً نباید فعال شود مگر مسیر COD واقعی تکمیل شود)
-  "delivery_type", // ۱۰ = تحویل در محل مشتری، ۲۰ = تحویل در محل نمایندگی
-  "pickup_type", // ۱۰ = جمع‌آوری در محل مشتری، ۲۰ = جمع‌آوری در نمایندگی (نام قبلی نادرست «type_pickup» بود؛ این‌جا اصلاح شد)
-];
+// تنظیمات Tapin Post v2: pay_type (پیش‌فرض ۱) و order_type (پیش‌فرض ۰) طبق
+// نمونهٔ رسمی Check Price؛ و packet_type (اجباری در قرارداد) که «هیچ پیش‌فرضی»
+// ندارد: فقط اگر در config_json/TAPIN_PACKET_TYPE تنظیم شده باشد به VPS ارسال
+// می‌شود، وگرنه VPS آن را از پیکربندی خودش می‌خواند و اگر آنجا هم نبود
+// TAPIN_CONTRACT_INCOMPLETE برمی‌گرداند (مقدار حدسی ساخته نمی‌شود).
+// اولویت: config_json پرووایدر > متغیر Worker (TAPIN_PAY_TYPE / TAPIN_ORDER_TYPE /
+// TAPIN_PACKET_TYPE) > پیش‌فرض رسمی (فقط pay/order). هیچ Secret جدیدی ساخته نمی‌شود.
+// فیلدهای قدیمی Tipax/v4 (product_type_id, packing_type_id, payment_type,
+// delivery_type, pickup_type, service_type_*) دیگر خوانده یا ارسال نمی‌شوند؛
+// اگر هنوز در config_json قدیمی ذخیره باشند، نادیده گرفته می‌شوند.
+export const TAPIN_DEFAULT_PAY_TYPE = 1;
+export const TAPIN_DEFAULT_ORDER_TYPE = 0;
+
+function pickIntegerSetting(...candidates) {
+  for (const value of candidates) {
+    if (value === undefined || value === null || String(value).trim() === "") continue;
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 0 ? { ok: true, value: n } : { ok: false, raw: String(value) };
+  }
+  return null;
+}
 
 async function getTapinBusinessConfig(env) {
   const row = await env.DB.prepare("SELECT config_json FROM shipping_providers WHERE code = 'tapin'").first();
   const config = safeParseJson(row?.config_json) || {};
-  const missing = TAPIN_REQUIRED_CONFIG_FIELDS.filter((f) => config[f] === undefined || config[f] === null);
-  return { config, missing };
-}
-
-// service_type پویا (بخش ۸ دستور): ۷=اکسپرس درون‌شهری اگر مبدأ (شهر
-// فروشگاه، از config.origin_city) با شهر مقصد یکی باشد؛ در غیر این صورت
-// ۲=اکسپرس ویژه بین‌شهری. هر دو عدد و همچنین شهر مبدأ از پنل Providers قابل
-// تنظیم‌اند (config.service_type_local / service_type_domestic / origin_city)
-// — مقادیر ۷/۲ پیش‌فرض‌های مستندشده PDF هستند، نه چیزی که این تابع اختراع کند.
-// اگر شهر مبدأ در config تنظیم نشده باشد یا مقصد خالی باشد، به‌صورت محافظه‌کارانه
-// حالت بین‌شهری فرض می‌شود (چون فرض اشتباهِ «درون‌شهری» ریسک SLA/قیمت نادرست
-// بیشتری دارد).
-function getTapinServiceType(config, destinationCity) {
-  const localType = Number(config.service_type_local) || 7;
-  const domesticType = Number(config.service_type_domestic) || 2;
-  const origin = normalizePersianText(config.origin_city || "");
-  const destination = normalizePersianText(destinationCity || "");
-  if (!origin || !destination) return domesticType;
-  return origin === destination ? localType : domesticType;
+  const pay = pickIntegerSetting(config.pay_type, env?.TAPIN_PAY_TYPE);
+  const order = pickIntegerSetting(config.order_type, env?.TAPIN_ORDER_TYPE);
+  const packet = pickIntegerSetting(config.packet_type, env?.TAPIN_PACKET_TYPE);
+  const invalid = [];
+  if (pay && !pay.ok) invalid.push("pay_type");
+  if (order && !order.ok) invalid.push("order_type");
+  if (packet && !packet.ok) invalid.push("packet_type");
+  return {
+    config: {
+      pay_type: pay?.ok ? pay.value : TAPIN_DEFAULT_PAY_TYPE,
+      order_type: order?.ok ? order.value : TAPIN_DEFAULT_ORDER_TYPE,
+      // بدون پیش‌فرض: null یعنی «Worker مقداری ندارد» (VPS تصمیم می‌گیرد).
+      packet_type: packet?.ok ? packet.value : null,
+    },
+    missing: [],
+    invalid,
+  };
 }
 
 function isPositiveNumber(value) {
@@ -429,9 +393,19 @@ async function resolveTapinPackageSpec(env, { cartItems, productRows }) {
       ? Math.max(Math.round(estimate.weightGrams) - weightPerCountGrams, 0)
       : Math.round(estimate.weightGrams);
 
+  const title = String(product.name || "").trim();
+  if (!title) {
+    return {
+      ok: false,
+      error: "TAPIN_CONTRACT_INCOMPLETE",
+      message: "نام محصول برای فیلد title در products[] Tapin ثبت نشده است.",
+    };
+  }
+
   return {
     ok: true,
     productId,
+    title,
     weightPerCountGrams,
     package: {
       lengthCm: Math.round(estimate.lengthCm),
@@ -521,6 +495,19 @@ async function requestTapinQuoteViaProxy(env, quotePayload) {
   // خطای سطح HTTP/Proxy (نه خطای منطقی Tapin/City که Proxy با ok:false و یک
   // کد مشخص گزارش می‌کند — آن حالت را quoteViaTapin پایین‌تر مدیریت می‌کند).
   if (!response.ok) {
+    // VPS خطاهای کنترل‌شده را با بدنهٔ {ok:false,error_code,message} برمی‌گرداند
+    // (مثلاً 400 برای TAPIN_CONTRACT_INCOMPLETE یا 501 برای غیرفعال بودن).
+    // کد دقیق حفظ می‌شود تا در Audit و پیام مشتری قابل تشخیص بماند.
+    const proxyCode = data && data.ok === false ? data.error_code || data.error || null : null;
+    if (proxyCode) {
+      return {
+        ok: false,
+        error: String(proxyCode),
+        status: response.status,
+        message: describeProxyFailure(data, null, env) || `HTTP ${response.status}`,
+        candidates: data.candidates || null,
+      };
+    }
     const reason = describeProxyFailure(data, null, env);
     return {
       ok: false,
@@ -568,15 +555,13 @@ export function findTapinCityMatch(cities, cityName) {
 }
 
 export async function quoteViaTapin(env, quoteRequest) {
-  const { config, missing } = await getTapinBusinessConfig(env);
-  if (missing.length > 0) {
+  const { config, invalid } = await getTapinBusinessConfig(env);
+  if (invalid.length > 0) {
     return {
       ok: false,
       provider: "tapin",
       error: "TAPIN_CONFIG_INCOMPLETE",
-      message:
-        `تنظیمات کسب‌وکار Tapin کامل نیست: ${missing.join(", ")}. این مقادیر باید طبق enumهای مستندشده در راهنمای رسمی Tapin، ` +
-        `از پنل «Providers» برای Provider با کد tapin (فیلد config) تنظیم شوند — به‌صورت خودکار حدس زده نمی‌شوند.`,
+      message: `مقدار تنظیم‌شدهٔ ${invalid.join(", ")} برای Tapin عدد صحیح معتبر نیست.`,
       available: false,
     };
   }
@@ -588,8 +573,7 @@ export async function quoteViaTapin(env, quoteRequest) {
     discount: Number(item.discount) || 0,
   }));
 
-  // بخش ۴/۱۶/۱۷ دستور: اطلاعات واقعی بسته/وزن از D1 (productRows، از پیش
-  // توسط فراخواننده واکشی‌شده — طبق الگوی بدون منبع موازی همین پروژه)،
+  // اطلاعات واقعی بسته/وزن از D1 (productRows، از پیش توسط فراخواننده واکشی‌شده)،
   // نه هیچ مقدار حدسی/ثابت.
   const packageSpec = await resolveTapinPackageSpec(env, {
     cartItems,
@@ -601,32 +585,29 @@ export async function quoteViaTapin(env, quoteRequest) {
 
   const item = cartItems.find((i) => i.productId === packageSpec.productId);
 
-  // بخش ۶ دستور: تبدیل تومان→ریال فقط همین یک‌بار، فقط این‌جا.
+  // تبدیل تومان→ریال فقط همین یک‌بار، فقط این‌جا (VPS هیچ تبدیل پولی انجام نمی‌دهد).
+  // وزن‌ها همیشه «گرم» به VPS می‌روند (VPS فقط در صورت تنظیم واحد kg، یک‌بار تبدیل می‌کند).
   const products = [
     {
-      discount_per_count: Math.round(item.discount * RIAL_PER_TOMAN),
-      amount_per_count: Math.round(item.price * RIAL_PER_TOMAN),
-      weight_per_count: packageSpec.weightPerCountGrams,
       count: item.quantity,
+      discount: Math.round(item.discount * RIAL_PER_TOMAN),
+      price: Math.round(item.price * RIAL_PER_TOMAN),
+      title: packageSpec.title,
+      weight: packageSpec.weightPerCountGrams,
+      // product_id عمداً ارسال نمی‌شود: در قرارداد Tapin این فیلد شناسهٔ کالا در
+      // کاتالوگ خود Tapin است، نه شناسهٔ داخلی فروشگاه. بدون آن قرارداد
+      // ارسال title/weight/price را می‌خواهد (هر سه ارسال می‌شوند).
     },
   ];
 
-  const serviceType = getTapinServiceType(config, quoteRequest.destinationCity);
-
-  // بدنه Quote — دقیقاً با نام فیلدهای رسمی Tapin (بخش ۳ دستور). شهر مقصد
-  // به‌صورت نام خام ارسال می‌شود؛ حل‌وفصل province/city سمت VPS/Proxy انجام
-  // می‌شود (Worker لیست/Endpoint شهر Tapin را مستقیماً صدا نمی‌زند).
+  // قرارداد Worker → VPS. length/width/height فقط برای انتخاب box_id سمت VPS
+  // هستند (به Tapin ارسال نمی‌شوند). هیچ فیلد Tipax/v4 در این بدنه وجود ندارد.
   const quotePayload = {
     destination_city: quoteRequest.destinationCity,
-    ...(quoteRequest.destinationProvince && isProvinceForwardingEnabled(env)
-      ? { destination_province: quoteRequest.destinationProvince }
-      : {}),
-    product_type_id: config.product_type_id,
-    packing_type_id: config.packing_type_id,
-    payment_type: config.payment_type,
-    service_type: serviceType,
-    delivery_type: config.delivery_type,
-    pickup_type: config.pickup_type,
+    ...(quoteRequest.destinationProvince ? { destination_province: quoteRequest.destinationProvince } : {}),
+    pay_type: config.pay_type,
+    order_type: config.order_type,
+    ...(config.packet_type != null ? { packet_type: config.packet_type } : {}),
     products,
     length: packageSpec.package.lengthCm,
     width: packageSpec.package.widthCm,
@@ -641,33 +622,27 @@ export async function quoteViaTapin(env, quoteRequest) {
 
   const responseData = result.data || {};
 
-  // اگر Proxy سطح HTTP موفق بوده ولی خود Quote منطقاً ناموفق است (مثلاً شهر
-  // پیدا نشد/مبهم بود یا Tapin خطا داده) — این‌جا Proxy طبق قرارداد فرضی
-  // { ok: false, error, message, candidates? } را برمی‌گرداند و Worker فقط
-  // آن را بدون تفسیر اضافه Passthrough می‌کند (منطق تفسیر خطا اکنون سمت VPS
-  // است، نه اینجا).
+  // Proxy در سطح HTTP موفق بوده ولی Quote منطقاً ناموفق است (CITY_NOT_FOUND،
+  // CITY_AMBIGUOUS، TAPIN_HTTP_400 ...). کد از error_code (قرارداد VPS) یا error.
   if (responseData.ok === false) {
     return {
       ok: false,
       provider: "tapin",
-      error: responseData.error || "TAPIN_API_ERROR",
+      error: responseData.error_code || responseData.error || "TAPIN_API_ERROR",
       message: responseData.message || null,
       candidates: responseData.candidates || null,
       available: false,
     };
   }
 
-  // فقط فیلد مستندشدهٔ Tapin پذیرفته می‌شود: entries.total_send_price (ریال).
-  // فیلدهای حدسی (مثل cost که واحدش معلوم نیست) عمداً پذیرفته نمی‌شوند تا
-  // تبدیل واحد دوباره/اشتباه رخ ندهد؛ تبدیل ریال→تومان فقط همین یک‌بار است.
+  // فقط entries.total_send_price (ریال) پذیرفته می‌شود؛ ریال→تومان فقط همین یک‌بار.
   const entries = responseData.entries || null;
   const totalSendPriceRial = entries?.total_send_price;
   let costToman = null;
   if (totalSendPriceRial != null && totalSendPriceRial !== "") {
     costToman = Math.round(Number(totalSendPriceRial) / RIAL_PER_TOMAN);
   }
-  // Fail-Safe (بخش ۲۵ دستور): پاسخ بدون مبلغ قابل‌اتکا هرگز «ارسال رایگان»
-  // یا موفقیت نمایش داده نمی‌شود.
+  // Fail-Safe: مبلغ نامعتبر/صفر هرگز «ارسال رایگان» یا موفقیت نمایش داده نمی‌شود.
   if (!Number.isFinite(costToman) || costToman <= 0) {
     return {
       ok: false,
@@ -678,19 +653,15 @@ export async function quoteViaTapin(env, quoteRequest) {
     };
   }
 
-  const estimatedDelivery =
-    serviceType === Number(config.service_type_local) || (serviceType === 7 && config.service_type_local == null)
-      ? "۱ تا ۲ روز کاری (SLA مستندشده سرویس اکسپرس درون‌شهری تیپاکس)"
-      : "۲ تا ۳ روز کاری (SLA مستندشده سرویس اکسپرس ویژه بین‌شهری تیپاکس)";
-
   return {
     ok: true,
     provider: "tapin",
-    carrier: "tipax",
-    service: serviceType === 7 ? "اکسپرس درون‌شهری" : "اکسپرس ویژه بین‌شهری",
+    carrier: "post",
+    service: "پست (از طریق Tapin)",
     cost: costToman,
     currency: "IRT",
-    estimated_delivery: estimatedDelivery,
+    // SLA رسمی برای Post v2 در قرارداد مستند نشده؛ زمان تحویل ساخته نمی‌شود.
+    estimated_delivery: null,
     available: true,
     tracking: responseData.tracking ?? null,
     quote_id: responseData.quote_id ?? null,
@@ -698,7 +669,12 @@ export async function quoteViaTapin(env, quoteRequest) {
       raw_response: responseData,
       matched_city: responseData.matched_city || null,
       package: packageSpec.package,
-      service_type: serviceType,
+      pay_type: config.pay_type,
+      order_type: config.order_type,
+      packet_type: responseData.sent?.packet_type ?? config.packet_type ?? null,
+      box_id: responseData.sent?.box_id ?? null,
+      sent_package_weight: responseData.sent?.package_weight ?? null,
+      total_weight: entries?.total_weight ?? null,
     },
   };
 }
@@ -813,6 +789,9 @@ const ONLINE_UNAVAILABLE_MESSAGES = {
   TAPIN_PROVIDER_INACTIVE: "امکان برآورد آنلاین ارسال در حال حاضر وجود ندارد.",
   AMBIGUOUS_CITY_NAME: "شهر انتخاب‌شده برای ارسال آنلاین مبهم است؛ لطفاً استان و شهر را دقیق‌تر انتخاب کنید.",
   CITY_NOT_FOUND: "برای این شهر امکان ارسال آنلاین پیدا نشد. لطفاً با پشتیبانی تماس بگیرید.",
+  PROVINCE_NOT_FOUND: "استان انتخاب‌شده برای ارسال آنلاین پیدا نشد. لطفاً با پشتیبانی تماس بگیرید.",
+  CITY_AMBIGUOUS: "شهر انتخاب‌شده برای ارسال آنلاین مبهم است؛ لطفاً استان و شهر را دقیق‌تر انتخاب کنید.",
+  TAPIN_CONTRACT_INCOMPLETE: "امکان برآورد آنلاین ارسال در حال حاضر وجود ندارد.",
 };
 const ONLINE_UNAVAILABLE_DEFAULT_MESSAGE =
   "امکان برآورد آنلاین هزینه ارسال در حال حاضر وجود ندارد. لطفاً کمی بعد دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.";
@@ -888,7 +867,7 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
       provider: "tapin",
       available: false,
       error: "TAPIN_PROVIDER_INACTIVE",
-      message: "Provider تیپاکس فعال نیست یا در حالت quote نیست.",
+      message: "Provider Tapin فعال نیست یا در حالت quote نیست.",
     };
   } else {
     // هر استثنای غیرمنتظره داخل Adapter به یک نتیجهٔ ناموفق «با علت واقعی»
@@ -922,14 +901,17 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
     provider_code: "tapin",
     calculation_mode: mode,
     destination_city: city || null,
-    destination_province: province || onlineResult?.metadata?.matched_city?.provinceTitle || null,
+    destination_province: province || onlineResult?.metadata?.matched_city?.province_title || null,
     weight_grams: totalWeight,
     cart_value: totalValue,
     quoted_cost: onlineResult?.cost ?? null,
     available: !!onlineResult?.ok,
     request_extra: {
       items: items.map((i) => ({ product_id: i.productId, quantity: i.quantity, price_toman: i.price })),
-      service_type: onlineResult?.metadata?.service_type ?? null,
+      pay_type: onlineResult?.metadata?.pay_type ?? null,
+      order_type: onlineResult?.metadata?.order_type ?? null,
+      box_id: onlineResult?.metadata?.box_id ?? null,
+      total_weight: onlineResult?.metadata?.total_weight ?? null,
       package: onlineResult?.metadata?.package ?? null,
       quoted_cost_toman: onlineResult?.cost ?? null,
       http_status: onlineResult?.status ?? null,
@@ -947,12 +929,12 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
       shipping_methods: [
         {
           id: TAPIN_OPTION_ID,
-          name: "ارسال با تیپاکس",
+          name: "ارسال پستی (Tapin)",
           cost: onlineResult.cost,
           cost_type: "prepaid",
           scope: "online",
           source: "tapin",
-          carrier: onlineResult.carrier || "tipax",
+          carrier: onlineResult.carrier || "post",
           service: onlineResult.service || null,
           estimated_delivery: onlineResult.estimated_delivery || null,
           quote_id: onlineResult.quote_id || null,

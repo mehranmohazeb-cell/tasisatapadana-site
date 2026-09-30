@@ -47,8 +47,7 @@ function wrapD1(db) {
 
 const PROXY_KEY = "proxy-secret-key-should-never-leak";
 const TAPIN_CONFIG = {
-  product_type_id: 1, packing_type_id: 2, payment_type: 10, delivery_type: 10, pickup_type: 20,
-  origin_city: "اصفهان", service_type_local: 7, service_type_domestic: 2,
+  pay_type: 1, order_type: 0,
 };
 
 function makeEnv({ mode = "online", tapinStatus = "active" } = {}) {
@@ -151,7 +150,7 @@ await test("online: Estimate ورامین → Quote تیپاکس (ریال→ت�
     assert.equal(proxy.calls.length, 1);
     assert.equal(proxy.calls[0].url, "https://proxy.tasisatapadanaesfahan.ir/api/v1/tapin/quote");
     assert.equal(proxy.calls[0].body.destination_city, "ورامین");
-    assert.equal("destination_province" in proxy.calls[0].body, false); // پیش‌فرض: قرارداد شناخته‌شدهٔ VPS دست‌نخورده
+    assert.equal(proxy.calls[0].body.destination_province, "تهران"); // قرارداد جدید: استان همیشه ارسال می‌شود
   } finally { proxy.restore(); }
 });
 
@@ -162,15 +161,19 @@ await test("بدنه Tapin: نام فیلدهای صحیح، تومان→ریا
     await estimate(env, enc(VARAMIN));
     const b = proxy.calls[0].body;
     const p = b.products[0];
-    assert.equal(p.amount_per_count, 1_120_000_000);
-    assert.equal(p.discount_per_count, 0);
-    assert.equal(p.weight_per_count, 36000);
+    assert.equal(p.price, 1_120_000_000);
+    assert.equal(p.discount, 0);
+    assert.equal(p.weight, 36000);
     assert.equal(p.count, 1);
+    assert.equal(p.title, "پکیج شوفاژ دیواری آدنا 24 کیلووات"); // نام واقعی محصول از D1
+    assert.equal(p.product_id, 1);
     assert.equal(b.package_weight, 1500);
     assert.deepEqual([b.length, b.width, b.height], [80, 45, 35]);
-    assert.equal(b.service_type, 2); // اصفهان ≠ ورامین → بین‌شهری
-    assert.equal(b.pickup_type, 20);
-    for (const bad of ["count_per_discount", "count_per_amount", "weight_package", "type_pickup"]) assert.equal(b[bad], undefined);
+    assert.equal(b.pay_type, 1);
+    assert.equal(b.order_type, 0);
+    for (const bad of ["service_type", "pickup_type", "delivery_type", "payment_type", "product_type_id", "packing_type_id",
+      "count_per_discount", "count_per_amount", "weight_package", "type_pickup", "receiver_city_id", "receiver_province_id"]) assert.equal(b[bad], undefined);
+    for (const bad of ["amount_per_count", "discount_per_count", "weight_per_count"]) assert.equal(p[bad], undefined);
     assert.ok(!JSON.stringify(proxy.calls[0].body).includes(PROXY_KEY));
   } finally { proxy.restore(); }
 });
@@ -276,7 +279,7 @@ await test("Checkout ورامین در حالت online: سفارش با مبلغ
     const order = env._raw.prepare("SELECT * FROM orders").get();
     assert.equal(order.shipping_cost, 165000);
     assert.equal(order.shipping_method_id, null);
-    assert.equal(order.shipping_method_name, "ارسال با تیپاکس");
+    assert.equal(order.shipping_method_name, "ارسال پستی (Tapin)");
     assert.equal(order.total, 112_000_000 + 165000);
     assert.equal(proxy.calls.length, 1);
   } finally { proxy.restore(); }
@@ -360,7 +363,7 @@ await test("یک کالا × چند عدد → count=3 با یک بسته؛ Quot
     const data = await estimate(env, enc("city=ورامین&province=تهران&product_ids=1&quantities=3"));
     assert.equal(data.shipping_methods[0].cost, 200000);
     assert.equal(proxy.calls[0].body.products[0].count, 3);
-    assert.equal(proxy.calls[0].body.products[0].amount_per_count, 1_120_000_000);
+    assert.equal(proxy.calls[0].body.products[0].price, 1_120_000_000);
   } finally { proxy.restore(); }
 });
 
@@ -374,7 +377,8 @@ await test("Quote قدیمی با تغییر تعداد/مقصد دوباره ا
     const c = await estimate(env, enc("city=اصفهان&province=اصفهان&product_ids=1&quantities=2"));
     assert.equal(proxy.calls.length, 3);
     assert.equal(proxy.calls[1].body.products[0].count, 2);
-    assert.equal(proxy.calls[2].body.service_type, 7); // مبدأ = مقصد → درون‌شهری
+    assert.equal(proxy.calls[2].body.destination_city, "اصفهان");
+    assert.equal(proxy.calls[2].body.service_type, undefined); // Post v2: service_type وجود ندارد
     assert.notEqual(a.shipping_methods[0].cost, b.shipping_methods[0].cost);
     assert.equal(c.shipping_methods[0].cost, 130000);
   } finally { proxy.restore(); }
@@ -399,7 +403,7 @@ await test("برآورد بسته (بدون Override): package_weight فقط س�
   try {
     await estimate(env, enc(VARAMIN));
     const b = proxy.calls[0].body;
-    assert.equal(b.products[0].weight_per_count, 36000);
+    assert.equal(b.products[0].weight, 36000);
     assert.ok(b.package_weight > 0 && b.package_weight < 36000, `package_weight=${b.package_weight}`);
     assert.ok(b.length >= 70 && b.width >= 40 && b.height >= 30);
     assert.notDeepEqual([b.length, b.width, b.height], [5, 5, 5]);

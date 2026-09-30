@@ -19,9 +19,15 @@ import { quoteViaTapin, findTapinCityMatch, getShippingOptionsViaEngine } from "
 
 let passed = 0;
 let failed = 0;
+// Assertion داخل handler موک‌شدهٔ fetch توسط try/catch خود Adapter بلعیده می‌شد
+// (تست اشتباهاً سبز). اینجا هر استثنای handler ثبت می‌شود و پس از پایان تست
+// دوباره پرتاب می‌شود تا هرگز نتیجهٔ سبز کاذب ندهد.
+const handlerErrors = [];
 function test(name, fn) {
+  handlerErrors.length = 0;
   return fn()
     .then(() => {
+      if (handlerErrors.length > 0) throw handlerErrors[0];
       passed++;
       console.log(`  ✓ ${name}`);
     })
@@ -68,14 +74,8 @@ function makeDbWithTapinConfig(configOverrides = {}) {
     );
   `);
   const config = {
-    product_type_id: 1,
-    packing_type_id: 2,
-    payment_type: 10,
-    delivery_type: 10,
-    pickup_type: 20,
-    origin_city: "اصفهان",
-    service_type_local: 7,
-    service_type_domestic: 2,
+    pay_type: 1,
+    order_type: 0,
     ...configOverrides,
   };
   db.prepare(
@@ -100,7 +100,12 @@ function installMockFetch(handler) {
   const original = global.fetch;
   global.fetch = async (url, options) => {
     calls.push({ url, options });
-    return handler(url, options, calls.length);
+    try {
+      return handler(url, options, calls.length);
+    } catch (error) {
+      handlerErrors.push(error);
+      throw error;
+    }
   };
   return {
     calls,
@@ -154,31 +159,29 @@ await test("Worker فقط /api/v1/tapin/quote را صدا می‌زند", async 
   }
 });
 
-await test("بدنه درخواست دقیقاً با نام فیلدهای رسمی Tapin ساخته می‌شود (نه نام‌های نادرست قبلی)", async () => {
+await test("بدنه Worker→VPS: قرارداد Post v2 (products[]: count/discount/price/title/weight — بدون product_id داخلی)", async () => {
   const mock = installMockFetch((url, options) => {
     const body = JSON.parse(options.body);
     assert.equal(options.headers.Authorization, `Bearer ${REAL_PROXY_KEY}`);
     assert.equal(body.destination_city, "تهران");
-    assert.equal(body.product_type_id, 1);
-    assert.equal(body.packing_type_id, 2);
-    assert.equal(body.payment_type, 10);
-    assert.equal(body.delivery_type, 10);
-    assert.equal(body.pickup_type, 20);
-    // ابعاد واقعی بسته (Override) — نه ۵×۵×۵ ثابت نسخه قبلی:
+    assert.equal(body.pay_type, 1);
+    assert.equal(body.order_type, 0);
+    // ابعاد واقعی بسته (Override) — فقط برای انتخاب box_id سمت VPS:
     assert.equal(body.length, 80);
     assert.equal(body.width, 45);
     assert.equal(body.height, 35);
     assert.equal(body.package_weight, 1500);
-    // نام دقیق فیلدهای products[] طبق PDF:
     const product = body.products[0];
-    assert.equal(product.discount_per_count, 0);
-    assert.equal(product.amount_per_count, 1_120_000_000); // ۱۱۲,۰۰۰,۰۰۰ تومان × ۱۰
-    assert.equal(product.weight_per_count, 32000); // وزن کالا، مستقل از وزن بسته‌بندی
+    assert.equal(product.discount, 0);
+    assert.equal(product.price, 1_120_000_000); // ۱۱۲,۰۰۰,۰۰۰ تومان × ۱۰ (فقط یک‌بار، فقط در Worker)
+    assert.equal(product.weight, 32000); // وزن کالا (گرم)، مستقل از وزن بسته‌بندی
     assert.equal(product.count, 1);
-    // نام‌های نادرست نسخه قبلی نباید دیگر وجود داشته باشند:
-    assert.equal(body.count_per_amount, undefined);
-    assert.equal(body.type_pickup, undefined);
-    assert.equal(body.weight_package, undefined);
+    assert.equal(product.title, "پکیج آدنا ۲۴");
+    // product_id در قرارداد Tapin شناسهٔ کاتالوگ خود Tapin است؛ شناسهٔ داخلی فروشگاه نباید ارسال شود.
+    assert.equal(product.product_id, undefined);
+    assert.deepEqual(Object.keys(product).sort(), ["count", "discount", "price", "title", "weight"]);
+    // packet_type بدون تنظیم واقعی هرگز توسط Worker ساخته نمی‌شود.
+    assert.equal(body.packet_type, undefined);
     assert.equal(body.shop_id, undefined);
     return jsonResponse({ ok: true, entries: { total_send_price: 150000 } });
   });
@@ -189,40 +192,48 @@ await test("بدنه درخواست دقیقاً با نام فیلدهای رس
   }
 });
 
-await test("service_type پویا: مبدأ=مقصد → اکسپرس درون‌شهری (7)", async () => {
-  const mock = installMockFetch((url, options) => {
-    const body = JSON.parse(options.body);
-    assert.equal(body.service_type, 7);
-    return jsonResponse({ ok: true, entries: { total_send_price: 100000 } });
-  });
+await test("packet_type: فقط در صورت تنظیم واقعی ارسال می‌شود (config_json > env Worker)، بدون پیش‌فرض", async () => {
+  let body;
+  const mock = installMockFetch((url, opts) => { body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  const req = { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows };
   try {
-    const result = await quoteViaTapin(baseEnv(), {
-      destinationCity: "اصفهان", // = config.origin_city
-      items: sampleItems,
-      productRows: sampleProductRows,
-    });
-    assert.equal(result.service, "اکسپرس درون‌شهری");
+    await quoteViaTapin(baseEnv(), req);
+    assert.equal("packet_type" in body, false);
+    await quoteViaTapin(baseEnv({ TAPIN_PACKET_TYPE: "5" }), req);
+    assert.equal(body.packet_type, 5);
+    await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ packet_type: 7 }), TAPIN_PACKET_TYPE: "5" }), req);
+    assert.equal(body.packet_type, 7);
   } finally {
     mock.restore();
   }
 });
 
-await test("service_type پویا: مبدأ≠مقصد → اکسپرس ویژه بین‌شهری (2)", async () => {
-  const mock = installMockFetch((url, options) => {
-    const body = JSON.parse(options.body);
-    assert.equal(body.service_type, 2);
-    return jsonResponse({ ok: true, entries: { total_send_price: 100000 } });
-  });
+await test("pay_type/order_type: پیش‌فرض ۱ و ۰؛ اولویت config_json > env Worker > پیش‌فرض", async () => {
+  let body;
+  const mock = installMockFetch((url, opts) => { body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  const req = { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows };
   try {
-    const result = await quoteViaTapin(baseEnv(), {
-      destinationCity: "تهران",
-      items: sampleItems,
-      productRows: sampleProductRows,
-    });
-    assert.equal(result.service, "اکسپرس ویژه بین‌شهری");
-  } finally {
-    mock.restore();
-  }
+    await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ pay_type: undefined, order_type: undefined }) }), req);
+    assert.deepEqual([body.pay_type, body.order_type], [1, 0]);
+    await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ pay_type: undefined, order_type: undefined }), TAPIN_PAY_TYPE: "3", TAPIN_ORDER_TYPE: "2" }), req);
+    assert.deepEqual([body.pay_type, body.order_type], [3, 2]);
+    await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ pay_type: 5, order_type: 4 }), TAPIN_PAY_TYPE: "3" }), req);
+    assert.deepEqual([body.pay_type, body.order_type], [5, 4]);
+  } finally { mock.restore(); }
+});
+
+await test("هیچ فیلد Tipax/v4 وارد درخواست نمی‌شود (حتی اگر config_json قدیمی آن‌ها را دارد)", async () => {
+  let raw;
+  const mock = installMockFetch((url, opts) => { raw = opts.body; return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  try {
+    const legacy = makeDbWithTapinConfig({ product_type_id: 1, packing_type_id: 2, payment_type: 10, delivery_type: 10, pickup_type: 20, origin_city: "اصفهان", service_type_local: 7, service_type_domestic: 2 });
+    await quoteViaTapin(baseEnv({ DB: legacy }), { destinationCity: "تهران", destinationProvince: "تهران", items: sampleItems, productRows: sampleProductRows });
+    const body = JSON.parse(raw);
+    for (const bad of ["product_type_id", "packing_type_id", "payment_type", "delivery_type", "pickup_type", "service_type",
+      "receiver_province_id", "receiver_city_id", "weight_package", "type_pickup", "shop_id"]) assert.equal(bad in body, false, bad);
+    for (const bad of ["amount_per_count", "discount_per_count", "weight_per_count"]) assert.equal(bad in body.products[0], false, bad);
+    assert.ok(!/tipax|\/v4/i.test(raw));
+  } finally { mock.restore(); }
 });
 
 await test("چند قلم کالای متفاوت در سبد → TAPIN_MULTI_PACKAGE_UNSUPPORTED، بدون هیچ تماس شبکه", async () => {
@@ -297,30 +308,30 @@ await test("بدون PROXY_API_KEY هرگز fetch اجرا نمی‌شود", asy
   }
 });
 
-await test("config_json ناقص (مثلاً بدون pickup_type) → TAPIN_CONFIG_INCOMPLETE بدون تماس شبکه", async () => {
+await test("pay_type نامعتبر در config_json → TAPIN_CONFIG_INCOMPLETE بدون تماس شبکه", async () => {
   const mock = installMockFetch(() => {
     throw new Error("fetch نباید صدا زده شود");
   });
   try {
-    const env = baseEnv({ DB: makeDbWithTapinConfig({ pickup_type: undefined }) });
+    const env = baseEnv({ DB: makeDbWithTapinConfig({ pay_type: "abc" }) });
     const result = await quoteViaTapin(env, { destinationCity: "اصفهان", items: sampleItems, productRows: sampleProductRows });
     assert.equal(result.ok, false);
     assert.equal(result.error, "TAPIN_CONFIG_INCOMPLETE");
-    assert.ok(result.message.includes("pickup_type"));
+    assert.ok(result.message.includes("pay_type"));
     assert.equal(mock.calls.length, 0);
   } finally {
     mock.restore();
   }
 });
 
-await test("پاسخ منطقی ناموفق Proxy (AMBIGUOUS_CITY_NAME) همراه candidates حفظ می‌شود", async () => {
+await test("پاسخ منطقی ناموفق Proxy (CITY_AMBIGUOUS با کلید error_code) همراه candidates حفظ می‌شود", async () => {
   const mock = installMockFetch(() =>
-    jsonResponse({ ok: false, error: "AMBIGUOUS_CITY_NAME", message: "چند شهر", candidates: [{ cityId: 1 }, { cityId: 2 }] })
+    jsonResponse({ ok: false, error_code: "CITY_AMBIGUOUS", message: "چند شهر", candidates: [{ city_code: 1 }, { city_code: 2 }] })
   );
   try {
     const result = await quoteViaTapin(baseEnv(), { destinationCity: "ری", items: sampleItems, productRows: sampleProductRows });
     assert.equal(result.ok, false);
-    assert.equal(result.error, "AMBIGUOUS_CITY_NAME");
+    assert.equal(result.error, "CITY_AMBIGUOUS");
     assert.equal(result.candidates.length, 2);
   } finally {
     mock.restore();
@@ -404,14 +415,58 @@ await test("پاسخ بدون entries.total_send_price (مثلاً فقط cost/p
   }
 });
 
-await test("destination_province فقط با TAPIN_PROXY_SEND_PROVINCE=true به Proxy فرستاده می‌شود", async () => {
+await test("destination_province همیشه (در صورت وجود) به VPS فرستاده می‌شود و بدون آن حذف می‌شود", async () => {
   const req = { destinationCity: "ورامین", destinationProvince: "تهران", items: sampleItems, productRows: sampleProductRows };
-  let mock = installMockFetch((url, opts) => { globalThis.__body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  const mock = installMockFetch((url, opts) => { globalThis.__body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
   try {
     await quoteViaTapin(baseEnv(), req);
-    assert.equal("destination_province" in globalThis.__body, false);
-    await quoteViaTapin({ ...baseEnv(), TAPIN_PROXY_SEND_PROVINCE: "true" }, req);
     assert.equal(globalThis.__body.destination_province, "تهران");
+    await quoteViaTapin(baseEnv(), { ...req, destinationProvince: null });
+    assert.equal("destination_province" in globalThis.__body, false);
+  } finally { mock.restore(); }
+});
+
+await test("VPS با HTTP غیر ۲xx و بدنهٔ کنترل‌شده → کد دقیق (TAPIN_CONTRACT_INCOMPLETE / TAPIN_BAD_REQUEST) حفظ می‌شود", async () => {
+  const mock = installMockFetch(() => jsonResponse({ ok: false, error_code: "TAPIN_CONTRACT_INCOMPLETE", message: "missing", missing_fields: ["address"] }, { ok: false, status: 400 }));
+  try {
+    const result = await quoteViaTapin(baseEnv(), { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows });
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "TAPIN_CONTRACT_INCOMPLETE");
+    assert.equal(result.status, 400);
+  } finally { mock.restore(); }
+});
+
+await test("کدهای VPS (CITY_NOT_FOUND / TAPIN_HTTP_400 / TAPIN_TIMEOUT / TAPIN_AUTH_ERROR) بدون تغییر منتقل می‌شوند", async () => {
+  for (const code of ["CITY_NOT_FOUND", "TAPIN_HTTP_400", "TAPIN_TIMEOUT", "TAPIN_AUTH_ERROR", "TAPIN_PRICE_NOT_FOUND"]) {
+    const mock = installMockFetch(() => jsonResponse({ ok: false, error_code: code, message: "x" }));
+    try {
+      const result = await quoteViaTapin(baseEnv(), { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows });
+      assert.equal(result.error, code);
+      assert.equal(result.available, false);
+    } finally { mock.restore(); }
+  }
+});
+
+await test("قیمت صفر/منفی/غیرعددی هرگز ارسال رایگان یا موفقیت نمی‌شود", async () => {
+  for (const price of [0, -5, "abc", null]) {
+    const mock = installMockFetch(() => jsonResponse({ ok: true, entries: { total_send_price: price } }));
+    try {
+      const result = await quoteViaTapin(baseEnv(), { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows });
+      assert.equal(result.ok, false, String(price));
+      assert.equal(result.error, "TAPIN_RESPONSE_UNRECOGNIZED");
+    } finally { mock.restore(); }
+  }
+});
+
+await test("total_weight / box_id پاسخ VPS در metadata برای مقایسهٔ Live Test نگه‌داشته می‌شود", async () => {
+  const mock = installMockFetch(() => jsonResponse({ ok: true, entries: { total_send_price: 150000, total_weight: 33500 }, sent: { box_id: 7, package_weight: 1500 } }));
+  try {
+    const result = await quoteViaTapin(baseEnv(), { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows });
+    assert.equal(result.ok, true);
+    assert.equal(result.cost, 15000);
+    assert.equal(result.metadata.total_weight, 33500);
+    assert.equal(result.metadata.box_id, 7);
+    assert.equal(result.carrier, "post");
   } finally { mock.restore(); }
 });
 
@@ -456,14 +511,7 @@ await test("Fallback موتور داخلی Shipping Engine وقتی Proxy/Tapin 
   try {
     const internalOptionsFn = async () => [{ id: 1, name: "پست پیشتاز", cost: 45000, cost_type: "flat", scope: "global" }];
     const dbRaw = new DatabaseSync(":memory:");
-    const config = {
-      product_type_id: 1,
-      packing_type_id: 2,
-      payment_type: 10,
-      delivery_type: 10,
-      pickup_type: 20,
-      origin_city: "اصفهان",
-    };
+    const config = { pay_type: 1, order_type: 0 };
     dbRaw.exec(`
       CREATE TABLE shipping_providers (id INTEGER PRIMARY KEY, code TEXT UNIQUE, status TEXT, mode TEXT, fallback_provider_code TEXT, config_json TEXT, sort_order INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE site_settings (id INTEGER PRIMARY KEY, shipping_calculation_mode TEXT);

@@ -49,8 +49,7 @@ function wrapD1(db) {
 
 const PROXY_KEY = "proxy-secret-key-should-never-leak";
 const TAPIN_CONFIG = {
-  product_type_id: 1, packing_type_id: 2, payment_type: 10, delivery_type: 10, pickup_type: 20,
-  origin_city: "اصفهان", service_type_local: 7, service_type_domestic: 2,
+  pay_type: 1, order_type: 0,
 };
 
 function makeEnv({ mode = "online", tapinStatus = "active" } = {}) {
