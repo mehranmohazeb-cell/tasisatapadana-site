@@ -49,7 +49,7 @@ function wrapD1(db) {
 
 const PROXY_KEY = "proxy-secret-key-should-never-leak";
 const TAPIN_CONFIG = {
-  pay_type: 1, order_type: 0,
+  pay_type: 1,
 };
 
 function makeEnv({ mode = "online", tapinStatus = "active" } = {}) {

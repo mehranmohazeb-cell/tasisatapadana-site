@@ -47,7 +47,7 @@ function wrapD1(db) {
 
 const PROXY_KEY = "proxy-secret-key-should-never-leak";
 const TAPIN_CONFIG = {
-  pay_type: 1, order_type: 0,
+  pay_type: 1,
 };
 
 function makeEnv({ mode = "online", tapinStatus = "active" } = {}) {
@@ -166,11 +166,12 @@ await test("بدنه Tapin: نام فیلدهای صحیح، تومان→ریا
     assert.equal(p.weight, 36000);
     assert.equal(p.count, 1);
     assert.equal(p.title, "پکیج شوفاژ دیواری آدنا 24 کیلووات"); // نام واقعی محصول از D1
-    assert.equal(p.product_id, 1);
+    assert.ok("product_id" in p);
+    assert.strictEqual(p.product_id, null); // نه شناسهٔ D1 (1)، نه SKU/عدد ساختگی
     assert.equal(b.package_weight, 1500);
     assert.deepEqual([b.length, b.width, b.height], [80, 45, 35]);
     assert.equal(b.pay_type, 1);
-    assert.equal(b.order_type, 0);
+    assert.equal("order_type" in b, false); // بدون تنظیم صریح Worker/D1 ارسال نمی‌شود
     for (const bad of ["service_type", "pickup_type", "delivery_type", "payment_type", "product_type_id", "packing_type_id",
       "count_per_discount", "count_per_amount", "weight_package", "type_pickup", "receiver_city_id", "receiver_province_id"]) assert.equal(b[bad], undefined);
     for (const bad of ["amount_per_count", "discount_per_count", "weight_per_count"]) assert.equal(p[bad], undefined);

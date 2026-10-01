@@ -75,7 +75,7 @@ function makeDbWithTapinConfig(configOverrides = {}) {
   `);
   const config = {
     pay_type: 1,
-    order_type: 0,
+    // order_type عمداً تنظیم نشده: Worker نباید مقدار پیش‌فرض (۰) بسازد.
     ...configOverrides,
   };
   db.prepare(
@@ -159,13 +159,14 @@ await test("Worker فقط /api/v1/tapin/quote را صدا می‌زند", async 
   }
 });
 
-await test("بدنه Worker→VPS: قرارداد Post v2 (products[]: count/discount/price/title/weight — بدون product_id داخلی)", async () => {
+await test("بدنه Worker→VPS: قرارداد Post v2 (products[]: count/discount/price/title/weight — product_id همیشه هست و بدون mapping واقعی null است)", async () => {
   const mock = installMockFetch((url, options) => {
     const body = JSON.parse(options.body);
     assert.equal(options.headers.Authorization, `Bearer ${REAL_PROXY_KEY}`);
     assert.equal(body.destination_city, "تهران");
     assert.equal(body.pay_type, 1);
-    assert.equal(body.order_type, 0);
+    // بدون تنظیم صریح Worker/D1 → order_type اصلاً ارسال نمی‌شود (VPS از TAPIN_ORDER_TYPE خودش می‌خواند).
+    assert.equal("order_type" in body, false);
     // ابعاد واقعی بسته (Override) — فقط برای انتخاب box_id سمت VPS:
     assert.equal(body.length, 80);
     assert.equal(body.width, 45);
@@ -177,9 +178,12 @@ await test("بدنه Worker→VPS: قرارداد Post v2 (products[]: count/dis
     assert.equal(product.weight, 32000); // وزن کالا (گرم)، مستقل از وزن بسته‌بندی
     assert.equal(product.count, 1);
     assert.equal(product.title, "پکیج آدنا ۲۴");
-    // product_id در قرارداد Tapin شناسهٔ کاتالوگ خود Tapin است؛ شناسهٔ داخلی فروشگاه نباید ارسال شود.
-    assert.equal(product.product_id, undefined);
-    assert.deepEqual(Object.keys(product).sort(), ["count", "discount", "price", "title", "weight"]);
+    // product_id در قرارداد Tapin شناسهٔ کاتالوگ خود Tapin است؛ بدون mapping واقعی → کلید هست و null است.
+    assert.ok("product_id" in product);
+    assert.strictEqual(product.product_id, null);
+    assert.notEqual(product.product_id, sampleItems[0].productId); // شناسهٔ D1 نباید جایگزین شود
+    assert.deepEqual(Object.keys(product).sort(), ["count", "discount", "price", "product_id", "title", "weight"]);
+    assert.ok(product.price > 0 && product.title && product.weight > 0); // با product_id=null هر سه حفظ می‌شوند
     // packet_type بدون تنظیم واقعی هرگز توسط Worker ساخته نمی‌شود.
     assert.equal(body.packet_type, undefined);
     assert.equal(body.shop_id, undefined);
@@ -208,13 +212,14 @@ await test("packet_type: فقط در صورت تنظیم واقعی ارسال �
   }
 });
 
-await test("pay_type/order_type: پیش‌فرض ۱ و ۰؛ اولویت config_json > env Worker > پیش‌فرض", async () => {
+await test("pay_type پیش‌فرض ۱؛ order_type بدون پیش‌فرض؛ اولویت config_json > env Worker", async () => {
   let body;
   const mock = installMockFetch((url, opts) => { body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
   const req = { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows };
   try {
     await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ pay_type: undefined, order_type: undefined }) }), req);
-    assert.deepEqual([body.pay_type, body.order_type], [1, 0]);
+    assert.equal(body.pay_type, 1);
+    assert.equal("order_type" in body, false); // نه ۰، نه ۱: Worker چیزی تحمیل نمی‌کند
     await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ pay_type: undefined, order_type: undefined }), TAPIN_PAY_TYPE: "3", TAPIN_ORDER_TYPE: "2" }), req);
     assert.deepEqual([body.pay_type, body.order_type], [3, 2]);
     await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ pay_type: 5, order_type: 4 }), TAPIN_PAY_TYPE: "3" }), req);
@@ -511,7 +516,7 @@ await test("Fallback موتور داخلی Shipping Engine وقتی Proxy/Tapin 
   try {
     const internalOptionsFn = async () => [{ id: 1, name: "پست پیشتاز", cost: 45000, cost_type: "flat", scope: "global" }];
     const dbRaw = new DatabaseSync(":memory:");
-    const config = { pay_type: 1, order_type: 0 };
+    const config = { pay_type: 1 };
     dbRaw.exec(`
       CREATE TABLE shipping_providers (id INTEGER PRIMARY KEY, code TEXT UNIQUE, status TEXT, mode TEXT, fallback_provider_code TEXT, config_json TEXT, sort_order INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE site_settings (id INTEGER PRIMARY KEY, shipping_calculation_mode TEXT);
@@ -534,6 +539,94 @@ await test("Fallback موتور داخلی Shipping Engine وقتی Proxy/Tapin 
     assert.equal(engineResult.results[0].provider, "internal");
   } finally {
     mock.restore();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// تست‌های مرحلهٔ «اصلاح order_type / product_id / قرارداد Worker→VPS / حذف Tipax-v4»
+// ---------------------------------------------------------------------------
+await test("order_type: مقدار صریح D1 یا env ارسال می‌شود؛ ۰ هرگز به‌صورت پیش‌فرض ساخته نمی‌شود", async () => {
+  let body; let calls = 0;
+  const mock = installMockFetch((url, opts) => { calls++; body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  const req = { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows };
+  try {
+    await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ order_type: 1 }) }), req);
+    assert.strictEqual(body.order_type, 1); // D1 صریح
+    await quoteViaTapin(baseEnv({ TAPIN_ORDER_TYPE: "1" }), req);
+    assert.strictEqual(body.order_type, 1); // env صریح
+    await quoteViaTapin(baseEnv({ DB: makeDbWithTapinConfig({ order_type: 2 }), TAPIN_ORDER_TYPE: "1" }), req);
+    assert.strictEqual(body.order_type, 2); // D1 بر env اولویت دارد
+    await quoteViaTapin(baseEnv({ TAPIN_ORDER_TYPE: "" }), req);
+    assert.equal("order_type" in body, false); // env خالی = بدون تنظیم
+    await quoteViaTapin(baseEnv(), req);
+    assert.equal("order_type" in body, false);
+    assert.ok(!/"order_type"\s*:\s*0/.test(JSON.stringify(body)));
+  } finally { mock.restore(); }
+});
+
+await test("order_type نامعتبر (غیرعدد) → TAPIN_CONFIG_INCOMPLETE و هیچ تماسی به VPS نمی‌رود", async () => {
+  let calls = 0;
+  const mock = installMockFetch(() => { calls++; return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  try {
+    const r = await quoteViaTapin(baseEnv({ TAPIN_ORDER_TYPE: "abc" }), { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows });
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "TAPIN_CONFIG_INCOMPLETE");
+    assert.equal(calls, 0);
+  } finally { mock.restore(); }
+});
+
+await test("product_id: کلید همیشه هست، null است و هرگز ID داخلی D1/SKU/slug نمی‌شود؛ price/title/weight/count/discount حفظ می‌شوند", async () => {
+  let body;
+  const mock = installMockFetch((url, opts) => { body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  try {
+    const rows = sampleProductRows.map((r) => ({ ...r, sku: "SKU-123", slug: "adena-24", tapin_product_id: 987 }));
+    await quoteViaTapin(baseEnv(), { destinationCity: "تهران", items: sampleItems, productRows: rows });
+    for (const pr of body.products) {
+      assert.ok(Object.prototype.hasOwnProperty.call(pr, "product_id"));
+      assert.strictEqual(pr.product_id, null);
+      for (const k of ["count", "discount", "price", "title", "weight"]) assert.ok(k in pr, k);
+      assert.ok(pr.price > 0 && pr.weight > 0 && pr.title.length > 0 && pr.count >= 1);
+    }
+    const raw = JSON.stringify(body);
+    assert.ok(!raw.includes("SKU-123") && !raw.includes("adena-24") && !raw.includes("987"));
+  } finally { mock.restore(); }
+});
+
+await test("قرارداد نهایی Worker→VPS: دقیقاً همین کلیدها، package_weight هست و weight_package نیست، فقط /api/v1/tapin/quote", async () => {
+  let body; let url0;
+  const mock = installMockFetch((url, opts) => { url0 = url; body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 150000 } }); });
+  try {
+    await quoteViaTapin(baseEnv(), { destinationCity: "تهران", destinationProvince: "تهران", items: sampleItems, productRows: sampleProductRows });
+    assert.ok(url0.endsWith("/api/v1/tapin/quote"));
+    assert.ok(!url0.includes("api.tapin.ir"));
+    assert.deepEqual(Object.keys(body).sort(),
+      ["destination_city", "destination_province", "height", "length", "package_weight", "pay_type", "products", "width"]);
+    assert.ok("package_weight" in body);
+    assert.equal("weight_package" in body, false);
+    assert.equal(body.pay_type, 1);
+  } finally { mock.restore(); }
+});
+
+await test("تبدیل پول: تومان→ریال فقط یک‌بار (Worker)، ریال→تومان فقط یک‌بار (پاسخ)", async () => {
+  let body;
+  const mock = installMockFetch((url, opts) => { body = JSON.parse(opts.body); return jsonResponse({ ok: true, entries: { total_send_price: 1_234_560 } }); });
+  try {
+    const r = await quoteViaTapin(baseEnv(), { destinationCity: "تهران", items: sampleItems, productRows: sampleProductRows });
+    assert.equal(body.products[0].price, sampleItems[0].price * 10); // ×۱۰ یک‌بار
+    assert.equal(r.cost, 123_456); // ÷۱۰ یک‌بار
+  } finally { mock.restore(); }
+});
+
+await test("اسکن ایستا: هیچ فیلد/Endpoint Tipax-v4 در کد اجرایی Worker (بدون کامنت) نیست", async () => {
+  const fs = await import("node:fs");
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/([^:])\/\/.*$/gm, "$1");
+  const banned = ["product_type_id", "packing_type_id", "payment_type", "service_type", "delivery_type", "pickup_type",
+    "receiver_province_id", "receiver_city_id", "weight_package", "TAPIN_DEFAULT_ORDER_TYPE"];
+  for (const f of ["src/shipping-engine.js", "src/index.js", "src/packaging-estimation.js"]) {
+    const code = strip(fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8"));
+    for (const b of banned) assert.equal(code.includes(b), false, `${f}: ${b}`);
+    assert.equal(/api\.tapin\.ir/.test(code), false, `${f}: api.tapin.ir`);
+    assert.equal(/\/api\/v4|tipax\.ir/i.test(code), false, `${f}: v4/tipax endpoint`);
   }
 });
 

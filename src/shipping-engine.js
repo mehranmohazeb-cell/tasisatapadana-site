@@ -14,9 +14,10 @@
 //   - رجیستری Provider، نسخه‌بندی/Import تعرفه، تاریخچه Quote: کامل پیاده و تست‌شده (مراحل قبل).
 //   - Tapin Adapter (quoteViaTapin) اکنون فقط قرارداد Tapin Post v2 را می‌سازد:
 //       Worker → VPS  POST /api/v1/tapin/quote
-//         destination_city, destination_province?, pay_type (پیش‌فرض ۱), order_type (پیش‌فرض ۰),
+//         destination_city, destination_province?, pay_type (پیش‌فرض ۱),
+//         order_type? (فقط اگر در config_json/TAPIN_ORDER_TYPE در Worker صراحتاً تنظیم شده باشد؛ وگرنه حذف می‌شود تا VPS از TAPIN_ORDER_TYPE خودش بخواند),
 //         packet_type? (فقط اگر در config_json/TAPIN_PACKET_TYPE واقعاً تنظیم شده باشد؛ وگرنه VPS از .env می‌خواند),
-//         products[{count, discount, price(ریال), title, weight(گرم)}]  (product_id عمداً ارسال نمی‌شود),
+//         products[{count, discount, price(ریال), title, weight(گرم), product_id}]  (کلید product_id همیشه هست؛ بدون mapping واقعی Tapin مقدارش null است),
 //         length/width/height (سانتی‌متر؛ فقط برای انتخاب box_id سمت VPS), package_weight (گرم)
 //       VPS → Tapin   POST /api/v2/public/order/post/check-price/
 //       و قیمت اصلی از entries.total_send_price (ریال ← تومان یک‌بار).
@@ -266,18 +267,22 @@ function describeProxyFailure(data, rawText, env) {
 // تبدیل فقط همین‌جا (در Adapter) انجام می‌شود، نه جای دیگر.
 const RIAL_PER_TOMAN = 10;
 
-// تنظیمات Tapin Post v2: pay_type (پیش‌فرض ۱) و order_type (پیش‌فرض ۰) طبق
-// نمونهٔ رسمی Check Price؛ و packet_type (اجباری در قرارداد) که «هیچ پیش‌فرضی»
+// تنظیمات Tapin Post v2: pay_type (پیش‌فرض ۱ طبق پیکربندی فعلی پروژه)،
+// order_type (بدون هیچ پیش‌فرض Worker-side) و packet_type (اجباری در قرارداد) که «هیچ پیش‌فرضی»
 // ندارد: فقط اگر در config_json/TAPIN_PACKET_TYPE تنظیم شده باشد به VPS ارسال
 // می‌شود، وگرنه VPS آن را از پیکربندی خودش می‌خواند و اگر آنجا هم نبود
 // TAPIN_CONTRACT_INCOMPLETE برمی‌گرداند (مقدار حدسی ساخته نمی‌شود).
 // اولویت: config_json پرووایدر > متغیر Worker (TAPIN_PAY_TYPE / TAPIN_ORDER_TYPE /
-// TAPIN_PACKET_TYPE) > پیش‌فرض رسمی (فقط pay/order). هیچ Secret جدیدی ساخته نمی‌شود.
+// TAPIN_PACKET_TYPE) > پیش‌فرض (فقط pay_type). هیچ Secret جدیدی ساخته نمی‌شود.
+//
+// order_type: Worker هیچ مقدار پیش‌فرضی ندارد (قبلاً ۰ تحمیل می‌شد و Tapin
+// پاسخ «order_type: نوع سفارش وارد شده معتبر نمیباشد» می‌داد). اگر نه config_json
+// و نه TAPIN_ORDER_TYPE مقدار معتبر داشته باشند، فیلد از Payload حذف می‌شود و
+// VPS مقدار خودش (TAPIN_ORDER_TYPE در .env سمت VPS) را به کار می‌برد.
 // فیلدهای قدیمی Tipax/v4 (product_type_id, packing_type_id, payment_type,
 // delivery_type, pickup_type, service_type_*) دیگر خوانده یا ارسال نمی‌شوند؛
 // اگر هنوز در config_json قدیمی ذخیره باشند، نادیده گرفته می‌شوند.
 export const TAPIN_DEFAULT_PAY_TYPE = 1;
-export const TAPIN_DEFAULT_ORDER_TYPE = 0;
 
 function pickIntegerSetting(...candidates) {
   for (const value of candidates) {
@@ -301,7 +306,8 @@ async function getTapinBusinessConfig(env) {
   return {
     config: {
       pay_type: pay?.ok ? pay.value : TAPIN_DEFAULT_PAY_TYPE,
-      order_type: order?.ok ? order.value : TAPIN_DEFAULT_ORDER_TYPE,
+      // بدون پیش‌فرض: null یعنی «Worker مقدار صریح ندارد» → فیلد ارسال نمی‌شود.
+      order_type: order?.ok ? order.value : null,
       // بدون پیش‌فرض: null یعنی «Worker مقداری ندارد» (VPS تصمیم می‌گیرد).
       packet_type: packet?.ok ? packet.value : null,
     },
@@ -594,9 +600,12 @@ export async function quoteViaTapin(env, quoteRequest) {
       price: Math.round(item.price * RIAL_PER_TOMAN),
       title: packageSpec.title,
       weight: packageSpec.weightPerCountGrams,
-      // product_id عمداً ارسال نمی‌شود: در قرارداد Tapin این فیلد شناسهٔ کالا در
-      // کاتالوگ خود Tapin است، نه شناسهٔ داخلی فروشگاه. بدون آن قرارداد
-      // ارسال title/weight/price را می‌خواهد (هر سه ارسال می‌شوند).
+      // product_id: شناسهٔ کالا در کاتالوگ خود Tapin است، نه شناسهٔ D1/SKU/slug.
+      // در پروژه هیچ mapping واقعی Tapin product_id وجود ندارد (هیچ ستون/جدولی
+      // برای آن نیست) → کلید همیشه ارسال می‌شود و مقدارش null است؛ مقدار ساختگی
+      // ساخته نمی‌شود. با null، قرارداد ارسال title/weight/price را می‌خواهد
+      // (هر سه واقعی و همیشه ارسال می‌شوند).
+      product_id: null,
     },
   ];
 
@@ -606,7 +615,7 @@ export async function quoteViaTapin(env, quoteRequest) {
     destination_city: quoteRequest.destinationCity,
     ...(quoteRequest.destinationProvince ? { destination_province: quoteRequest.destinationProvince } : {}),
     pay_type: config.pay_type,
-    order_type: config.order_type,
+    ...(config.order_type != null ? { order_type: config.order_type } : {}),
     ...(config.packet_type != null ? { packet_type: config.packet_type } : {}),
     products,
     length: packageSpec.package.lengthCm,
