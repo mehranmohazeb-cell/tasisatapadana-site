@@ -831,8 +831,13 @@ async function loadShippingProductRows(env, productIds) {
   return result.results || [];
 }
 
-export async function resolveCustomerShipping(env, { cartItems, city, province, internalOptionsFn, productRows } = {}) {
-  const mode = await getShippingCalculationMode(env);
+export async function resolveCustomerShipping(env, { cartItems, city, province, internalOptionsFn, productRows, modeOverride } = {}) {
+  // modeOverride فقط توسط Endpoint پیش‌نمایش Admin (isAdmin) پاس داده می‌شود تا
+  // خروجی یک حالت دیگر بدون تغییر حالت سراسری/زندهٔ D1 دیده شود. Estimate/Cart/
+  // Checkout مشتری هرگز آن را نمی‌فرستند و همیشه از D1 می‌خوانند.
+  const mode = SHIPPING_CALCULATION_MODES.includes(modeOverride)
+    ? modeOverride
+    : await getShippingCalculationMode(env);
   const normalized = normalizeShippingCartItems(cartItems);
 
   // قیمت و مشخصات واقعی از D1 (هرگز از مرورگر).
@@ -978,8 +983,8 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
 }
 
 // سازگاری عقب‌گرد Endpoint پیش‌نمایش Admin: همان مسیر مشترک، با قالب خروجی قبلی.
-export async function getShippingOptionsViaEngine(env, { cartItems, city, province, internalOptionsFn, productRows }) {
-  const shared = await resolveCustomerShipping(env, { cartItems, city, province, internalOptionsFn, productRows });
+export async function getShippingOptionsViaEngine(env, { cartItems, city, province, internalOptionsFn, productRows, modeOverride }) {
+  const shared = await resolveCustomerShipping(env, { cartItems, city, province, internalOptionsFn, productRows, modeOverride });
   const results = shared.shipping_methods.map((m) =>
     m.source === "tapin"
       ? {
@@ -1008,6 +1013,12 @@ export async function getShippingOptionsViaEngine(env, { cartItems, city, provin
         }
   );
   const out = { mode: shared.mode, results, fell_back: shared.fell_back };
+  if (SHIPPING_CALCULATION_MODES.includes(modeOverride)) {
+    // فقط Admin Preview: نشان می‌دهد این خروجی با حالت موقتِ درخواست ساخته شده،
+    // و حالت زندهٔ واقعی D1 (که مشتری‌ها می‌بینند) چیست.
+    out.mode_override = true;
+    out.live_mode = await getShippingCalculationMode(env);
+  }
   if (shared.unavailable) out.unavailable = shared.unavailable;
   if (shared.audit) out.audit = shared.audit; // فقط Admin Preview: نتیجهٔ ثبت Audit (موفق/علت شکست)
   return out;

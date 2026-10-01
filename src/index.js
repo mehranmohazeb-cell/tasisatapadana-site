@@ -13,6 +13,7 @@ import {
   resolveCustomerShipping,
   TAPIN_OPTION_ID,
   TARIFF_SOURCES,
+  SHIPPING_CALCULATION_MODES,
 } from "./shipping-engine.js";
 
 import { formatTechnicalText, applyTechnicalFormattingToProduct } from "./technical-format.js";
@@ -4919,6 +4920,15 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
     try {
       const city = String(url.searchParams.get("city") || "").trim();
       const province = String(url.searchParams.get("province") || "").trim();
+      // mode (اختیاری، فقط همین Endpoint Admin): نتیجهٔ یک حالت دیگر را بدون
+      // تغییر حالت زندهٔ D1 نشان می‌دهد. نبودنش = رفتار قبلی (حالت زنده).
+      const modeParam = String(url.searchParams.get("mode") || "").trim();
+      if (modeParam && !SHIPPING_CALCULATION_MODES.includes(modeParam)) {
+        return Response.json(
+          { ok: false, error: "INVALID_MODE", message: "مقدار mode نامعتبر است. مقادیر مجاز: " + SHIPPING_CALCULATION_MODES.join(", ") },
+          { status: 400 }
+        );
+      }
       const productIdsParam = url.searchParams.get("product_ids");
       const quantitiesParam = url.searchParams.get("quantities");
       const productIds = productIdsParam ? productIdsParam.split(",").map((v) => Number(v.trim())) : [];
@@ -4966,6 +4976,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         province,
         internalOptionsFn: resolveShippingOptionsForCart,
         productRows,
+        modeOverride: modeParam || undefined,
       });
 
       return Response.json({ ok: true, ...engineResult });
