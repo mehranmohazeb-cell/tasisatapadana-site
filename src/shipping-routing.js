@@ -43,9 +43,8 @@ export const ROUTE_POLICY_VALUES = Object.freeze(["normal", "freight"]);
 export const MSG_MAX_DISPATCH = "سفارش شما حداکثر تا ۳ روز از فروشگاه ارسال می‌شود.";
 export const CUSTOMER_MESSAGES = Object.freeze({
   isfahan_courier: `ارسال با پیک موتوری و رایگان است. ${MSG_MAX_DISPATCH}`,
-  freight:
-    "این سفارش با باربری ارسال می‌شود و هزینهٔ حمل (پس‌کرایه) هنگام تحویل توسط گیرنده به باربری پرداخت می‌شود. " +
-    MSG_MAX_DISPATCH,
+  // پیام مصوب Freight (دقیقاً همین متن؛ بدون جملهٔ اضافه). سقف ۳ روز همچنان در فیلد max_dispatch_days گزینه می‌آید.
+  freight: "این محصول به دلیل ابعاد یا وزن، توسط باربری و به‌صورت پس‌کرایه ارسال می‌شود.",
   normal: MSG_MAX_DISPATCH,
 });
 
