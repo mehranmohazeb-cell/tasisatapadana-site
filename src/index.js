@@ -22,7 +22,11 @@ import {
   ROUTING_RULES,
   ROUTE_REASON_LABELS_FA,
   SUSPICION_LABELS_FA,
+  ROUTE_NORMAL,
+  ROUTE_FREIGHT,
+  ROUTE_ISFAHAN_COURIER,
   classifyProduct,
+  decideRoute,
   detectShippingDataSuspicions,
   loadRoutingData,
 } from "./shipping-routing.js";
@@ -75,6 +79,147 @@ function resolveShippingInfo(product) {
     shipping_method: product.shipping_method || STORE_DEFAULT_SHIPPING_METHOD,
     shipping_time: product.shipping_time || STORE_DEFAULT_SHIPPING_TIME,
   };
+}
+
+// =========================================================================
+// Stage A — Admin Visibility (فقط خواندن/نمایش؛ منطق Routing دست‌نخورده)
+// =========================================================================
+// وضعیت route_policy خام یک Shipping Class — بدون هیچ تبدیل بی‌صدا:
+//   valid   : یکی از مقادیر پشتیبانی‌شده (normal | freight)
+//   unset   : NULL در D1 (سیستم آن را «عادی» تلقی می‌کند؛ پیش‌فرض فنی)
+//   invalid : مقداری خارج از مقادیر پشتیبانی‌شده (UI باید صریح نشان دهد)
+//   unavailable : ستون route_policy روی D1 وجود ندارد (Migration اجرا نشده)
+function describeRoutePolicy(rawValue, columnAvailable = true) {
+  if (!columnAvailable) return "unavailable";
+  if (rawValue == null || rawValue === "") return "unset";
+  return ROUTE_POLICY_VALUES.includes(rawValue) ? "valid" : "invalid";
+}
+
+const ROUTE_LABELS_FA = Object.freeze({
+  [ROUTE_NORMAL]: "عادی",
+  [ROUTE_FREIGHT]: "باربری (پس‌کرایه)",
+  [ROUTE_ISFAHAN_COURIER]: "پیک موتوری رایگان",
+});
+
+const PACKAGING_SOURCE_LABELS_FA = Object.freeze({
+  PRODUCT: "انتخاب اختصاصی روی خود محصول",
+  CLASS_DEFAULT: "پیش‌فرض Shipping Class",
+  SYSTEM_DEFAULT: "Profile عمومی سیستم",
+  BUILTIN_FALLBACK: "Fallback داخلی (Profile ای در پنل تنظیم نشده)",
+});
+
+async function recordRouteAudit(env, entityType, entityId, oldValue, newValue) {
+  try {
+    await env.DB
+      .prepare("INSERT INTO shipping_route_audit (entity_type, entity_id, old_value, new_value, changed_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(entityType, entityId, oldValue ?? null, newValue ?? null, new Date().toISOString())
+      .run();
+    return true;
+  } catch (error) {
+    console.error("[shipping-routing] ثبت Audit شکست خورد:", error.message);
+    return false;
+  }
+}
+
+// خلاصهٔ حمل یک محصول برای پنل مدیریت. تصمیم مسیر فقط از decideRoute /
+// classifyProduct (src/shipping-routing.js) می‌آید؛ اینجا هیچ منطق Routing
+// بازنویسی نشده است. Flagها فقط هشدارند و مسیر را تغییر نمی‌دهند.
+function buildProductShippingSummary(product, klass, profiles) {
+  const productId = Number(product.id);
+  const productMap = new Map([[productId, product]]);
+  const classMap = new Map();
+  if (klass) classMap.set(Number(klass.id), klass);
+
+  // «خارج از اصفهان»: شهر خالی یعنی هیچ شهر رسمی اصفهان نیست.
+  const outside = decideRoute({ city: "", province: "", productIds: [productId], productMap, classMap });
+  // «داخل اصفهان»: با همان ثابت‌های رسمی Routing.
+  const inside = decideRoute({
+    city: ROUTING_RULES.official_city,
+    province: ROUTING_RULES.official_province,
+    productIds: [productId],
+    productMap,
+    classMap,
+  });
+
+  const classDefaultProfileId = klass?.default_packaging_profile_id ?? null;
+  const profile = resolveEffectiveProfile(product, profiles.byId, classDefaultProfileId);
+  let packagingSource = "BUILTIN_FALLBACK";
+  if (profile && profile.id != null) {
+    if (product.packaging_profile_id != null && Number(profile.id) === Number(product.packaging_profile_id)) packagingSource = "PRODUCT";
+    else if (classDefaultProfileId != null && Number(profile.id) === Number(classDefaultProfileId)) packagingSource = "CLASS_DEFAULT";
+    else packagingSource = "SYSTEM_DEFAULT";
+  }
+
+  const flags = detectShippingDataSuspicions(product, { shippingClass: klass, effectiveProfile: profile, route: outside.route });
+
+  const classPolicyStatus = klass ? describeRoutePolicy(klass.route_policy ?? null, klass.__route_policy_available !== false) : "no_class";
+  const overrideRaw = product.shipping_route_override ?? null;
+  const overrideStatus = overrideRaw == null || overrideRaw === ""
+    ? "none"
+    : ROUTE_OVERRIDE_VALUES.includes(overrideRaw) ? "valid" : "invalid";
+
+  // یادداشت شفاف وقتی Reason کد فنی دارد ولی مقدار D1 «ثبت‌نشده/نامعتبر» است.
+  let reasonNote = null;
+  if (overrideStatus !== "valid") {
+    if (classPolicyStatus === "unset") reasonNote = "route_policy این Shipping Class در D1 ثبت نشده (NULL)؛ پیش‌فرض فنی سیستم «عادی» است.";
+    else if (classPolicyStatus === "invalid") reasonNote = `route_policy این Shipping Class مقدار نامعتبر «${klass.route_policy}» دارد؛ منطق فعلی سیستم آن را «عادی» تلقی می‌کند.`;
+    else if (classPolicyStatus === "unavailable") reasonNote = "ستون route_policy هنوز روی D1 ایجاد نشده؛ همه چیز «عادی» محاسبه می‌شود.";
+  }
+  if (overrideStatus === "invalid") reasonNote = `Override محصول مقدار نامعتبر «${overrideRaw}» دارد؛ منطق فعلی آن را نادیده می‌گیرد.`;
+
+  const num = (v) => (v == null || v === "" ? null : Number(v));
+  return {
+    product_id: productId,
+    product_name: product.name ?? null,
+    shipping_class: klass ? { id: Number(klass.id), name: klass.name, active: klass.active } : null,
+    route_policy: klass ? (klass.route_policy ?? null) : null,
+    route_policy_status: classPolicyStatus,
+    override: overrideRaw || null,
+    override_status: overrideStatus,
+    effective_route_outside_isfahan: outside.route,
+    effective_route_outside_isfahan_label: ROUTE_LABELS_FA[outside.route] || outside.route,
+    effective_route_inside_isfahan: inside.route,
+    effective_route_inside_isfahan_label: ROUTE_LABELS_FA[inside.route] || inside.route,
+    route_reason: outside.items?.[0]?.reason ?? outside.reason,
+    route_reason_label: ROUTE_REASON_LABELS_FA[outside.items?.[0]?.reason ?? outside.reason] || (outside.items?.[0]?.reason ?? outside.reason),
+    route_reason_note: reasonNote,
+    packaging_profile: profile
+      ? { id: profile.id ?? null, code: profile.code ?? null, name: profile.name ?? null, source: packagingSource, source_label: PACKAGING_SOURCE_LABELS_FA[packagingSource] }
+      : null,
+    weight_grams: num(product.weight_grams),
+    dimensions_cm: { length: num(product.length_cm), width: num(product.width_cm), height: num(product.height_cm) },
+    package_weight_grams: num(product.package_weight_grams),
+    package_dimensions_cm: { length: num(product.package_length_cm), width: num(product.package_width_cm), height: num(product.package_height_cm) },
+    flags,
+    flag_labels: flags.map((f) => SUSPICION_LABELS_FA[f] || f),
+  };
+}
+
+// Snapshot ثبت‌شدهٔ ارسال سفارش (بدون محاسبهٔ مجدد). SELECTهای اصلی سفارش‌ها
+// دست‌نخورده می‌مانند؛ این خواندن جداگانه و Fail-Safe است تا اگر Migration
+// database/shipping-routing.sql اجرا نشده باشد، پنل سفارش‌ها نشکند.
+async function attachOrderShippingSnapshot(env, orders) {
+  const list = (orders || []).filter(Boolean);
+  if (list.length === 0) return;
+  const ids = list.map((o) => Number(o.id)).filter((n) => Number.isInteger(n) && n > 0);
+  let rows = null;
+  try {
+    const placeholders = ids.map(() => "?").join(",");
+    const result = await env.DB
+      .prepare(`SELECT id, shipping_payment_mode, shipping_route, shipping_max_dispatch_days FROM orders WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .all();
+    rows = new Map((result.results || []).map((r) => [Number(r.id), r]));
+  } catch (error) {
+    rows = null;
+  }
+  for (const order of list) {
+    const row = rows ? rows.get(Number(order.id)) : null;
+    order.shipping_snapshot_available = rows !== null;
+    order.shipping_payment_mode = row ? row.shipping_payment_mode ?? null : null;
+    order.shipping_route = row ? row.shipping_route ?? null : null;
+    order.shipping_max_dispatch_days = row ? row.shipping_max_dispatch_days ?? null : null;
+  }
 }
 
 // =========================================================================
@@ -2431,6 +2576,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .all();
 
       const orders = ordersResult.results || [];
+      await attachOrderShippingSnapshot(env, orders);
 
       for (const order of orders) {
         const itemsResult = await env.DB
@@ -2546,6 +2692,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       order.status_history = historyResult.results || [];
       order.customer_address = composeAddressText(order);
       order.is_guest = !order.customer_id;
+      await attachOrderShippingSnapshot(env, [order]);
 
       // مشاهده جزئیات سفارش توسط مدیر یعنی «دیده شد» — اعلان مربوطه
       // (در صورت وجود) خوانده‌شده علامت می‌خورد. هرگز نباید کل درخواست را
@@ -3839,6 +3986,41 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         return Response.json({ ok: true, message: raw ? "Override ذخیره شد." : "Override حذف شد (برگشت به مسیر کلاس حمل).", audited });
       }
 
+      // GET /api/store/admin/shipping-routing/product-summary?product_id=ID
+      // Stage A — خلاصهٔ حمل فقط‌خواندنی برای فرم محصول (Single Source of Truth:
+      // classifyProduct/decideRoute/detectShippingDataSuspicions در shipping-routing.js).
+      if (url.pathname === "/api/store/admin/shipping-routing/product-summary" && request.method === "GET") {
+        const productId = Number(url.searchParams.get("product_id"));
+        if (!Number.isInteger(productId) || productId <= 0) {
+          return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه محصول نامعتبر است." }, { status: 400 });
+        }
+        let columnsReady = true;
+        const baseCols = "id, name, weight_grams, length_cm, width_cm, height_cm, shipping_class_id, packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, package_weight_grams";
+        let product;
+        try {
+          product = await env.DB.prepare(`SELECT ${baseCols}, shipping_route_override FROM products WHERE id = ?`).bind(productId).first();
+        } catch (error) {
+          columnsReady = false;
+          product = await env.DB.prepare(`SELECT ${baseCols} FROM products WHERE id = ?`).bind(productId).first();
+          if (product) product.shipping_route_override = null;
+        }
+        if (!product) return Response.json({ ok: false, error: "NOT_FOUND", message: "محصول پیدا نشد." }, { status: 404 });
+
+        let klass = null;
+        if (product.shipping_class_id != null) {
+          try {
+            klass = await env.DB.prepare("SELECT id, name, active, route_policy, default_packaging_profile_id FROM shipping_classes WHERE id = ?").bind(product.shipping_class_id).first();
+          } catch (error) {
+            columnsReady = false;
+            klass = await env.DB.prepare("SELECT id, name, active, default_packaging_profile_id FROM shipping_classes WHERE id = ?").bind(product.shipping_class_id).first();
+            if (klass) { klass.route_policy = null; klass.__route_policy_available = false; }
+          }
+        }
+        const profiles = await loadPackagingProfiles(env);
+        const summary = buildProductShippingSummary(product, klass, profiles);
+        return Response.json({ ok: true, columns_ready: columnsReady, summary });
+      }
+
       if (url.pathname === "/api/store/admin/shipping-routing/audit" && request.method === "GET") {
         const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 200);
         try {
@@ -3856,13 +4038,39 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   if (url.pathname === "/api/store/admin/shipping-classes" && request.method === "GET") {
     if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
     try {
-      const result = await env.DB
-        .prepare(
-          "SELECT id, name, active, sort_order, default_packaging_profile_id, created_at, updated_at " +
-          "FROM shipping_classes ORDER BY sort_order ASC, id ASC"
-        )
-        .all();
-      return Response.json({ ok: true, shipping_classes: result.results || [] });
+      // Stage A: route_policy هم برگردانده می‌شود. اگر ستون هنوز وجود نداشته
+      // باشد (Migration شمارهٔ ۲ اجرا نشده)، رفتار قبلی حفظ و وضعیت صریح اعلام می‌شود.
+      let rows;
+      let routePolicyAvailable = true;
+      try {
+        const result = await env.DB
+          .prepare(
+            "SELECT id, name, active, sort_order, default_packaging_profile_id, route_policy, created_at, updated_at " +
+            "FROM shipping_classes ORDER BY sort_order ASC, id ASC"
+          )
+          .all();
+        rows = result.results || [];
+      } catch (columnError) {
+        if (/no such table/i.test(columnError.message || "")) throw columnError;
+        routePolicyAvailable = false;
+        const result = await env.DB
+          .prepare(
+            "SELECT id, name, active, sort_order, default_packaging_profile_id, created_at, updated_at " +
+            "FROM shipping_classes ORDER BY sort_order ASC, id ASC"
+          )
+          .all();
+        rows = (result.results || []).map((c) => ({ ...c, route_policy: null }));
+      }
+      const shippingClasses = rows.map((c) => ({
+        ...c,
+        route_policy_status: describeRoutePolicy(c.route_policy ?? null, routePolicyAvailable),
+      }));
+      return Response.json({
+        ok: true,
+        shipping_classes: shippingClasses,
+        route_policy_available: routePolicyAvailable,
+        route_policy_values: ROUTE_POLICY_VALUES,
+      });
     } catch (error) {
       const isMissingTable = /no such table/i.test(error.message || "");
       return Response.json(
@@ -3897,17 +4105,52 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         return Response.json({ ok: false, error: "INVALID_DATA", message: "نام Shipping Class الزامی است." }, { status: 400 });
       }
 
+      // Stage A: route_policy (فقط مقادیر پشتیبانی‌شده). اگر ارسال نشود، رفتار
+      // قبلی حفظ می‌شود (ستون NULL = پیش‌فرض فنی «عادی»)؛ UI همیشه آن را صریح می‌فرستد.
+      const routePolicyProvided = body.route_policy !== undefined;
+      const routePolicy = routePolicyProvided ? String(body.route_policy ?? "").trim() : null;
+      if (routePolicyProvided && !ROUTE_POLICY_VALUES.includes(routePolicy)) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "Route Policy نامعتبر است. فقط «عادی» یا «باربری» مجاز است." },
+          { status: 400 }
+        );
+      }
+
       const timestamp = nowIso();
-      const result = await env.DB
-        .prepare(
-          "INSERT INTO shipping_classes (name, active, sort_order, default_packaging_profile_id, created_at, updated_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?)"
-        )
-        .bind(name, active, sortOrder, defaultPackagingProfileId, timestamp, timestamp)
-        .run();
+      let result;
+      if (routePolicyProvided) {
+        try {
+          result = await env.DB
+            .prepare(
+              "INSERT INTO shipping_classes (name, active, sort_order, default_packaging_profile_id, route_policy, created_at, updated_at) " +
+              "VALUES (?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(name, active, sortOrder, defaultPackagingProfileId, routePolicy, timestamp, timestamp)
+            .run();
+        } catch (insertError) {
+          if (/no such column|has no column/i.test(insertError.message || "")) {
+            return Response.json(
+              { ok: false, error: "ROUTING_MIGRATION_MISSING", message: "ستون Route Policy هنوز ایجاد نشده است. ابتدا database/shipping-routing.sql را روی D1 اجرا کنید." },
+              { status: 500 }
+            );
+          }
+          throw insertError;
+        }
+      } else {
+        result = await env.DB
+          .prepare(
+            "INSERT INTO shipping_classes (name, active, sort_order, default_packaging_profile_id, created_at, updated_at) " +
+            "VALUES (?, ?, ?, ?, ?, ?)"
+          )
+          .bind(name, active, sortOrder, defaultPackagingProfileId, timestamp, timestamp)
+          .run();
+      }
+
+      const newId = result.meta?.last_row_id ?? null;
+      if (routePolicyProvided && newId) await recordRouteAudit(env, "shipping_class", newId, null, routePolicy);
 
       return Response.json(
-        { ok: true, message: "Shipping Class ایجاد شد.", id: result.meta?.last_row_id ?? null },
+        { ok: true, message: "Shipping Class ایجاد شد.", id: newId },
         { status: 201 }
       );
     } catch (error) {
@@ -3940,16 +4183,54 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه و نام الزامی است." }, { status: 400 });
       }
 
-      const result = await env.DB
-        .prepare(
-          "UPDATE shipping_classes SET name = ?, active = ?, sort_order = ?, " +
-          "default_packaging_profile_id = ?, updated_at = ? WHERE id = ?"
-        )
-        .bind(name, active, sortOrder, defaultPackagingProfileId, nowIso(), id)
-        .run();
+      // Stage A: route_policy فقط وقتی در بدنه آمده باشد تغییر می‌کند؛ اگر نیامده
+      // باشد مقدار فعلی D1 دست‌نخورده می‌ماند (مثلاً فعال/غیرفعال‌سازی قدیمی).
+      const routePolicyProvided = body.route_policy !== undefined;
+      const routePolicy = routePolicyProvided ? String(body.route_policy ?? "").trim() : null;
+      if (routePolicyProvided && !ROUTE_POLICY_VALUES.includes(routePolicy)) {
+        return Response.json(
+          { ok: false, error: "INVALID_DATA", message: "Route Policy نامعتبر است. فقط «عادی» یا «باربری» مجاز است." },
+          { status: 400 }
+        );
+      }
+
+      let policyBefore = null;
+      if (routePolicyProvided) {
+        try {
+          policyBefore = await env.DB.prepare("SELECT id, route_policy FROM shipping_classes WHERE id = ?").bind(id).first();
+        } catch (columnError) {
+          return Response.json(
+            { ok: false, error: "ROUTING_MIGRATION_MISSING", message: "ستون Route Policy هنوز ایجاد نشده است. ابتدا database/shipping-routing.sql را روی D1 اجرا کنید." },
+            { status: 500 }
+          );
+        }
+        if (!policyBefore) {
+          return Response.json({ ok: false, error: "NOT_FOUND", message: "Shipping Class پیدا نشد." }, { status: 404 });
+        }
+      }
+
+      const result = routePolicyProvided
+        ? await env.DB
+            .prepare(
+              "UPDATE shipping_classes SET name = ?, active = ?, sort_order = ?, " +
+              "default_packaging_profile_id = ?, route_policy = ?, updated_at = ? WHERE id = ?"
+            )
+            .bind(name, active, sortOrder, defaultPackagingProfileId, routePolicy, nowIso(), id)
+            .run()
+        : await env.DB
+            .prepare(
+              "UPDATE shipping_classes SET name = ?, active = ?, sort_order = ?, " +
+              "default_packaging_profile_id = ?, updated_at = ? WHERE id = ?"
+            )
+            .bind(name, active, sortOrder, defaultPackagingProfileId, nowIso(), id)
+            .run();
 
       if (!result.meta?.changes) {
         return Response.json({ ok: false, error: "NOT_FOUND", message: "Shipping Class پیدا نشد." }, { status: 404 });
+      }
+
+      if (routePolicyProvided && (policyBefore.route_policy ?? null) !== routePolicy) {
+        await recordRouteAudit(env, "shipping_class", id, policyBefore.route_policy, routePolicy);
       }
 
       return Response.json({ ok: true, message: "Shipping Class ویرایش شد." });
