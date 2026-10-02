@@ -304,7 +304,10 @@ async function loadShippingMethods(city) {
     const methods = (data.ok && Array.isArray(data.shipping_methods)) ? data.shipping_methods : [];
 
     if (methods.length === 0) {
-      const message = data.unavailable?.message || "برای این مقصد روش ارسالی در دسترس نیست. لطفاً با پشتیبانی تماس بگیرید.";
+      // Route=freight هرگز نباید پیام «روش ارسالی در دسترس نیست» را بگیرد؛ پیام مصوب باربری نمایش داده می‌شود.
+      const message = data.route === "freight"
+        ? "این محصول به دلیل ابعاد یا وزن، توسط باربری و به‌صورت پس‌کرایه ارسال می‌شود."
+        : (data.unavailable?.message || "برای این مقصد روش ارسالی در دسترس نیست. لطفاً با پشتیبانی تماس بگیرید.");
       container.innerHTML = `<p style="font-size:13px; color:#a23b3b;">${escapeHtml(message)}</p>`;
       return;
     }
