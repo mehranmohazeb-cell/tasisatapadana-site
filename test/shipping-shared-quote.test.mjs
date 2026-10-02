@@ -68,7 +68,7 @@ function makeEnv({ mode = "online", tapinStatus = "active" } = {}) {
       error_message TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE shipping_methods (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, cost REAL, cost_type TEXT DEFAULT 'flat',
       active INTEGER DEFAULT 1, scope TEXT DEFAULT 'global', allowed_city TEXT, sort_order INTEGER DEFAULT 0, volumetric_divisor REAL);
-    INSERT INTO shipping_methods (name, cost, cost_type, scope, allowed_city) VALUES ('پیک اصفهان', 30000, 'flat', 'city', 'اصفهان');
+    INSERT INTO shipping_methods (name, cost, cost_type, scope, allowed_city) VALUES ('پیک مشهد', 30000, 'flat', 'city', 'مشهد');
     CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price INTEGER, stock INTEGER, active INTEGER DEFAULT 1,
       weight_grams INTEGER, length_cm REAL, width_cm REAL, height_cm REAL, shipping_class_id INTEGER,
       packaging_profile_id INTEGER, package_length_cm REAL, package_width_cm REAL, package_height_cm REAL,
@@ -200,9 +200,9 @@ await test("online + شکست Proxy → shipping_methods خالی + unavailable�
   const env = makeEnv({ mode: "online" });
   const proxy = installProxy(() => ({ ok: false, status: 502, json: { message: "down" } }));
   try {
-    const data = await estimate(env, enc("city=اصفهان&province=اصفهان&product_ids=1&quantities=1"));
+    const data = await estimate(env, enc("city=مشهد&province=مشهد&product_ids=1&quantities=1"));
     assert.equal(data.ok, true);
-    assert.deepEqual(data.shipping_methods, []); // «پیک اصفهان» داخلی نباید بیاید، حتی برای اصفهان
+    assert.deepEqual(data.shipping_methods, []); // «پیک مشهد» داخلی نباید بیاید، حتی برای مشهد
     assert.equal(data.fell_back, false);
     assert.ok(data.unavailable?.message);
     const row = env._raw.prepare("SELECT status, error_code FROM shipping_quote_history").get();
@@ -215,7 +215,7 @@ await test("online + Provider تیپاکس غیرفعال → خطا، نه Fall
   const env = makeEnv({ mode: "online", tapinStatus: "disabled" });
   const proxy = installProxy(() => { throw new Error("نباید تماسی برقرار شود"); });
   try {
-    const data = await estimate(env, enc("city=اصفهان&province=اصفهان&product_ids=1&quantities=1"));
+    const data = await estimate(env, enc("city=مشهد&province=مشهد&product_ids=1&quantities=1"));
     assert.deepEqual(data.shipping_methods, []);
     assert.equal(data.unavailable.code, "TAPIN_PROVIDER_INACTIVE");
     assert.equal(proxy.calls.length, 0);
@@ -237,10 +237,10 @@ await test("online_fallback_internal + شکست Tapin → موتور داخلی 
   const env = makeEnv({ mode: "online_fallback_internal" });
   const proxy = installProxy(() => ({ ok: false, status: 502, json: {} }));
   try {
-    const data = await estimate(env, enc("city=اصفهان&province=اصفهان&product_ids=1&quantities=1"));
+    const data = await estimate(env, enc("city=مشهد&province=مشهد&product_ids=1&quantities=1"));
     assert.equal(data.fell_back, true);
     assert.equal(data.source, "internal");
-    assert.equal(data.shipping_methods[0].name, "پیک اصفهان");
+    assert.equal(data.shipping_methods[0].name, "پیک مشهد");
     assert.equal(data.shipping_methods[0].source, "internal");
   } finally { proxy.restore(); }
 });
@@ -260,9 +260,9 @@ await test("حالت internal (engine): هیچ تماس شبکه‌ای؛ منط
   const env = makeEnv({ mode: "internal" });
   const proxy = installProxy(() => { throw new Error("نباید Tapin صدا زده شود"); });
   try {
-    const data = await estimate(env, enc("city=اصفهان&province=اصفهان&product_ids=1&quantities=1"));
+    const data = await estimate(env, enc("city=مشهد&province=مشهد&product_ids=1&quantities=1"));
     assert.equal(data.source, "internal");
-    assert.equal(data.shipping_methods[0].name, "پیک اصفهان");
+    assert.equal(data.shipping_methods[0].name, "پیک مشهد");
     assert.equal(proxy.calls.length, 0);
     const varamin = await estimate(env, enc(VARAMIN));
     assert.deepEqual(varamin.shipping_methods, []); // ورامین در جدول داخلی نیست (رفتار قبلی)
@@ -280,7 +280,7 @@ await test("Checkout ورامین در حالت online: سفارش با مبلغ
     const order = env._raw.prepare("SELECT * FROM orders").get();
     assert.equal(order.shipping_cost, 165000);
     assert.equal(order.shipping_method_id, null);
-    assert.equal(order.shipping_method_name, "ارسال پستی (Tapin)");
+    assert.equal(order.shipping_method_name, "ارسال پستی");
     assert.equal(order.total, 112_000_000 + 165000);
     assert.equal(proxy.calls.length, 1);
   } finally { proxy.restore(); }
@@ -337,7 +337,7 @@ await test("Checkout در حالت internal: مسیر داخلی قبلی (رو�
   const proxy = installProxy(() => { throw new Error("نباید Tapin صدا زده شود"); });
   try {
     const { status, data } = await checkout(env, checkoutBody({
-      customer: { ...checkoutBody().customer, province: "اصفهان", city: "اصفهان" }, shipping_method_id: 1, expected_shipping_cost: undefined }));
+      customer: { ...checkoutBody().customer, province: "مشهد", city: "مشهد" }, shipping_method_id: 1, expected_shipping_cost: undefined }));
     assert.equal(status, 201, JSON.stringify(data));
     const order = env._raw.prepare("SELECT * FROM orders").get();
     assert.equal(order.shipping_cost, 30000);
@@ -375,10 +375,10 @@ await test("Quote قدیمی با تغییر تعداد/مقصد دوباره ا
   try {
     const a = await estimate(env, enc("city=ورامین&province=تهران&product_ids=1&quantities=1"));
     const b = await estimate(env, enc("city=ورامین&province=تهران&product_ids=1&quantities=2"));
-    const c = await estimate(env, enc("city=اصفهان&province=اصفهان&product_ids=1&quantities=2"));
+    const c = await estimate(env, enc("city=مشهد&province=مشهد&product_ids=1&quantities=2"));
     assert.equal(proxy.calls.length, 3);
     assert.equal(proxy.calls[1].body.products[0].count, 2);
-    assert.equal(proxy.calls[2].body.destination_city, "اصفهان");
+    assert.equal(proxy.calls[2].body.destination_city, "مشهد");
     assert.equal(proxy.calls[2].body.service_type, undefined); // Post v2: service_type وجود ندارد
     assert.notEqual(a.shipping_methods[0].cost, b.shipping_methods[0].cost);
     assert.equal(c.shipping_methods[0].cost, 130000);

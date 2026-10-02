@@ -80,6 +80,16 @@ import {
   loadPackagingProfiles,
 } from "./packaging-estimation.js";
 
+import {
+  resolveShippingRoute,
+  buildIsfahanCourierOption,
+  buildFreightOption,
+  decorateNormalOption,
+  ROUTE_ISFAHAN_COURIER,
+  ROUTE_FREIGHT,
+  ROUTE_NORMAL,
+} from "./shipping-routing.js";
+
 export const SHIPPING_CALCULATION_MODES = ["internal", "online", "online_fallback_internal"];
 
 export const TARIFF_SOURCES = ["manual", "tapin", "post", "tipax", "other"];
@@ -831,7 +841,7 @@ async function loadShippingProductRows(env, productIds) {
   return result.results || [];
 }
 
-export async function resolveCustomerShipping(env, { cartItems, city, province, internalOptionsFn, productRows, modeOverride } = {}) {
+async function resolveNormalShipping(env, { cartItems, city, province, internalOptionsFn, productRows, modeOverride } = {}) {
   // modeOverride فقط توسط Endpoint پیش‌نمایش Admin (isAdmin) پاس داده می‌شود تا
   // خروجی یک حالت دیگر بدون تغییر حالت سراسری/زندهٔ D1 دیده شود. Estimate/Cart/
   // Checkout مشتری هرگز آن را نمی‌فرستند و همیشه از D1 می‌خوانند.
@@ -862,12 +872,13 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
 
   if (mode === "internal") {
     const internal = await internalOptionsFn(env, items, city);
-    return { mode, source: "internal", shipping_methods: asInternal(internal), fell_back: false, unavailable: null };
+    return { mode, source: "internal", shipping_methods: asInternal(internal), fell_back: false, unavailable: null, tapin_called: false };
   }
 
   // mode === 'online' | 'online_fallback_internal'
   let onlineResult;
   let tapinProvider = null;
+  let tapinCalled = false; // آیا quoteViaTapin واقعاً اجرا شد (نه فقط «حالت آنلاین است»)
   try {
     const providers = await listShippingProviders(env);
     tapinProvider = providers.find((p) => p.code === "tapin") || null;
@@ -887,6 +898,7 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
     // هر استثنای غیرمنتظره داخل Adapter به یک نتیجهٔ ناموفق «با علت واقعی»
     // تبدیل می‌شود، نه خطای ۵۰۰ که پیش از ثبت Audit مسیر را می‌شکند.
     try {
+      tapinCalled = true;
       onlineResult = await quoteViaTapin(env, {
         destinationCity: city,
         destinationProvince: province || null,
@@ -939,11 +951,12 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
       source: "tapin",
       fell_back: false,
       unavailable: null,
+      tapin_called: tapinCalled,
       audit,
       shipping_methods: [
         {
           id: TAPIN_OPTION_ID,
-          name: "ارسال پستی (Tapin)",
+          name: "ارسال پستی",
           cost: onlineResult.cost,
           cost_type: "prepaid",
           scope: "online",
@@ -965,6 +978,7 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
       shipping_methods: asInternal(internal),
       fell_back: true,
       unavailable: null,
+      tapin_called: tapinCalled,
       online_error: onlineResult?.error || "TAPIN_UNAVAILABLE",
       audit,
     };
@@ -978,7 +992,55 @@ export async function resolveCustomerShipping(env, { cartItems, city, province, 
     shipping_methods: [],
     fell_back: false,
     unavailable: { code, message: ONLINE_UNAVAILABLE_MESSAGES[code] || ONLINE_UNAVAILABLE_DEFAULT_MESSAGE },
+    tapin_called: tapinCalled,
     audit,
+  };
+}
+
+// -------------------------------------------------------------------------
+// نقطهٔ ورود واحد Estimate / Cart / Checkout / Admin Preview — مرحله ۲:
+//
+//   Routing (صلاحیت + مقصد، فقط از داده) ← قبل از هر Provider
+//     ├─ مقصد = محدودهٔ رسمی شهر اصفهان → پیک موتوری رایگان (هیچ روش دیگری)
+//     ├─ سبد غیرعادی + خارج اصفهان      → باربری/پس‌کرایه — هرگز Tapin
+//     └─ سبد عادی + خارج اصفهان         → resolveNormalShipping (Tapin / داخلی طبق mode)
+//
+// Fallback فنی Provider (online_fallback_internal) فقط داخل مسیر «عادی» است و
+// هرگز مسیر/Classification را تغییر نمی‌دهد.
+// -------------------------------------------------------------------------
+export async function resolveCustomerShipping(env, args = {}) {
+  const { cartItems, city, province, modeOverride } = args;
+  const route = await resolveShippingRoute(env, { cartItems, city, province });
+  const routingMeta = {
+    route: route.route,
+    route_reason: route.reason,
+    basket_abnormal: route.basket_abnormal,
+    routing_data_available: route.routing_data_available,
+    route_items: route.items,
+  };
+
+  if (route.route === ROUTE_ISFAHAN_COURIER || route.route === ROUTE_FREIGHT) {
+    const option = route.route === ROUTE_ISFAHAN_COURIER ? buildIsfahanCourierOption() : buildFreightOption();
+    const mode = SHIPPING_CALCULATION_MODES.includes(modeOverride)
+      ? modeOverride
+      : await getShippingCalculationMode(env);
+    return {
+      mode,
+      source: "routing",
+      shipping_methods: [option],
+      fell_back: false,
+      unavailable: null,
+      tapin_called: false,
+      ...routingMeta,
+    };
+  }
+
+  const normal = await resolveNormalShipping(env, args);
+  return {
+    ...normal,
+    shipping_methods: (normal.shipping_methods || []).map(decorateNormalOption),
+    ...routingMeta,
+    route: ROUTE_NORMAL,
   };
 }
 
@@ -1000,7 +1062,7 @@ export async function getShippingOptionsViaEngine(env, { cartItems, city, provin
           metadata: { option_id: m.id },
         }
       : {
-          provider: "internal",
+          provider: m.source === "routing" ? "routing" : "internal",
           carrier: null,
           service: m.name,
           cost: Number(m.cost) || 0,
@@ -1009,10 +1071,19 @@ export async function getShippingOptionsViaEngine(env, { cartItems, city, provin
           available: true,
           tracking: null,
           quote_id: null,
-          metadata: { shipping_method_id: m.id, cost_type: m.cost_type, scope: m.scope },
+          metadata: { shipping_method_id: m.id, cost_type: m.cost_type, scope: m.scope, payment_mode: m.payment_mode, route: m.route },
         }
   );
-  const out = { mode: shared.mode, results, fell_back: shared.fell_back };
+  const out = {
+    mode: shared.mode,
+    results,
+    fell_back: shared.fell_back,
+    route: shared.route,
+    route_reason: shared.route_reason,
+    route_items: shared.route_items,
+    basket_abnormal: shared.basket_abnormal,
+    tapin_called: shared.tapin_called === true,
+  };
   if (SHIPPING_CALCULATION_MODES.includes(modeOverride)) {
     // فقط Admin Preview: نشان می‌دهد این خروجی با حالت موقتِ درخواست ساخته شده،
     // و حالت زندهٔ واقعی D1 (که مشتری‌ها می‌بینند) چیست.

@@ -15,6 +15,17 @@ import {
   TARIFF_SOURCES,
   SHIPPING_CALCULATION_MODES,
 } from "./shipping-engine.js";
+import {
+  ROUTED_OPTION_IDS,
+  ROUTE_OVERRIDE_VALUES,
+  ROUTE_POLICY_VALUES,
+  ROUTING_RULES,
+  ROUTE_REASON_LABELS_FA,
+  SUSPICION_LABELS_FA,
+  classifyProduct,
+  detectShippingDataSuspicions,
+  loadRoutingData,
+} from "./shipping-routing.js";
 
 import { formatTechnicalText, applyTechnicalFormattingToProduct } from "./technical-format.js";
 
@@ -3694,6 +3705,154 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
   // تک‌تک محصولات. مدیر هر تعداد کلاس دلخواه می‌تواند بسازد.
   // =========================================================================
 
+  // =========================================================================
+  // مدیریت Routing ارسال (مرحله ۲) — Override مدیریتی، مشاهده و Audit.
+  //   GET  /api/store/admin/shipping-routing            قواعد + کلاس‌ها + محصولات با مسیر مؤثر و Flagها
+  //   PUT  /api/store/admin/shipping-routing/class      route_policy کلاس حمل (normal|freight)
+  //   PUT  /api/store/admin/shipping-routing/product    Override محصول (normal|freight|null=بدون Override)
+  //   GET  /api/store/admin/shipping-routing/audit      تاریخچهٔ تغییرات (قابل برگشت با همین PUTها)
+  // هیچ آستانهٔ عددی وجود ندارد؛ Flag داده‌های مشکوک فقط هشدار است، نه Routing.
+  // =========================================================================
+  if (url.pathname.startsWith("/api/store/admin/shipping-routing")) {
+    if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    const MIGRATION_MSG = "ستون‌های Routing هنوز ایجاد نشده‌اند. ابتدا database/shipping-routing.sql را روی D1 اجرا کنید.";
+
+    const writeRoutingAudit = async (entityType, entityId, oldValue, newValue) => {
+      try {
+        await env.DB
+          .prepare("INSERT INTO shipping_route_audit (entity_type, entity_id, old_value, new_value, changed_at) VALUES (?, ?, ?, ?, ?)")
+          .bind(entityType, entityId, oldValue ?? null, newValue ?? null, nowIso())
+          .run();
+        return true;
+      } catch (error) {
+        console.error("[shipping-routing] ثبت Audit شکست خورد:", error.message);
+        return false;
+      }
+    };
+
+    try {
+      if (url.pathname === "/api/store/admin/shipping-routing" && request.method === "GET") {
+        const filter = String(url.searchParams.get("filter") || "all");
+        const q = String(url.searchParams.get("q") || "").trim();
+        const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 100, 1), 300);
+
+        let classRows = [];
+        let columnsReady = true;
+        try {
+          const r = await env.DB.prepare("SELECT id, name, active, route_policy, default_packaging_profile_id FROM shipping_classes ORDER BY sort_order ASC, id ASC").all();
+          classRows = r.results || [];
+        } catch (error) {
+          columnsReady = false;
+          const r = await env.DB.prepare("SELECT id, name, active, default_packaging_profile_id FROM shipping_classes ORDER BY sort_order ASC, id ASC").all();
+          classRows = (r.results || []).map((c) => ({ ...c, route_policy: null }));
+        }
+        const classMap = new Map(classRows.map((c) => [Number(c.id), c]));
+
+        let productRows = [];
+        const baseCols = "id, name, active, weight_grams, length_cm, width_cm, height_cm, shipping_class_id, packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, package_weight_grams";
+        try {
+          const r = await env.DB.prepare(`SELECT ${baseCols}, shipping_route_override FROM products ORDER BY id DESC`).all();
+          productRows = r.results || [];
+        } catch (error) {
+          columnsReady = false;
+          const r = await env.DB.prepare(`SELECT ${baseCols} FROM products ORDER BY id DESC`).all();
+          productRows = (r.results || []).map((p) => ({ ...p, shipping_route_override: null }));
+        }
+
+        const profiles = await loadPackagingProfiles(env);
+        const items = productRows.map((p) => {
+          const klass = p.shipping_class_id != null ? classMap.get(Number(p.shipping_class_id)) || null : null;
+          const cls = classifyProduct(p, klass);
+          const profile = resolveEffectiveProfile(p, profiles.byId, klass?.default_packaging_profile_id ?? null);
+          const flags = detectShippingDataSuspicions(p, { shippingClass: klass, effectiveProfile: profile, route: cls.abnormal ? "freight" : "normal" });
+          return {
+            id: p.id,
+            name: p.name,
+            active: p.active,
+            shipping_class_id: p.shipping_class_id,
+            shipping_class_name: klass?.name || null,
+            override: p.shipping_route_override || null,
+            effective_route_outside_isfahan: cls.abnormal ? "freight" : "normal",
+            route_reason: cls.reason,
+            route_reason_label: ROUTE_REASON_LABELS_FA[cls.reason] || cls.reason,
+            flags,
+            flag_labels: flags.map((f) => SUSPICION_LABELS_FA[f] || f),
+          };
+        });
+
+        let filtered = items;
+        if (filter === "freight") filtered = items.filter((i) => i.effective_route_outside_isfahan === "freight");
+        else if (filter === "flagged") filtered = items.filter((i) => i.flags.length > 0);
+        else if (filter === "override") filtered = items.filter((i) => i.override);
+        if (q) filtered = filtered.filter((i) => String(i.name || "").includes(q) || String(i.id) === q);
+
+        return Response.json({
+          ok: true,
+          columns_ready: columnsReady,
+          rules: ROUTING_RULES,
+          classes: classRows,
+          totals: {
+            products: items.length,
+            freight: items.filter((i) => i.effective_route_outside_isfahan === "freight").length,
+            flagged: items.filter((i) => i.flags.length > 0).length,
+            overridden: items.filter((i) => i.override).length,
+          },
+          products: filtered.slice(0, limit),
+        });
+      }
+
+      if (url.pathname === "/api/store/admin/shipping-routing/class" && request.method === "PUT") {
+        const body = await request.json();
+        const id = Number(body.id);
+        const policy = String(body.route_policy || "").trim();
+        if (!Number.isInteger(id) || id <= 0 || !ROUTE_POLICY_VALUES.includes(policy)) {
+          return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه کلاس یا مقدار مسیر نامعتبر است." }, { status: 400 });
+        }
+        let before;
+        try {
+          before = await env.DB.prepare("SELECT id, route_policy FROM shipping_classes WHERE id = ?").bind(id).first();
+        } catch (error) {
+          return Response.json({ ok: false, error: "ROUTING_MIGRATION_MISSING", message: MIGRATION_MSG }, { status: 500 });
+        }
+        if (!before) return Response.json({ ok: false, error: "NOT_FOUND", message: "Shipping Class پیدا نشد." }, { status: 404 });
+        await env.DB.prepare("UPDATE shipping_classes SET route_policy = ?, updated_at = ? WHERE id = ?").bind(policy, nowIso(), id).run();
+        const audited = await writeRoutingAudit("shipping_class", id, before.route_policy, policy);
+        return Response.json({ ok: true, message: "مسیر کلاس حمل ذخیره شد.", audited });
+      }
+
+      if (url.pathname === "/api/store/admin/shipping-routing/product" && request.method === "PUT") {
+        const body = await request.json();
+        const productId = Number(body.product_id);
+        const raw = body.override == null || body.override === "" ? null : String(body.override).trim();
+        if (!Number.isInteger(productId) || productId <= 0 || (raw !== null && !ROUTE_OVERRIDE_VALUES.includes(raw))) {
+          return Response.json({ ok: false, error: "INVALID_DATA", message: "شناسه محصول یا مقدار Override نامعتبر است." }, { status: 400 });
+        }
+        let before;
+        try {
+          before = await env.DB.prepare("SELECT id, shipping_route_override FROM products WHERE id = ?").bind(productId).first();
+        } catch (error) {
+          return Response.json({ ok: false, error: "ROUTING_MIGRATION_MISSING", message: MIGRATION_MSG }, { status: 500 });
+        }
+        if (!before) return Response.json({ ok: false, error: "NOT_FOUND", message: "محصول پیدا نشد." }, { status: 404 });
+        await env.DB.prepare("UPDATE products SET shipping_route_override = ? WHERE id = ?").bind(raw, productId).run();
+        const audited = await writeRoutingAudit("product", productId, before.shipping_route_override, raw);
+        return Response.json({ ok: true, message: raw ? "Override ذخیره شد." : "Override حذف شد (برگشت به مسیر کلاس حمل).", audited });
+      }
+
+      if (url.pathname === "/api/store/admin/shipping-routing/audit" && request.method === "GET") {
+        const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 200);
+        try {
+          const r = await env.DB.prepare("SELECT id, entity_type, entity_id, old_value, new_value, changed_at FROM shipping_route_audit ORDER BY id DESC LIMIT ?").bind(limit).all();
+          return Response.json({ ok: true, audit: r.results || [] });
+        } catch (error) {
+          return Response.json({ ok: false, error: "ROUTING_MIGRATION_MISSING", message: MIGRATION_MSG }, { status: 500 });
+        }
+      }
+    } catch (error) {
+      return Response.json({ ok: false, error: "DATABASE_ERROR", message: error.message }, { status: 500 });
+    }
+  }
+
   if (url.pathname === "/api/store/admin/shipping-classes" && request.method === "GET") {
     if (!isAdmin(request, env)) return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
     try {
@@ -5249,6 +5408,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         source: shared.source,
         fell_back: shared.fell_back,
         unavailable: shared.unavailable,
+        route: shared.route,
+        max_dispatch_days: ROUTING_RULES.max_dispatch_days,
       });
     } catch (error) {
       const isMissingTable = /no such table/i.test(error.message || "");
@@ -5831,9 +5992,11 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       // و نه از برآورد قبلی صفحه محصول/سبد) دوباره محاسبه می‌شود. ---
 
       // شناسه روش ارسال: عدد (روش داخلی) یا "tapin" (Quote آنلاین Tapin).
-      const isTapinChoice = String(body.shipping_method_id) === TAPIN_OPTION_ID;
-      const shippingMethodId = isTapinChoice ? TAPIN_OPTION_ID : Number(body.shipping_method_id);
-      if (!isTapinChoice && (!Number.isInteger(shippingMethodId) || shippingMethodId <= 0)) {
+      // گزینه‌های مجازی (tapin / isfahan_courier / freight) ردیف shipping_methods نیستند.
+      const isVirtualChoice =
+        String(body.shipping_method_id) === TAPIN_OPTION_ID || ROUTED_OPTION_IDS.includes(String(body.shipping_method_id));
+      const shippingMethodId = isVirtualChoice ? String(body.shipping_method_id) : Number(body.shipping_method_id);
+      if (!isVirtualChoice && (!Number.isInteger(shippingMethodId) || shippingMethodId <= 0)) {
         return Response.json(
           { ok: false, error: "SHIPPING_METHOD_REQUIRED", message: "لطفاً یک روش ارسال انتخاب کنید." },
           { status: 400 }
@@ -5999,7 +6162,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
             address.longitude,
             total,
             shippingCost,
-            shippingMethod.source === "tapin" ? null : shippingMethod.id,
+            typeof shippingMethod.id === "string" ? null : shippingMethod.id,
             shippingMethod.name,
             shippingIsCod ? 1 : 0,
             payableAmount,
@@ -6012,6 +6175,23 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
 
         orderId = orderResult.meta?.last_row_id ?? null;
         if (!orderId) throw new Error("ORDER_ID_NOT_CREATED");
+
+        // Snapshot مسیر/نوع پرداخت هزینه ارسال (رایگان ≠ پس‌کرایه). جدا و Fail-Safe:
+        // اگر Migration database/shipping-routing.sql هنوز اجرا نشده باشد ثبت سفارش
+        // نمی‌شکند؛ تفکیک رایگان/پس‌کرایه همچنان از shipping_is_cod + هزینه قابل استنتاج است.
+        try {
+          await env.DB
+            .prepare("UPDATE orders SET shipping_payment_mode = ?, shipping_route = ?, shipping_max_dispatch_days = ? WHERE id = ?")
+            .bind(
+              shippingMethod.payment_mode || (shippingIsCod ? "receiver_pays" : "prepaid"),
+              shippingMethod.route || "normal",
+              Number(shippingMethod.max_dispatch_days) || ROUTING_RULES.max_dispatch_days,
+              orderId
+            )
+            .run();
+        } catch (routeSnapshotError) {
+          console.error("[shipping-routing] ثبت Snapshot مسیر ارسال شکست خورد (Migration اجرا شده؟):", routeSnapshotError.message);
+        }
 
         for (const item of verifiedItems) {
           await env.DB
@@ -6122,6 +6302,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           shipping_cost: shippingCost,
           shipping_method_name: shippingMethod.name,
           shipping_is_cod: shippingIsCod,
+          shipping_payment_mode: shippingMethod.payment_mode || (shippingIsCod ? "receiver_pays" : "prepaid"),
+          shipping_max_dispatch_days: Number(shippingMethod.max_dispatch_days) || ROUTING_RULES.max_dispatch_days,
           payable_amount: payableAmount,
           status: "pending",
           status_label: STATUS_LABELS.pending,

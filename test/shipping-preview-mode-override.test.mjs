@@ -64,7 +64,7 @@ function makeEnv({ mode = "online", tapinStatus = "active" } = {}) {
       error_message TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE shipping_methods (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, cost REAL, cost_type TEXT DEFAULT 'flat',
       active INTEGER DEFAULT 1, scope TEXT DEFAULT 'global', allowed_city TEXT, sort_order INTEGER DEFAULT 0, volumetric_divisor REAL);
-    INSERT INTO shipping_methods (name, cost, cost_type, scope, allowed_city) VALUES ('پیک اصفهان', 30000, 'flat', 'city', 'اصفهان');
+    INSERT INTO shipping_methods (name, cost, cost_type, scope, allowed_city) VALUES ('پیک مشهد', 30000, 'flat', 'city', 'مشهد');
     CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price INTEGER, stock INTEGER, active INTEGER DEFAULT 1,
       weight_grams INTEGER, length_cm REAL, width_cm REAL, height_cm REAL, shipping_class_id INTEGER,
       packaging_profile_id INTEGER, package_length_cm REAL, package_width_cm REAL, package_height_cm REAL,
@@ -117,7 +117,7 @@ async function customerEstimate(env, query) {
 }
 const liveMode = (env) => env._raw.prepare("SELECT shipping_calculation_mode AS m FROM site_settings WHERE id=1").get().m;
 const historyCount = (env) => env._raw.prepare("SELECT COUNT(*) AS c FROM shipping_quote_history").get().c;
-const ISF = "city=" + encodeURIComponent("اصفهان") + "&product_ids=1&quantities=1";
+const ISF = "city=" + encodeURIComponent("مشهد") + "&product_ids=1&quantities=1";
 const VAR = "city=" + encodeURIComponent("ورامین") + "&province=" + encodeURIComponent("تهران") + "&product_ids=1&quantities=1";
 
 console.log("Preview mode override — موتور داخلی کنار حالت زندهٔ online");
@@ -190,7 +190,7 @@ await test("F) live=online + preview mode=online_fallback_internal + شکست Ta
   } finally { proxy.restore(); }
 });
 
-await test("G) موتور داخلی برای مقصد غیر اصفهان (فقط روش scope=city تعریف شده) → فهرست خالی، نه خطا", async () => {
+await test("G) موتور داخلی برای مقصد غیر مشهد (فقط روش scope=city تعریف شده) → فهرست خالی، نه خطا", async () => {
   const env = makeEnv({ mode: "online" });
   const { data } = await preview(env, VAR + "&mode=internal");
   assert.equal(data.mode, "internal");
