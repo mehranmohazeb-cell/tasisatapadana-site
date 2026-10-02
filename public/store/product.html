@@ -337,7 +337,7 @@ async function loadShippingEstimatorMethods(city, productId) {
 
     methodSelect.innerHTML =
       '<option value="">روش ارسال را انتخاب کنید</option>' +
-      methods.map((m) => `<option value="${escapeHtml(m.id)}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
+      methods.map((m) => `<option value="${escapeHtml(m.id)}" data-cost="${m.cost}" data-cost-type="${m.cost_type}" data-payment-mode="${escapeHtml(m.payment_mode || "")}" data-cost-known="${m.cost_known === false ? "0" : "1"}" data-note="${escapeHtml(m.customer_message || "")}">${escapeHtml(m.name)}</option>`).join("");
     methodSelect.disabled = false;
 
     // فقط یک گزینه (مثلاً Quote آنلاین) → مستقیم نمایش داده شود.
@@ -350,6 +350,16 @@ async function loadShippingEstimatorMethods(city, productId) {
     methodSelect.innerHTML = '<option value="">خطا در دریافت روش‌های ارسال</option>';
     methodSelect.disabled = true;
   }
+}
+
+
+// برچسب مشتری‌پسند هزینه ارسال: «رایگان» ≠ «پس‌کرایه» (فقط cost=0 مبنا نیست).
+function shippingCostLabel(cost, paymentMode, costKnown, costType) {
+  if (paymentMode === "free") return "رایگان";
+  if ((paymentMode === "receiver_pays" || costType === "cod") && costKnown === false) {
+    return "پس‌کرایه (هزینه حمل هنگام تحویل به باربری پرداخت می‌شود)";
+  }
+  return formatPrice(cost) + (paymentMode === "receiver_pays" || costType === "cod" ? " (پس‌کرایه)" : "");
 }
 
 function initShippingEstimator(productId) {
@@ -373,7 +383,8 @@ function initShippingEstimator(productId) {
     }
     const cost = Number(option.dataset.cost) || 0;
     const isCod = option.dataset.costType === "cod";
-    resultBox.textContent = `هزینه تقریبی ارسال: ${formatPrice(cost)}${isCod ? " (پس‌کرایه)" : ""}`;
+    const label = shippingCostLabel(cost, option.dataset.paymentMode, option.dataset.costKnown !== "0", option.dataset.costType);
+    resultBox.textContent = `هزینه تقریبی ارسال: ${label}` + (option.dataset.note ? ` — ${option.dataset.note}` : "");
     resultBox.style.display = "block";
   });
 }

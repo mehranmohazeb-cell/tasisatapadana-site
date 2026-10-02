@@ -216,6 +216,16 @@ function fillCities(province, selectedCity) {
 }
 
 let itemsTotal = 0;
+
+// برچسب مشتری‌پسند هزینه ارسال: «رایگان» ≠ «پس‌کرایه» (فقط cost=0 مبنا نیست).
+function shippingCostLabel(cost, paymentMode, costKnown, costType) {
+  if (paymentMode === "free") return "رایگان";
+  if ((paymentMode === "receiver_pays" || costType === "cod") && costKnown === false) {
+    return "پس‌کرایه (هزینه حمل هنگام تحویل به باربری پرداخت می‌شود)";
+  }
+  return formatPrice(cost) + (paymentMode === "receiver_pays" || costType === "cod" ? " (پس‌کرایه)" : "");
+}
+
 let selectedShippingMethod = null; // { id, name, cost, cost_type }
 
 function renderSummary() {
@@ -246,9 +256,7 @@ function updateGrandTotal() {
   }
 
   const cost = Number(selectedShippingMethod.cost) || 0;
-  shippingEl.textContent = selectedShippingMethod.cost_type === "cod"
-    ? `${formatPrice(cost)} (پس‌کرایه)`
-    : formatPrice(cost);
+  shippingEl.textContent = shippingCostLabel(cost, selectedShippingMethod.payment_mode, selectedShippingMethod.cost_known, selectedShippingMethod.cost_type);
   totalEl.textContent = formatPrice(itemsTotal + cost);
 }
 
@@ -257,11 +265,13 @@ let shippingRequestSeq = 0; // جلوگیری از نمایش پاسخ قدیم�
 function selectedMethodFromInput(input) {
   const rawId = input.value;
   return {
-    id: rawId === "tapin" ? "tapin" : Number(rawId),
+    id: Number.isInteger(Number(rawId)) && rawId !== "" ? Number(rawId) : rawId, // عدد (روش داخلی) یا شناسهٔ مجازی (tapin/isfahan_courier/freight)
     name: input.dataset.name,
     cost: Number(input.dataset.cost),
     cost_type: input.dataset.costType,
     source: input.dataset.source || "internal",
+    payment_mode: input.dataset.paymentMode || "",
+    cost_known: input.dataset.costKnown !== "0",
   };
 }
 
@@ -301,10 +311,10 @@ async function loadShippingMethods(city) {
 
     container.innerHTML = methods.map((m, index) => `
       <label class="field-checkbox" style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px;">
-        <input type="radio" name="shipping_method" value="${escapeHtml(m.id)}" ${index === 0 ? "checked" : ""} data-cost="${m.cost}" data-cost-type="${m.cost_type}" data-name="${escapeHtml(m.name)}" data-source="${escapeHtml(m.source || "internal")}">
+        <input type="radio" name="shipping_method" value="${escapeHtml(m.id)}" ${index === 0 ? "checked" : ""} data-cost="${m.cost}" data-cost-type="${m.cost_type}" data-name="${escapeHtml(m.name)}" data-source="${escapeHtml(m.source || "internal")}" data-payment-mode="${escapeHtml(m.payment_mode || "")}" data-cost-known="${m.cost_known === false ? "0" : "1"}">
         <span>
-          ${escapeHtml(m.name)} — ${formatPrice(m.cost)}
-          ${m.cost_type === "cod" ? '<em style="color:#8a6100; font-style:normal;"> (پس‌کرایه)</em>' : ""}
+          ${escapeHtml(m.name)} — ${escapeHtml(shippingCostLabel(m.cost, m.payment_mode, m.cost_known, m.cost_type))}
+          ${m.customer_message ? `<br><small style="color:#5b6b68;">${escapeHtml(m.customer_message)}</small>` : ""}
         </span>
       </label>
     `).join("");
@@ -456,6 +466,7 @@ async function submitOrder(event) {
       total: data.total,
       shipping_method_name: data.shipping_method_name,
       shipping_is_cod: data.shipping_is_cod,
+      shipping_payment_mode: data.shipping_payment_mode,
       created_at: data.created_at,
       mobile: data.mobile,
       items: cart,

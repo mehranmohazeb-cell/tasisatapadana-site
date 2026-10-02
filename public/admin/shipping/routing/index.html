@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مسیر ارسال | تأسیسات آپادانا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="../../admin-common.css">
+</head>
+
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <h1>مدیریت فروشگاه</h1>
+      <a href="../../../store/" class="back-link">بازگشت به فروشگاه</a>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container" id="admin-nav"></div>
+  </nav>
+
+  <main class="container">
+
+    <div id="shipping-sub-nav"></div>
+
+    <section class="admin-card">
+      <h2>قواعد ثابت مسیر ارسال <span class="help-icon" data-help="این قواعد در سند تصمیمات نهایی تصویب شده‌اند و از اینجا قابل تغییر نیستند. داخل محدوده رسمی شهر اصفهان همیشه پیک موتوری رایگان است؛ بهارستان، شاهین‌شهر، خمینی‌شهر و شهرهای اطراف اصفهان حساب نمی‌شوند. خارج از اصفهان کالای عادی از مسیر عادی و کالای غیرعادی با باربری و پس‌کرایه ارسال می‌شود. «رایگان» به معنی ارسال فوری نیست.">ⓘ</span></h2>
+      <ul style="font-size:13px; line-height:2; margin:0; padding-inline-start:18px;">
+        <li>داخل محدودهٔ رسمی شهر اصفهان: هر سبد → پیک موتوری، رایگان</li>
+        <li>خارج اصفهان، سبد عادی → ارسال عادی</li>
+        <li>خارج اصفهان، سبد دارای کالای غیرعادی → باربری + پس‌کرایه (گیرنده هنگام تحویل می‌پردازد)</li>
+        <li>حداکثر زمان ارسال از فروشگاه: ۳ روز (برای همهٔ روش‌ها؛ ارسال فوری فعال نیست)</li>
+      </ul>
+      <p id="migration-warning" style="display:none; color:#a23b3b; font-size:13px;">ستون‌های Routing هنوز روی D1 ایجاد نشده‌اند (database/shipping-routing.sql). تا آن زمان همهٔ کالاها «عادی» حساب می‌شوند.</p>
+    </section>
+
+    <section class="admin-card">
+      <h2>مسیر هر Shipping Class
+        <span class="help-icon" data-help="این تنظیم اصلی‌ترین راه تشخیص کالای غیرعادی است. کلاسی که روی «باربری» باشد، همهٔ محصولات آن (پکیج، آبگرمکن، رادیاتور و ...) خارج از اصفهان با باربری و پس‌کرایه می‌روند و هرگز برای آن‌ها استعلام ارسال عادی گرفته نمی‌شود. تغییر آن بلافاصله روی همهٔ محصولات آن کلاس اثر می‌گذارد و در تاریخچه ثبت می‌شود؛ با برگرداندن به «عادی» به حالت قبل برمی‌گردد.">ⓘ</span>
+      </h2>
+      <div id="classes-container"><p class="loading">در حال بارگذاری...</p></div>
+    </section>
+
+    <section class="admin-card">
+      <div class="section-heading">
+        <h2>محصولات و مسیر مؤثر
+          <span class="help-icon" data-help="«Override» فقط برای استثنا است و بر مسیر کلاس حمل اولویت دارد: «باربری» محصول را حتماً غیرعادی می‌کند و «عادی» آن را حتی در کلاس باربری، عادی نگه می‌دارد. «بدون Override» یعنی مسیر از کلاس حمل می‌آید. هشدارها (Flag) فقط برای بررسی شما هستند و مسیر را تغییر نمی‌دهند.">ⓘ</span>
+        </h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <select id="filter-select">
+            <option value="all">همه</option>
+            <option value="freight">فقط باربری</option>
+            <option value="flagged">دارای هشدار داده</option>
+            <option value="override">دارای Override</option>
+          </select>
+          <input id="search-input" type="text" placeholder="جستجوی نام محصول">
+          <button id="refresh-btn" class="secondary-button" type="button">بروزرسانی</button>
+        </div>
+      </div>
+      <p id="totals-line" style="font-size:13px; color:#71817e;"></p>
+      <div id="products-container"><p class="loading">در حال بارگذاری...</p></div>
+    </section>
+
+    <section class="admin-card">
+      <h2>تاریخچهٔ تغییرات مسیر <span class="help-icon" data-help="هر تغییر مسیر کلاس یا Override محصول اینجا ثبت می‌شود تا قابل پیگیری و برگشت باشد.">ⓘ</span></h2>
+      <div id="audit-container"><p class="loading">در حال بارگذاری...</p></div>
+    </section>
+
+  </main>
+
+  <script src="../../admin-common.js"></script>
+  <script src="routing.js"></script>
+</body>
+</html>

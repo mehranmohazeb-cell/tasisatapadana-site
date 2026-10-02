@@ -276,7 +276,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ${order.shipping_method_name ? `
       <div class="summary-line">
         <span>روش ارسال</span>
-        <strong>${escapeHtml(order.shipping_method_name)}${order.shipping_is_cod ? " (پس‌کرایه)" : ""}</strong>
+        <strong>${escapeHtml(order.shipping_method_name)}${order.shipping_is_cod ? " (پس‌کرایه — هزینه حمل هنگام تحویل پرداخت می‌شود)" : (order.shipping_payment_mode === "free" ? " (رایگان)" : "")}</strong>
       </div>
       ` : ""}
 

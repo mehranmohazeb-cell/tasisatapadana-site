@@ -318,6 +318,7 @@ function renderSmsSubNav(activeKey) {
 const SHIPPING_SUB_NAV_ITEMS = [
   { key: "shipping-methods", href: "/admin/shipping/", label: "روش‌های ارسال" },
   { key: "shipping-classes", href: "/admin/shipping/classes/", label: "Shipping Classes" },
+  { key: "shipping-routing", href: "/admin/shipping/routing/", label: "مسیر ارسال" },
   { key: "shipping-packaging", href: "/admin/shipping/packaging/", label: "Packaging Profiles" },
   { key: "shipping-table-rates", href: "/admin/shipping/table-rates/", label: "Table Rates" },
   { key: "shipping-import", href: "/admin/shipping/import/", label: "Import تعرفه" },

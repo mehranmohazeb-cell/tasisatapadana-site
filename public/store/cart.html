@@ -352,7 +352,7 @@ async function loadCartShippingEstimatorMethods(city, productIds, quantities, it
 
     methodSelect.innerHTML =
       '<option value="">روش ارسال را انتخاب کنید</option>' +
-      methods.map((m) => `<option value="${escapeHtml(m.id)}" data-cost="${m.cost}" data-cost-type="${m.cost_type}">${escapeHtml(m.name)}</option>`).join("");
+      methods.map((m) => `<option value="${escapeHtml(m.id)}" data-cost="${m.cost}" data-cost-type="${m.cost_type}" data-payment-mode="${escapeHtml(m.payment_mode || "")}" data-cost-known="${m.cost_known === false ? "0" : "1"}" data-note="${escapeHtml(m.customer_message || "")}">${escapeHtml(m.name)}</option>`).join("");
     methodSelect.disabled = false;
 
     const showSelected = () => {
@@ -363,9 +363,11 @@ async function loadCartShippingEstimatorMethods(city, productIds, quantities, it
       }
       const shippingCost = Number(option.dataset.cost) || 0;
       const isCod = option.dataset.costType === "cod";
+      const label = shippingCostLabel(shippingCost, option.dataset.paymentMode, option.dataset.costKnown !== "0", option.dataset.costType);
+      const note = option.dataset.note ? `<br><small>${escapeHtml(option.dataset.note)}</small>` : "";
       resultBox.innerHTML =
-        `هزینه ارسال: ${formatPrice(shippingCost)}${isCod ? " (پس‌کرایه)" : ""}<br>` +
-        `مجموع تقریبی کالا + ارسال: ${formatPrice(itemsTotal + shippingCost)}`;
+        `هزینه ارسال: ${label}<br>` +
+        (option.dataset.costKnown === "0" ? `مجموع کالا: ${formatPrice(itemsTotal)}` : `مجموع تقریبی کالا + ارسال: ${formatPrice(itemsTotal + shippingCost)}`) + note;
       resultBox.style.display = "block";
     };
     methodSelect.onchange = showSelected;
@@ -380,6 +382,16 @@ async function loadCartShippingEstimatorMethods(city, productIds, quantities, it
     methodSelect.innerHTML = '<option value="">خطا در دریافت روش‌های ارسال</option>';
     methodSelect.disabled = true;
   }
+}
+
+
+// برچسب مشتری‌پسند هزینه ارسال: «رایگان» ≠ «پس‌کرایه» (فقط cost=0 مبنا نیست).
+function shippingCostLabel(cost, paymentMode, costKnown, costType) {
+  if (paymentMode === "free") return "رایگان";
+  if ((paymentMode === "receiver_pays" || costType === "cod") && costKnown === false) {
+    return "پس‌کرایه (هزینه حمل هنگام تحویل به باربری پرداخت می‌شود)";
+  }
+  return formatPrice(cost) + (paymentMode === "receiver_pays" || costType === "cod" ? " (پس‌کرایه)" : "");
 }
 
 function initCartShippingEstimator(cart, itemsTotal) {
