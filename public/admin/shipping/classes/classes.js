@@ -32,6 +32,38 @@ async function loadClasses() {
   }
 }
 
+const ROUTE_POLICY_LABELS = { normal: "عادی", freight: "باربری (پس‌کرایه)" };
+
+// وضعیت route_policy دقیقاً همان‌طور که در D1 است نمایش داده می‌شود (بدون تبدیل بی‌صدا).
+function routePolicyBadge(c) {
+  const status = c.route_policy_status;
+  if (status === "valid") {
+    const label = ROUTE_POLICY_LABELS[c.route_policy] || c.route_policy;
+    return `<span class="shipping-badge ${c.route_policy === "freight" ? "" : "inactive"}">Route Policy: ${escapeHtml(label)}</span>`;
+  }
+  if (status === "unset") {
+    return '<span class="shipping-badge inactive" title="در D1 مقداری ثبت نشده (NULL). سیستم پیش‌فرض فنی «عادی» را اعمال می‌کند.">Route Policy: ثبت نشده (پیش‌فرض فنی: عادی)</span>';
+  }
+  if (status === "invalid") {
+    return `<span class="shipping-badge" style="background:#fbeaea; color:#a23b3b;" title="مقدار خارج از مقادیر پشتیبانی‌شده در D1. منطق فعلی سیستم آن را «عادی» تلقی می‌کند.">Route Policy نامعتبر در D1: ${escapeHtml(String(c.route_policy))}</span>`;
+  }
+  return '<span class="shipping-badge inactive" title="ستون route_policy هنوز روی D1 ایجاد نشده (database/shipping-routing.sql).">Route Policy: ستون در D1 موجود نیست</span>';
+}
+
+function applyRoutePolicyFormState(item) {
+  const select = document.getElementById("class-route-policy");
+  const note = document.getElementById("class-route-policy-note");
+  select.value = item && ROUTE_POLICY_LABELS[item.route_policy] ? item.route_policy : "";
+  const status = item ? item.route_policy_status : null;
+  const messages = {
+    unset: "Route Policy این کلاس در D1 ثبت نشده (فعلاً «عادی» محاسبه می‌شود). برای صریح‌شدن، یکی را انتخاب و ذخیره کنید.",
+    invalid: `مقدار نامعتبر در D1: «${item ? item.route_policy : ""}». تا انتخاب و ذخیرهٔ مقدار معتبر، سیستم آن را «عادی» تلقی می‌کند.`,
+    unavailable: "ستون route_policy هنوز روی D1 ایجاد نشده؛ ذخیرهٔ Route Policy ممکن نیست (database/shipping-routing.sql).",
+  };
+  note.textContent = messages[status] || "";
+  note.style.display = messages[status] ? "block" : "none";
+}
+
 function renderClasses() {
   const container = document.getElementById("list-container");
 
@@ -51,6 +83,7 @@ function renderClasses() {
       <div>
         <strong>${escapeHtml(c.name)}</strong>
         ${Number(c.active) === 0 ? '<span class="shipping-badge inactive">غیرفعال</span>' : ""}
+        ${routePolicyBadge(c)}
         ${profileName(c.default_packaging_profile_id) ? `<span class="shipping-badge">Packaging: ${escapeHtml(profileName(c.default_packaging_profile_id))}</span>` : ""}
       </div>
       <div style="display:flex; gap:8px;">
@@ -69,6 +102,7 @@ function resetClassForm() {
   document.getElementById("class-id").value = "";
   document.getElementById("class-active").checked = true;
   document.getElementById("class-packaging-profile").value = "";
+  applyRoutePolicyFormState(null);
   document.getElementById("cancel-class-edit").style.display = "none";
 }
 
@@ -80,6 +114,7 @@ function editClass(id) {
   document.getElementById("class-active").checked = Number(item.active) !== 0;
   document.getElementById("class-packaging-profile").value =
     item.default_packaging_profile_id != null ? String(item.default_packaging_profile_id) : "";
+  applyRoutePolicyFormState(item);
   document.getElementById("cancel-class-edit").style.display = "inline-block";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -127,11 +162,18 @@ document.addEventListener("DOMContentLoaded", () => {
     event.preventDefault();
     const id = document.getElementById("class-id").value;
     const packagingProfileRaw = document.getElementById("class-packaging-profile").value;
+    const routePolicyRaw = document.getElementById("class-route-policy").value;
+    if (!id && !routePolicyRaw) {
+      showToast("Route Policy را برای Shipping Class جدید صریحاً انتخاب کنید.", "error");
+      return;
+    }
     const payload = {
       name: document.getElementById("class-name").value.trim(),
       active: document.getElementById("class-active").checked,
       default_packaging_profile_id: packagingProfileRaw ? Number(packagingProfileRaw) : null,
     };
+    // در ویرایش، اگر انتخابی نشده باشد route_policy ارسال نمی‌شود تا مقدار فعلی D1 دست‌نخورده بماند.
+    if (routePolicyRaw) payload.route_policy = routePolicyRaw;
 
     try {
       if (id) {

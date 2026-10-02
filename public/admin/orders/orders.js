@@ -220,6 +220,8 @@ async function showOrderDetails(orderId) {
               : ""
           }
 
+          ${renderOrderShippingSnapshot(order)}
+
           <div class="detail-row" style="align-items:flex-start;">
             <span>
               هزینه واقعی حمل
@@ -300,3 +302,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadOrders(1);
 });
+
+
+// Snapshot ارسال همان سفارش (ثبت‌شده هنگام سفارش؛ هیچ محاسبهٔ مجددی انجام نمی‌شود).
+// مقدار null «ثبت نشده» نمایش داده می‌شود، نه مقدار ساختگی.
+const ORDER_ROUTE_LABELS = { normal: "عادی", freight: "باربری", isfahan_courier: "پیک موتوری اصفهان" };
+const ORDER_PAYMENT_MODE_LABELS = { free: "رایگان", prepaid: "پیش‌پرداخت", receiver_pays: "پس‌کرایه (گیرنده هنگام تحویل می‌پردازد)" };
+
+function renderOrderShippingSnapshot(order) {
+  const notSet = '<span style="color:#8a9995;">ثبت نشده</span>';
+  const show = (value, labels) => {
+    if (value == null || value === "") return notSet;
+    return labels[value] ? `${escapeHtml(labels[value])} <span style="color:#8a9995;">(${escapeHtml(String(value))})</span>` : `${escapeHtml(String(value))} <span style="color:#a23b3b;">(مقدار ناشناخته)</span>`;
+  };
+  const days = order.shipping_max_dispatch_days != null ? `${Number(order.shipping_max_dispatch_days).toLocaleString("fa-IR")} روز` : notSet;
+  const unavailable = order.shipping_snapshot_available === false
+    ? '<div style="font-size:12px; color:#a23b3b;">ستون‌های Snapshot ارسال روی D1 موجود نیستند (database/shipping-routing.sql).</div>'
+    : "";
+  return `
+    <h4 style="margin:16px 0 8px; color:#173b3b;">
+      Snapshot ارسال سفارش
+      <span class="help-icon" data-help="این اطلاعات هنگام ثبت سفارش ذخیره شده و دوباره محاسبه نمی‌شود. سفارش‌های قدیمی که پیش از اضافه‌شدن Routing ثبت شده‌اند «ثبت نشده» نمایش داده می‌شوند.">ⓘ</span>
+    </h4>
+    ${unavailable}
+    <div class="detail-row"><span>مسیر ارسال (Route)</span><span>${show(order.shipping_route, ORDER_ROUTE_LABELS)}</span></div>
+    <div class="detail-row"><span>نوع پرداخت هزینه ارسال</span><span>${show(order.shipping_payment_mode, ORDER_PAYMENT_MODE_LABELS)}</span></div>
+    <div class="detail-row"><span>حداکثر زمان ارسال از فروشگاه</span><span>${days}</span></div>`;
+}

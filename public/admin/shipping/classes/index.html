@@ -34,6 +34,11 @@
         یک گروه حمل (مثلاً «سبک»، «سنگین»، «حجیم») قرار دهید و برای همان گروه
         در بخش Table Rates تعرفه تعریف کنید.
       </p>
+      <p style="font-size:13px; color:#71817e;">
+        <strong>Shipping Class</strong> ماهیت حمل کالا را مشخص می‌کند و
+        <strong>Route Policy</strong> سیاست مسیر همان کلاس است (فعلاً فقط «عادی» یا «باربری»).
+        <strong>Packaging Profile</strong> فقط نحوهٔ برآورد بسته‌بندی را تعیین می‌کند و با این دو یکی نیست.
+      </p>
 
       <form id="class-form" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
         <input type="hidden" id="class-id" value="">
@@ -49,6 +54,18 @@
           <select id="class-packaging-profile">
             <option value="">— بدون Profile پیش‌فرض —</option>
           </select>
+        </div>
+        <div style="flex:1; min-width:220px;">
+          <label for="class-route-policy" style="display:flex; align-items:center; gap:4px; font-size:13px; margin-bottom:4px;">
+            Route Policy (سیاست مسیر)
+            <span class="help-icon" data-help="سیاست مسیر حمل برای همهٔ محصولات این Shipping Class. «عادی»: خارج از اصفهان از مسیر ارسال عادی می‌روند. «باربری»: خارج از اصفهان با باربری و پس‌کرایه می‌روند و هرگز برایشان استعلام ارسال عادی گرفته نمی‌شود. داخل محدودهٔ رسمی شهر اصفهان همیشه پیک موتوری رایگان است. این تنظیم با Packaging Profile یکی نیست. Override اختصاصی محصول (در صفحهٔ «مسیر ارسال») بر این سیاست اولویت دارد.">ⓘ</span>
+          </label>
+          <select id="class-route-policy">
+            <option value="">— انتخاب کنید —</option>
+            <option value="normal">عادی</option>
+            <option value="freight">باربری (پس‌کرایه)</option>
+          </select>
+          <small id="class-route-policy-note" style="display:none; font-size:12px; color:#a23b3b;"></small>
         </div>
         <div>
           <label style="display:flex; align-items:center; gap:6px;">

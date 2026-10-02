@@ -186,6 +186,7 @@ function clearForm() {
   if (shippingRatesSection) shippingRatesSection.style.display = "none";
   shippingRatesCache = [];
   setPackagingOverrideVisible(false);
+  resetShippingSummary();
 }
 
 // نمایش/پنهان‌کردن بخش Override واقعی ابعاد/وزن بسته‌بندی (بخش ۱۲ دستور) —
@@ -268,7 +269,108 @@ function editProduct(id) {
     loadProductShippingRates(editingProductId);
   }
 
+  loadShippingSummary(editingProductId);
+
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// =========================
+// خلاصهٔ حمل محصول (فقط‌خواندنی) — Stage A
+// منبع: GET /admin/shipping-routing/product-summary (همان منطق Routing موجود؛
+// هیچ تصمیم مسیری در این فایل محاسبه نمی‌شود)
+// =========================
+
+function resetShippingSummary() {
+  const body = document.getElementById("shipping-summary-body");
+  const stale = document.getElementById("shipping-summary-stale");
+  if (body) body.innerHTML = '<span style="color:#8a9995;">پس از ذخیرهٔ محصول و ورود به حالت ویرایش، خلاصهٔ حمل اینجا نمایش داده می‌شود.</span>';
+  if (stale) stale.style.display = "none";
+}
+
+function summaryNumber(value) {
+  return value == null ? null : Number(value).toLocaleString("fa-IR");
+}
+
+function summaryDims(d) {
+  if (!d || d.length == null || d.width == null || d.height == null) {
+    const parts = d ? [d.length, d.width, d.height] : [];
+    if (parts.every((v) => v == null)) return null;
+    return `ناقص (${parts.map((v) => (v == null ? "؟" : summaryNumber(v))).join(" × ")}) سانتی‌متر`;
+  }
+  return `${summaryNumber(d.length)} × ${summaryNumber(d.width)} × ${summaryNumber(d.height)} سانتی‌متر`;
+}
+
+function renderShippingSummary(summary, columnsReady) {
+  const NOT_SET = '<span style="color:#8a9995;">ثبت نشده</span>';
+  const row = (label, value) => `<div style="display:flex; gap:8px;"><span style="min-width:170px; color:#71817e;">${label}</span><span>${value}</span></div>`;
+  const group = (title) => `<div style="margin-top:8px; font-weight:700; color:#2c5a56; border-bottom:1px dashed #d6e3e0;">${title}</div>`;
+  const POLICY_LABEL = { normal: "عادی", freight: "باربری (پس‌کرایه)" };
+
+  let policyHtml;
+  if (!summary.shipping_class) policyHtml = '<span style="color:#8a9995;">— (محصول Shipping Class ندارد)</span>';
+  else if (summary.route_policy_status === "valid") policyHtml = escapeHtml(POLICY_LABEL[summary.route_policy] || summary.route_policy);
+  else if (summary.route_policy_status === "unset") policyHtml = '<span style="color:#a26b00;">ثبت نشده در D1 (پیش‌فرض فنی: عادی)</span>';
+  else if (summary.route_policy_status === "invalid") policyHtml = `<span style="color:#a23b3b;">مقدار نامعتبر در D1: ${escapeHtml(String(summary.route_policy))}</span>`;
+  else policyHtml = '<span style="color:#a23b3b;">ستون route_policy روی D1 موجود نیست</span>';
+
+  let overrideHtml = '<span style="color:#8a9995;">ندارد (مسیر از Shipping Class می‌آید)</span>';
+  if (summary.override_status === "valid") overrideHtml = `${escapeHtml(POLICY_LABEL[summary.override] || summary.override)} <span style="color:#71817e;">(بر Route Policy کلاس اولویت دارد؛ در صفحهٔ «مسیر ارسال» ویرایش می‌شود)</span>`;
+  else if (summary.override_status === "invalid") overrideHtml = `<span style="color:#a23b3b;">مقدار نامعتبر در D1: ${escapeHtml(String(summary.override))}</span>`;
+
+  const pk = summary.packaging_profile;
+  const packagingHtml = pk
+    ? `${escapeHtml(pk.code || pk.name || "-")}${pk.name && pk.code ? ` — ${escapeHtml(pk.name)}` : ""} <span style="color:#71817e;">(${escapeHtml(pk.source_label || "")})</span>`
+    : NOT_SET;
+
+  const weight = summaryNumber(summary.weight_grams);
+  const pkgWeight = summaryNumber(summary.package_weight_grams);
+  const dims = summaryDims(summary.dimensions_cm);
+  const pkgDims = summaryDims(summary.package_dimensions_cm);
+
+  const flagsHtml = (summary.flag_labels || []).length
+    ? `<ul style="margin:2px 0 0; padding-inline-start:18px; color:#a23b3b;">${summary.flag_labels.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+       <div style="font-size:12px; color:#71817e;">این هشدارها فقط برای بررسی شما هستند و مسیر ارسال را تغییر نمی‌دهند.</div>`
+    : '<span style="color:#2e7d5b;">هشداری وجود ندارد</span>';
+
+  const migrationWarn = columnsReady
+    ? ""
+    : '<div style="color:#a23b3b; font-size:12px;">ستون‌های Routing هنوز روی D1 کامل ایجاد نشده‌اند (database/shipping-routing.sql)؛ تا آن زمان همه چیز «عادی» محاسبه می‌شود.</div>';
+
+  document.getElementById("shipping-summary-body").innerHTML = `
+    ${migrationWarn}
+    ${group("۱) ماهیت و سیاست حمل (Shipping Class)")}
+    ${row("Shipping Class", summary.shipping_class ? escapeHtml(summary.shipping_class.name) : '<span style="color:#a23b3b;">ندارد</span>')}
+    ${row("Route Policy کلاس", policyHtml)}
+    ${row("Override مدیریتی محصول", overrideHtml)}
+    ${group("۲) مشخصات فیزیکی کالا")}
+    ${row("وزن محصول", weight ? `${weight} گرم` : NOT_SET)}
+    ${row("ابعاد محصول", dims || NOT_SET)}
+    ${group("۳) برآورد بسته‌بندی (Packaging Profile)")}
+    ${row("Packaging Profile مؤثر", packagingHtml)}
+    ${row("وزن بسته‌بندی", pkgWeight ? `${pkgWeight} گرم` : NOT_SET)}
+    ${row("ابعاد بسته‌بندی", pkgDims || NOT_SET)}
+    ${group("۴) نتیجهٔ Routing (Effective Route)")}
+    ${row("مسیر مؤثر خارج از اصفهان", `<strong>${escapeHtml(summary.effective_route_outside_isfahan_label)}</strong>`)}
+    ${row("مسیر مؤثر داخل شهر اصفهان", escapeHtml(summary.effective_route_inside_isfahan_label))}
+    ${row("دلیل مسیر", `${escapeHtml(summary.route_reason_label)}${summary.route_reason_note ? `<div style="font-size:12px; color:#a26b00;">${escapeHtml(summary.route_reason_note)}</div>` : ""}`)}
+    ${group("هشدارهای اطلاعات حمل")}
+    <div>${flagsHtml}</div>`;
+}
+
+async function loadShippingSummary(productId) {
+  const body = document.getElementById("shipping-summary-body");
+  const stale = document.getElementById("shipping-summary-stale");
+  if (!body) return;
+  if (stale) stale.style.display = "none";
+  body.innerHTML = '<span class="loading">در حال بارگذاری خلاصهٔ حمل...</span>';
+  try {
+    const data = await fetchAdmin(`/admin/shipping-routing/product-summary?product_id=${encodeURIComponent(productId)}`);
+    // اگر در حین بارگذاری محصول دیگری انتخاب شد، نتیجهٔ قدیمی نمایش داده نشود.
+    if (Number(editingProductId) !== Number(productId)) return;
+    renderShippingSummary(data.summary, data.columns_ready !== false);
+  } catch (error) {
+    body.innerHTML = `<span style="color:#a23b3b;">${escapeHtml(error.message)}</span>`;
+  }
 }
 
 // =========================
@@ -795,6 +897,20 @@ function renderCoPurchased(list) {
 // =========================
 
 document.addEventListener("DOMContentLoaded", () => {
+  // خلاصهٔ حمل فقط وضعیت ذخیره‌شده را نشان می‌دهد؛ با تغییر فیلدهای مرتبط، هشدار «ذخیره‌نشده» نمایش داده می‌شود.
+  ["product-shipping-class", "product-weight", "product-length", "product-width", "product-height",
+   "product-packaging-profile", "product-package-length", "product-package-width", "product-package-height", "product-package-weight",
+  ].forEach((fieldId) => {
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+    const markStale = () => {
+      const stale = document.getElementById("shipping-summary-stale");
+      if (stale && editingProductId) stale.style.display = "block";
+    };
+    el.addEventListener("input", markStale);
+    el.addEventListener("change", markStale);
+  });
+
   initAdminPage("products");
   setupRichTextToolbar();
   loadCategoriesForSelect();
