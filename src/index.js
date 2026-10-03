@@ -63,23 +63,10 @@ const PAYMENT_STATUS_LABELS = {
 
 const ALLOWED_PAYMENT_STATUSES = Object.keys(PAYMENT_STATUS_LABELS);
 
-// =========================================================================
-// پیش‌فرض‌های سراسری ارسال — وقتی محصولی مقدار shipping_* خودش را ندارد
-// (NULL در D1)، از همین مقادیر استفاده می‌شود. تغییر این‌ها فقط روی
-// محصولاتی اثر دارد که خودشان override ندارند.
-// =========================================================================
-const STORE_DEFAULT_SHIPPING_COST = 0; // پیش‌فرض: ارسال رایگان
-const STORE_DEFAULT_SHIPPING_METHOD = "پست پیشتاز";
-const STORE_DEFAULT_SHIPPING_TIME = "حداکثر ۳ روز کاری";
+// Stage C/D: نمایش و خروجی API قدیمیِ ارسال محصول (هزینه/روش/زمان) حذف شد؛ فقط
+// نمایش را گمراه می‌کرد و در Routing، محاسبهٔ هزینه یا Checkout نقشی نداشت.
+// ستون‌های قدیمی ارسال در جدول products (D1) به‌عنوان Archive باقی‌اند و حذف نشده‌اند.
 const STORE_BASE_URL = "https://tasisatapadanaesfahan.ir";
-
-function resolveShippingInfo(product) {
-  return {
-    shipping_cost: product.shipping_cost != null ? Number(product.shipping_cost) : STORE_DEFAULT_SHIPPING_COST,
-    shipping_method: product.shipping_method || STORE_DEFAULT_SHIPPING_METHOD,
-    shipping_time: product.shipping_time || STORE_DEFAULT_SHIPPING_TIME,
-  };
-}
 
 // =========================================================================
 // Stage A — Admin Visibility (فقط خواندن/نمایش؛ منطق Routing دست‌نخورده)
@@ -326,7 +313,6 @@ function sanitizeDescriptionHtml(html) {
 // endpoint عمومی JSON و هم صفحه SSR محصول از همین استفاده می‌کنند تا هیچ‌وقت
 // Schema.org با آنچه واقعاً در صفحه دیده می‌شود اختلاف نداشته باشد.
 function buildProductViewModel(product) {
-  const shipping = resolveShippingInfo(product);
   const price = Number(product.price) || 0;
   const compareAtPrice = product.compare_at_price != null ? Number(product.compare_at_price) : null;
   const discountActive = compareAtPrice != null && compareAtPrice > price;
@@ -337,7 +323,6 @@ function buildProductViewModel(product) {
     in_stock: inStock,
     discount_active: discountActive,
     discount_percent: discountActive ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100) : null,
-    ...shipping,
     has_warranty: !!(product.warranty_months && Number(product.warranty_months) > 0),
     has_return_policy: !!(product.return_days && Number(product.return_days) > 0),
     canonical_url: `${STORE_BASE_URL}/store/product/${encodeURIComponent(product.slug)}`,
@@ -2406,7 +2391,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       try {
         const result = await env.DB
           .prepare(
-            "SELECT id, name, slug, description, price, image, stock, active, shipping_cost, brand, category_id " +
+            "SELECT id, name, slug, description, price, image, stock, active, brand, category_id " +
             "FROM products WHERE active = 1 ORDER BY id DESC"
           )
           .all();
@@ -2468,7 +2453,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const result = await env.DB
         .prepare(
           "SELECT id, name, slug, description, price, image, stock, active, " +
-          "brand, model, sku, compare_at_price, shipping_cost, shipping_method, shipping_time, " +
+          "brand, model, sku, compare_at_price, " +
           "warranty_months, warranty_provider, return_days, category_id, " +
           "shipping_class_id, weight_grams, length_cm, width_cm, height_cm, " +
           "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, " +
@@ -2916,10 +2901,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         body.compare_at_price != null && body.compare_at_price !== ""
           ? Number(body.compare_at_price)
           : null;
-      const shippingCost =
-        body.shipping_cost != null && body.shipping_cost !== "" ? Number(body.shipping_cost) : null;
-      const shippingMethod = body.shipping_method != null ? String(body.shipping_method).trim() || null : null;
-      const shippingTime = body.shipping_time != null ? String(body.shipping_time).trim() || null : null;
+      // Stage C: shipping_cost/shipping_method/shipping_time (ستون‌های قدیمی نمایشی) دیگر
+      // از بدنهٔ درخواست خوانده یا در D1 نوشته نمی‌شوند؛ مقدار موجود در D1 دست‌نخورده می‌ماند.
       const warrantyMonths =
         body.warranty_months != null && body.warranty_months !== "" ? Number(body.warranty_months) : null;
       const warrantyProvider =
@@ -3006,16 +2989,16 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .prepare(
           "INSERT INTO products " +
           "(name, slug, description, price, image, stock, active, brand, model, sku, compare_at_price, " +
-          "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days, " +
+          "warranty_months, warranty_provider, return_days, " +
           "shipping_class_id, weight_grams, length_cm, width_cm, height_cm, " +
           "packaging_profile_id, package_length_cm, package_width_cm, package_height_cm, package_weight_grams, packaging_confidence, " +
           "category_id) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           name, slug, description, price, image, stock, active,
           brand, model, sku, compareAtPrice,
-          shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
+          warrantyMonths, warrantyProvider, returnDays,
           shippingClassId, weightGrams, lengthCm, widthCm, heightCm,
           packagingProfileId, packageLengthCm, packageWidthCm, packageHeightCm, packageWeightGrams, packagingConfidence,
           categoryId
@@ -3097,10 +3080,8 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         body.compare_at_price != null && body.compare_at_price !== ""
           ? Number(body.compare_at_price)
           : null;
-      const shippingCost =
-        body.shipping_cost != null && body.shipping_cost !== "" ? Number(body.shipping_cost) : null;
-      const shippingMethod = body.shipping_method != null ? String(body.shipping_method).trim() || null : null;
-      const shippingTime = body.shipping_time != null ? String(body.shipping_time).trim() || null : null;
+      // Stage C: shipping_cost/shipping_method/shipping_time (ستون‌های قدیمی نمایشی) دیگر
+      // از بدنهٔ درخواست خوانده یا در D1 نوشته نمی‌شوند؛ مقدار موجود در D1 دست‌نخورده می‌ماند.
       const warrantyMonths =
         body.warranty_months != null && body.warranty_months !== "" ? Number(body.warranty_months) : null;
       const warrantyProvider =
@@ -3195,7 +3176,6 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
           "UPDATE products SET name = ?, slug = COALESCE(NULLIF(?, ''), slug), " +
           "description = ?, price = ?, image = ?, stock = ?, active = ?, " +
           "brand = ?, model = ?, sku = ?, compare_at_price = ?, " +
-          "shipping_cost = ?, shipping_method = ?, shipping_time = ?, " +
           "warranty_months = ?, warranty_provider = ?, return_days = ?, " +
           "shipping_class_id = ?, weight_grams = ?, length_cm = ?, width_cm = ?, height_cm = ?, " +
           "packaging_profile_id = ?, package_length_cm = ?, package_width_cm = ?, package_height_cm = ?, " +
@@ -3205,7 +3185,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
         .bind(
           name, slug, description, price, image, stock, active,
           brand, model, sku, compareAtPrice,
-          shippingCost, shippingMethod, shippingTime, warrantyMonths, warrantyProvider, returnDays,
+          warrantyMonths, warrantyProvider, returnDays,
           shippingClassId, weightGrams, lengthCm, widthCm, heightCm,
           packagingProfileId, packageLengthCm, packageWidthCm, packageHeightCm, packageWeightGrams, packagingConfidence,
           categoryId,
@@ -6028,7 +6008,7 @@ async function queueEmail(env, orderId, ticketId, toEmail, subject, body) {
       const result = await env.DB
         .prepare(
           "SELECT id, name, slug, description, price, image, stock, " +
-          "brand, model, sku, compare_at_price, shipping_cost, shipping_method, shipping_time, " +
+          "brand, model, sku, compare_at_price, " +
           "warranty_months, warranty_provider, return_days, category_id " +
           "FROM products WHERE slug = ? AND active = 1 LIMIT 1"
         )
@@ -8262,7 +8242,7 @@ function buildProductJsonLd(viewModel, images) {
 }
 
 // همان چیدمانی که در public/store/product.html با JavaScript ساخته می‌شود
-// (renderBrandModelLine/renderPriceBlock/renderShippingBlock/renderAssuranceList/
+// (renderBrandModelLine/renderPriceBlock/renderAssuranceList/
 // renderSpecsTable)، اینجا سمت سرور هم تولید می‌شود تا قبل از اجرای JS هم در
 // HTML واقعی موجود باشد. اگر یکی از این دو تغییر کرد، دیگری هم باید هماهنگ شود.
 function renderProductDetailSsrHtml(viewModel, images, specs) {
@@ -8281,14 +8261,6 @@ function renderProductDetailSsrHtml(viewModel, images, specs) {
        <span class="old-price">${Number(viewModel.compare_at_price).toLocaleString("fa-IR")} تومان</span>
        ${viewModel.discount_percent ? `<span class="discount-badge">${Number(viewModel.discount_percent).toLocaleString("fa-IR")}٪ تخفیف</span>` : ""}`
     : `${Number(viewModel.price).toLocaleString("fa-IR")} تومان`;
-
-  const shippingBlock = `
-    <div class="product-shipping-info">
-      <div>هزینه ارسال: ${Number(viewModel.shipping_cost) > 0 ? Number(viewModel.shipping_cost).toLocaleString("fa-IR") + " تومان" : "رایگان"}</div>
-      ${viewModel.shipping_method ? `<div>روش ارسال: ${escapeHtmlForSsr(viewModel.shipping_method)}</div>` : ""}
-      ${viewModel.shipping_time ? `<div>زمان ارسال: ${escapeHtmlForSsr(viewModel.shipping_time)}</div>` : ""}
-    </div>
-  `;
 
   const assuranceItems = [];
   if (viewModel.has_return_policy) {
@@ -8336,7 +8308,6 @@ function renderProductDetailSsrHtml(viewModel, images, specs) {
         ${brandModelLine}
         <div class="product-detail-price">${priceBlock}</div>
         <div class="product-detail-stock">${viewModel.in_stock ? `موجودی: ${Number(viewModel.stock).toLocaleString("fa-IR")} عدد` : "در حال حاضر ناموجود"}</div>
-        ${shippingBlock}
         ${assuranceBlock}
         <div class="product-actions">
           <label for="quantity">تعداد:</label>
@@ -8390,7 +8361,7 @@ async function handleProductPageSsr(request, env, slug) {
     productRow = await env.DB
       .prepare(
         "SELECT id, name, slug, description, price, image, stock, brand, model, sku, compare_at_price, " +
-        "shipping_cost, shipping_method, shipping_time, warranty_months, warranty_provider, return_days " +
+        "warranty_months, warranty_provider, return_days " +
         "FROM products WHERE slug = ? AND active = 1 LIMIT 1"
       )
       .bind(slug)
