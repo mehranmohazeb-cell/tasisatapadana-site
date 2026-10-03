@@ -677,24 +677,6 @@ input {
   text-align: center;
 }
 
-/* ---------- Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ø§Ø±Ø³Ø§Ù„ ---------- */
-
-.product-shipping-info {
-  max-width: 420px;
-  margin: 0 auto 16px;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-alt);
-  font-size: 14px;
-  color: var(--ink);
-  text-align: center;
-}
-
-.product-shipping-info div {
-  padding: 3px 0;
-}
-
 /* ---------- برآورد هزینه ارسال (صفحه محصول) ---------- */
 
 .shipping-estimator {

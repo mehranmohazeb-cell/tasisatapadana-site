@@ -259,14 +259,6 @@ function renderPriceBlock(product) {
   return formatPrice(product.price);
 }
 
-function renderShippingBlock(product) {
-  const rows = [];
-  rows.push(`<div>هزینه ارسال: ${Number(product.shipping_cost) > 0 ? formatPrice(product.shipping_cost) : "رایگان"}</div>`);
-  if (product.shipping_method) rows.push(`<div>روش ارسال: ${escapeHtml(product.shipping_method)}</div>`);
-  if (product.shipping_time) rows.push(`<div>زمان ارسال: ${escapeHtml(product.shipping_time)}</div>`);
-  return `<div class="product-shipping-info">${rows.join("")}</div>`;
-}
-
 function getAllCitiesFlat() {
   const cities = new Set();
   const locations = window.IRAN_LOCATIONS || {};
@@ -1691,8 +1683,6 @@ if (!slug) {
           </div>
 
           <div id="product-viewers" class="product-viewers" hidden></div>
-
-          ${renderShippingBlock(currentProduct)}
 
           <div id="shipping-estimator-container"></div>
 

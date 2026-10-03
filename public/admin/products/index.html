@@ -135,26 +135,6 @@
 
           </div>
 
-          <div class="form-group full" style="font-size:12px; color:#71817e; background:#f4f8f7; border-radius:8px; padding:8px 12px;">
-            سه فیلد «هزینه ارسال»، «روش ارسال» و «زمان ارسال» پایین، فقط <strong>متن نمایشی قدیمی صفحهٔ محصول</strong> هستند و در تعیین مسیر ارسال (Routing) یا هزینهٔ ارسال سفارش نقشی ندارند.
-            مسیر واقعی ارسال را «خلاصهٔ حمل» (زیر مشخصات حمل) نشان می‌دهد.
-          </div>
-
-          <div class="form-group">
-            <label for="product-shipping-cost">هزینه ارسال (تومان) <span class="help-icon" data-help="هزینه ارسال اختصاصی همین محصول، اگر خالی باشد از پیش‌فرض فروشگاه استفاده می‌شود. توجه: این هزینه نهایی است؛ محاسبه خودکار وزن/تعرفه گروهی جدا از این فیلد است.">ⓘ</span></label>
-            <input id="product-shipping-cost" type="number" min="0" placeholder="پیش‌فرض فروشگاه: رایگان">
-          </div>
-
-          <div class="form-group">
-            <label for="product-shipping-method">روش ارسال <span class="help-icon" data-help="نام روش ارسال که به مشتری نمایش داده می‌شود (مثلاً پست پیشتاز). صرفاً برای نمایش است.">ⓘ</span></label>
-            <input id="product-shipping-method" type="text" placeholder="پیش‌فرض فروشگاه: پست پیشتاز">
-          </div>
-
-          <div class="form-group">
-            <label for="product-shipping-time">زمان ارسال <span class="help-icon" data-help="مدت زمان تقریبی تحویل که به مشتری نمایش داده می‌شود (مثلاً «حداکثر ۳ روز کاری»).">ⓘ</span></label>
-            <input id="product-shipping-time" type="text" placeholder="پیش‌فرض فروشگاه: حداکثر ۳ روز کاری">
-          </div>
-
           <div class="form-group">
             <label for="product-shipping-class">Shipping Class (برای تعرفه گروهی) <span class="help-icon" data-help="گروه حمل این محصول (مثلاً سبک/سنگین/حجیم). تعرفه‌های چندشرطی (Table Rate) بر اساس همین گروه اعمال می‌شوند. با انتخاب Shipping Class، Packaging Profile هم به‌صورت خودکار تشخیص داده می‌شود، مگر اینکه پایین‌تر برایش Override اختصاصی تعیین کنید.">ⓘ</span></label>
             <select id="product-shipping-class">
@@ -184,8 +164,8 @@
 
           <div class="form-group full" id="shipping-summary-box" style="border:1px solid #d6e3e0; border-radius:10px; padding:12px 14px; background:#fbfdfc;">
             <div style="display:flex; align-items:center; gap:6px; font-weight:800; color:#173b3b; margin-bottom:6px;">
-              خلاصهٔ حمل این محصول (فقط‌خواندنی)
-              <span class="help-icon" data-help="این بخش فقط وضعیت فعلی ذخیره‌شدهٔ سیستم را نشان می‌دهد و قابل ویرایش نیست. Shipping Class = ماهیت و سیاست حمل کالا؛ Packaging Profile = نحوهٔ برآورد بسته‌بندی؛ وزن و ابعاد = مشخصات فیزیکی؛ مسیر مؤثر = نتیجهٔ Routing. هشدارها فقط برای بررسی مدیر هستند و مسیر را تغییر نمی‌دهند.">ⓘ</span>
+              خلاصهٔ حمل و Override مسیر این محصول
+              <span class="help-icon" data-help="این بخش وضعیت ذخیره‌شدهٔ سیستم را نشان می‌دهد؛ فقط «Override مسیر» قابل ویرایش است و دکمهٔ ذخیرهٔ مخصوص خود را دارد. Shipping Class = ماهیت و سیاست حمل کالا؛ Packaging Profile = نحوهٔ برآورد بسته‌بندی؛ وزن و ابعاد = مشخصات فیزیکی؛ مسیر مؤثر = نتیجهٔ Routing. هشدارها فقط برای بررسی مدیر هستند و مسیر را تغییر نمی‌دهند.">ⓘ</span>
             </div>
             <div id="shipping-summary-stale" style="display:none; font-size:12px; color:#a26b00; margin-bottom:6px;">
               تغییرات این فرم هنوز ذخیره نشده؛ خلاصه پس از ذخیرهٔ محصول و ورود دوباره به ویرایش بروز می‌شود.

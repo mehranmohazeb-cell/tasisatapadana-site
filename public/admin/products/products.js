@@ -220,9 +220,6 @@ function editProduct(id) {
   document.getElementById("product-price").value = product.price || 0;
   document.getElementById("product-compare-price").value = product.compare_at_price ?? "";
   document.getElementById("product-stock").value = product.stock || 0;
-  document.getElementById("product-shipping-cost").value = product.shipping_cost ?? "";
-  document.getElementById("product-shipping-method").value = product.shipping_method || "";
-  document.getElementById("product-shipping-time").value = product.shipping_time || "";
   document.getElementById("product-shipping-class").value =
     product.shipping_class_id != null ? String(product.shipping_class_id) : "";
   document.getElementById("product-weight").value = product.weight_grams ?? "";
@@ -280,7 +277,18 @@ function editProduct(id) {
 // هیچ تصمیم مسیری در این فایل محاسبه نمی‌شود)
 // =========================
 
+// وضعیت کنترل Route Override (Stage B). serverValue مقدار ذخیره‌شدهٔ واقعی Server است:
+// "" = NULL (پیش‌فرض کلاس) | "normal" | "freight" | "__invalid__" = مقدار نامعتبر در D1.
+let routeOverrideState = null;
+let routeOverrideSaving = false;
+
+function isRouteOverrideDirty() {
+  return Boolean(routeOverrideState) && routeOverrideState.selected !== routeOverrideState.serverValue;
+}
+
 function resetShippingSummary() {
+  routeOverrideState = null;
+  routeOverrideSaving = false;
   const body = document.getElementById("shipping-summary-body");
   const stale = document.getElementById("shipping-summary-stale");
   if (body) body.innerHTML = '<span style="color:#8a9995;">پس از ذخیرهٔ محصول و ورود به حالت ویرایش، خلاصهٔ حمل اینجا نمایش داده می‌شود.</span>';
@@ -313,9 +321,38 @@ function renderShippingSummary(summary, columnsReady) {
   else if (summary.route_policy_status === "invalid") policyHtml = `<span style="color:#a23b3b;">مقدار نامعتبر در D1: ${escapeHtml(String(summary.route_policy))}</span>`;
   else policyHtml = '<span style="color:#a23b3b;">ستون route_policy روی D1 موجود نیست</span>';
 
-  let overrideHtml = '<span style="color:#8a9995;">ندارد (مسیر از Shipping Class می‌آید)</span>';
-  if (summary.override_status === "valid") overrideHtml = `${escapeHtml(POLICY_LABEL[summary.override] || summary.override)} <span style="color:#71817e;">(بر Route Policy کلاس اولویت دارد؛ در صفحهٔ «مسیر ارسال» ویرایش می‌شود)</span>`;
-  else if (summary.override_status === "invalid") overrideHtml = `<span style="color:#a23b3b;">مقدار نامعتبر در D1: ${escapeHtml(String(summary.override))}</span>`;
+  // --- کنترل Product Route Override (Stage B) ---
+  // سه حالت: پیش‌فرض کلاس (NULL) / عادی / باربری. مقدار نامعتبر D1 بی‌صدا اصلاح نمی‌شود.
+  const serverOverride = summary.override_status === "invalid" ? "__invalid__" : (summary.override_status === "valid" ? summary.override : "");
+  const classDefaultText = !summary.shipping_class
+    ? "محصول Shipping Class ندارد"
+    : summary.route_policy_status === "valid" ? (POLICY_LABEL[summary.route_policy] || summary.route_policy)
+    : summary.route_policy_status === "unset" ? "Policy کلاس ثبت نشده"
+    : summary.route_policy_status === "invalid" ? "Policy کلاس نامعتبر"
+    : "ستون Policy در D1 نیست";
+  routeOverrideState = { productId: Number(summary.product_id), serverValue: serverOverride, selected: serverOverride };
+  const overrideDisabled = !columnsReady;
+  const overrideControlHtml = `
+    <div id="route-override-control" style="margin:2px 0;">
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <select id="product-route-override" aria-label="Product Route Override" ${overrideDisabled ? "disabled" : ""} style="max-width:260px;">
+          <option value="" ${serverOverride === "" ? "selected" : ""}>پیش‌فرض کلاس (${escapeHtml(classDefaultText)})</option>
+          <option value="normal" ${serverOverride === "normal" ? "selected" : ""}>عادی</option>
+          <option value="freight" ${serverOverride === "freight" ? "selected" : ""}>باربری (پس‌کرایه)</option>
+          ${serverOverride === "__invalid__" ? `<option value="__invalid__" selected>مقدار نامعتبر در D1: ${escapeHtml(String(summary.override))}</option>` : ""}
+        </select>
+        <button type="button" id="save-route-override" class="secondary-button" disabled>ذخیرهٔ Override</button>
+      </div>
+      <div id="route-override-invalid" style="display:${serverOverride === "__invalid__" ? "block" : "none"}; font-size:12px; color:#a23b3b;">
+        مقدار ذخیره‌شده در D1 نامعتبر است و بی‌صدا اصلاح نشده. منطق فعلی سیستم آن را نادیده می‌گیرد. با انتخاب یکی از سه حالت معتبر و ذخیره، اصلاح می‌شود.
+      </div>
+      <div id="route-override-unsaved" style="display:none; font-size:12px; color:#a26b00;">
+        تغییر Override هنوز ذخیره نشده است. «مسیر مؤثر» و «دلیل مسیر» زیر هنوز مربوط به مقدار ذخیره‌شدهٔ Server است.
+      </div>
+      <div id="route-override-error" role="alert" style="display:none; font-size:12px; color:#a23b3b;"></div>
+      <div style="font-size:12px; color:#71817e;">Override فقط استثنای همین محصول است؛ Shipping Class و Route Policy کلاس را تغییر نمی‌دهد و بر Policy کلاس اولویت دارد. با دکمهٔ خودش ذخیره می‌شود، نه با «ذخیرهٔ محصول».</div>
+      ${overrideDisabled ? '<div style="font-size:12px; color:#a23b3b;">ستون‌های Routing هنوز روی D1 ایجاد نشده‌اند؛ ویرایش Override ممکن نیست.</div>' : ""}
+    </div>`;
 
   const pk = summary.packaging_profile;
   const packagingHtml = pk
@@ -341,20 +378,83 @@ function renderShippingSummary(summary, columnsReady) {
     ${group("۱) ماهیت و سیاست حمل (Shipping Class)")}
     ${row("Shipping Class", summary.shipping_class ? escapeHtml(summary.shipping_class.name) : '<span style="color:#a23b3b;">ندارد</span>')}
     ${row("Route Policy کلاس", policyHtml)}
-    ${row("Override مدیریتی محصول", overrideHtml)}
-    ${group("۲) مشخصات فیزیکی کالا")}
+    ${group("۲) استثنای مدیریتی این محصول (Product Route Override)")}
+    ${overrideControlHtml}
+    ${group("۳) مشخصات فیزیکی کالا")}
     ${row("وزن محصول", weight ? `${weight} گرم` : NOT_SET)}
     ${row("ابعاد محصول", dims || NOT_SET)}
-    ${group("۳) برآورد بسته‌بندی (Packaging Profile)")}
+    ${group("۴) برآورد بسته‌بندی (Packaging Profile)")}
     ${row("Packaging Profile مؤثر", packagingHtml)}
     ${row("وزن بسته‌بندی", pkgWeight ? `${pkgWeight} گرم` : NOT_SET)}
     ${row("ابعاد بسته‌بندی", pkgDims || NOT_SET)}
-    ${group("۴) نتیجهٔ Routing (Effective Route)")}
+    ${group("۵) نتیجهٔ Routing (Effective Route — مقدار ذخیره‌شده)")}
     ${row("مسیر مؤثر خارج از اصفهان", `<strong>${escapeHtml(summary.effective_route_outside_isfahan_label)}</strong>`)}
     ${row("مسیر مؤثر داخل شهر اصفهان", escapeHtml(summary.effective_route_inside_isfahan_label))}
     ${row("دلیل مسیر", `${escapeHtml(summary.route_reason_label)}${summary.route_reason_note ? `<div style="font-size:12px; color:#a26b00;">${escapeHtml(summary.route_reason_note)}</div>` : ""}`)}
     ${group("هشدارهای اطلاعات حمل")}
     <div>${flagsHtml}</div>`;
+
+  bindRouteOverrideControl();
+}
+
+function updateRouteOverrideUi() {
+  const dirty = isRouteOverrideDirty();
+  const saveBtn = document.getElementById("save-route-override");
+  const unsaved = document.getElementById("route-override-unsaved");
+  if (saveBtn) saveBtn.disabled = !dirty || routeOverrideSaving || routeOverrideState?.selected === "__invalid__";
+  if (unsaved) unsaved.style.display = dirty ? "block" : "none";
+}
+
+function bindRouteOverrideControl() {
+  const select = document.getElementById("product-route-override");
+  const saveBtn = document.getElementById("save-route-override");
+  if (select) {
+    select.addEventListener("change", () => {
+      if (!routeOverrideState) return;
+      routeOverrideState.selected = select.value;
+      const err = document.getElementById("route-override-error");
+      if (err) err.style.display = "none";
+      updateRouteOverrideUi();
+    });
+  }
+  if (saveBtn) saveBtn.addEventListener("click", saveRouteOverride);
+  updateRouteOverrideUi();
+}
+
+// ذخیرهٔ Override با همان Endpoint موجود صفحهٔ Routing (احراز هویت، اعتبارسنجی و Audit همان‌جا انجام می‌شود).
+// فقط products.shipping_route_override تغییر می‌کند؛ NULL با override:null ذخیره می‌شود.
+async function saveRouteOverride() {
+  const state = routeOverrideState;
+  if (!state || routeOverrideSaving || !isRouteOverrideDirty() || state.selected === "__invalid__") return;
+  const productId = state.productId;
+  const value = state.selected;
+  const errBox = document.getElementById("route-override-error");
+  routeOverrideSaving = true;
+  updateRouteOverrideUi();
+  if (errBox) errBox.style.display = "none";
+  try {
+    const result = await fetchAdmin("/admin/shipping-routing/product", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product_id: productId, override: value === "" ? null : value }),
+    });
+    routeOverrideSaving = false;
+    if (Number(editingProductId) !== Number(productId)) return; // کاربر به محصول دیگری رفته است
+    showToast(result.message || "Override ذخیره شد.", "success");
+    if (result.audited === false) showToast("Override ذخیره شد، اما ثبت در تاریخچهٔ تغییرات (Audit) ناموفق بود.", "error", 5000);
+    // مقدار جدید و مسیر مؤثر از Server خوانده می‌شود (نه حدس سمت مرورگر).
+    const reloaded = await loadShippingSummary(productId);
+    if (!reloaded) showToast("Override ذخیره شد، اما بارگذاری مجدد خلاصهٔ حمل ناموفق بود. صفحه را دوباره باز کنید.", "error", 5000);
+  } catch (error) {
+    routeOverrideSaving = false;
+    // شکست ذخیره: مقدار انتخاب‌شده و وضعیت «ذخیره‌نشده» حفظ می‌شود؛ هیچ موفقیت فرضی نمایش داده نمی‌شود.
+    if (Number(editingProductId) === Number(productId)) {
+      const box = document.getElementById("route-override-error");
+      if (box) { box.textContent = `ذخیرهٔ Override انجام نشد: ${error.message}`; box.style.display = "block"; }
+      updateRouteOverrideUi();
+    }
+    showToast(`ذخیرهٔ Override انجام نشد: ${error.message}`, "error", 5000);
+  }
 }
 
 async function loadShippingSummary(productId) {
@@ -366,10 +466,12 @@ async function loadShippingSummary(productId) {
   try {
     const data = await fetchAdmin(`/admin/shipping-routing/product-summary?product_id=${encodeURIComponent(productId)}`);
     // اگر در حین بارگذاری محصول دیگری انتخاب شد، نتیجهٔ قدیمی نمایش داده نشود.
-    if (Number(editingProductId) !== Number(productId)) return;
+    if (Number(editingProductId) !== Number(productId)) return false;
     renderShippingSummary(data.summary, data.columns_ready !== false);
+    return true;
   } catch (error) {
     body.innerHTML = `<span style="color:#a23b3b;">${escapeHtml(error.message)}</span>`;
+    return false;
   }
 }
 
@@ -659,6 +761,11 @@ function setupRichTextToolbar() {
 async function saveProduct(event) {
   event.preventDefault();
 
+  // Override مسیر با دکمهٔ جدا ذخیره می‌شود؛ جلوگیری از گم‌شدن بی‌صدای تغییر ذخیره‌نشده.
+  if (isRouteOverrideDirty() && !confirm("Override مسیر ارسال این محصول تغییر کرده ولی ذخیره نشده است و با «ذخیرهٔ محصول» ذخیره نمی‌شود. بدون ذخیرهٔ Override ادامه می‌دهید؟")) {
+    return;
+  }
+
   const name = document.getElementById("product-name")?.value.trim();
   const slug = document.getElementById("product-slug")?.value.trim();
   const brand = document.getElementById("product-brand")?.value.trim();
@@ -669,9 +776,6 @@ async function saveProduct(event) {
   const price = Number(document.getElementById("product-price")?.value);
   const comparePriceRaw = document.getElementById("product-compare-price")?.value;
   const stock = Number(document.getElementById("product-stock")?.value);
-  const shippingCostRaw = document.getElementById("product-shipping-cost")?.value;
-  const shippingMethod = document.getElementById("product-shipping-method")?.value.trim();
-  const shippingTime = document.getElementById("product-shipping-time")?.value.trim();
   const shippingClassRaw = document.getElementById("product-shipping-class")?.value;
   const weightRaw = document.getElementById("product-weight")?.value;
   const lengthRaw = document.getElementById("product-length")?.value;
@@ -697,9 +801,6 @@ async function saveProduct(event) {
     name, slug, brand, model, sku, description, price, stock, active,
     category_id: categoryIdRaw ? Number(categoryIdRaw) : null,
     compare_at_price: comparePriceRaw ? Number(comparePriceRaw) : null,
-    shipping_cost: shippingCostRaw ? Number(shippingCostRaw) : null,
-    shipping_method: shippingMethod || null,
-    shipping_time: shippingTime || null,
     shipping_class_id: shippingClassRaw ? Number(shippingClassRaw) : null,
     weight_grams: weightRaw ? Number(weightRaw) : null,
     length_cm: lengthRaw ? Number(lengthRaw) : null,
